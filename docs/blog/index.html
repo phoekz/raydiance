@@ -1,1 +1,51 @@
-todo
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>raydiance - blog</title>
+    <style>
+        a {
+            color: darkorange;
+            text-decoration: none;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Header -->
+    <h1>raydiance - blog</h1>
+    <hr />
+
+    <!-- Posts -->
+    <section>
+        <h2>2023/01/07 - Hello, winit!</h2>
+
+        <img src="images/20230107-161828.png" />
+
+        <p>
+            Before anything interesting can happen, we are going to need a window to draw on. We use <a
+                href="https://crates.io/crates/winit"><code>winit</code></a>
+            crate for windowing and handling inputs. For convenience, we bound the Escape key to close the window and
+            center the window in the middle of the primary monitor.
+        </p>
+
+        <p>
+            For simple logging we use <a href="https://crates.io/crates/log"><code>log</code></a> and <a
+                href="https://crates.io/crates/env_logger"><code>env_logger</code></a>, and for application-level error
+            handling we use <a href="https://crates.io/crates/anyhow"><code>anyhow</code></a>.
+        </p>
+
+        <p>
+            Next we are going to slog through a huge amount of Vulkan boilerplate to begin drawing something on our
+            blank window.
+        </p>
+    </section>
+    <hr />
+
+    <!-- Footer -->
+    <a href="https://github.com/phoekz/raydiance">GitHub</a>
+
+</body>
+
+</html>
