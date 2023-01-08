@@ -15,9 +15,69 @@
 <body>
     <!-- Header -->
     <h1>raydiance - blog</h1>
-    <hr />
+    <hr>
 
     <!-- Posts -->
+    <section>
+        <h2>2023/01/08 - Clearing window with <code>VK_KHR_dynamic_rendering</code></h2>
+
+        <img src="images/20230108-170100.webp">
+
+        <p>
+            After around 1000 LOC, we have a barebones Vulkan application which:
+        </p>
+
+        <ol>
+            <li>Load Vulkan with <a href="https://crates.io/crates/ash"><code>ash</code></a> crate.</li>
+            <li>Creates Vulkan instance with <code>VK_LAYER_KHRONOS_validation</code> and debug utilities.</li>
+            <li>Creates window surface with <a href="https://crates.io/crates/ash-window"><code>ash-window</code></a>
+                and
+                <a href="https://crates.io/crates/raw-window-handle"><code>raw-window-handle</code></a> crates.
+            </li>
+            <li>Creates logical device and queues.</li>
+            <li>Creates command pool and buffers.</li>
+            <li>Creates swapchain.</li>
+            <li>Creates semaphores and fences for host to host and host to device synchronization.</li>
+            <li>Clears the screen with a different color every frame.</li>
+        </ol>
+
+        <p>
+            We also handle tricky situations such as user resizing the window and minimizing the window.
+        </p>
+
+        <p>
+            Notably we are not creating render passes or framebuffers, thanks to
+            <code>VK_KHR_dynamic_rendering</code>. We do have to specify some
+            render pass parameters when we record command buffers, but reducing
+            the number of API abstractions simplifies the implementation
+            signifcantly. We used this <a
+                href="https://github.com/SaschaWillems/Vulkan/blob/313ac10de4a765997ddf5202c599e4a0ca32c8ca/examples/dynamicrendering/dynamicrendering.cpp">example</a>
+            as a reference.
+        </p>
+
+        <p>
+            Everything is written under <code>main()</code> with minimal
+            abstractions and with liberal use of <code>unsafe</code>. We will do
+            a <a href="https://caseymuratori.com/blog_0015">semantic
+                compression</a>
+            pass later once we have learned more about how the program should be
+            laid out.
+        </p>
+
+        <p>
+            Next we will continue with more Vulkan code to get a triangle on the screen.
+        </p>
+
+        <p>
+            Commit:
+            <code>
+                <a href="https://github.com/phoekz/raydiance/commit/0f6d7f1bf1b22d1fff43e87080c854eadb3e459d">0f6d7f1b</a>
+            </code>
+        </p>
+
+    </section>
+    <hr>
+
     <section>
         <h2>2023/01/07 - Hello, winit!</h2>
 
@@ -48,7 +108,7 @@
             </code>
         </p>
     </section>
-    <hr />
+    <hr>
 
     <!-- Footer -->
     <a href="https://github.com/phoekz/raydiance">GitHub</a>
