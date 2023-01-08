@@ -9,147 +9,174 @@
             color: darkorange;
             text-decoration: none;
         }
+
+        .title {
+            border-bottom: 1px solid #bbb
+        }
+
+        section {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        article {
+            margin: 30px 0 5px 0;
+            border-bottom: 1px solid #bbb
+        }
+
+        .article-date {
+            margin: 20px 0;
+            color: #666;
+        }
     </style>
 </head>
 
 <body>
-    <!-- Header -->
-    <h1>raydiance - blog</h1>
-    <hr>
-
-    <!-- Posts -->
     <section>
-        <h2>2023/01/08 - The first triangle</h2>
+        <!-- Header -->
+        <div class="title">
+            <h1>raydiance - blog</h1>
+        </div>
 
-        <img src="images/20230108-193100.webp">
+        <!-- Posts -->
+        <article>
+            <h2>The first triangle</h2>
+            <div class="article-date">2023-01-08</div>
 
-        <p>
-            This is the simplest triangle example rendered without any device
-            memory allocations. The triangle is hard coded in the vertex shader
-            and we index into its attributes with vertex index.
-        </p>
+            <img src="images/20230108-193100.webp">
 
-        <p>
-            We added a simple shader compiling step in
-            <a href="https://doc.rust-lang.org/cargo/reference/build-scripts.html"><code>build.rs</code></a>
-            which builds
-            <code>.glsl</code> into <code>.spv</code> using Google's <a
-                href="https://github.com/google/shaderc/tree/main/glslc"><code>glslc</code></a>,
-            which is included in <a href="https://vulkan.lunarg.com/sdk/home">LunarG's Vulkan SDK</a>.
-        </p>
+            <p>
+                This is the simplest triangle example rendered without any
+                device memory allocations. The triangle is hard coded in the
+                vertex shader and we index into its attributes with vertex
+                index.
+            </p>
 
-        <p>
-            Next we will implement device memory allocations in order to load a
-            3D model from a file.
-        </p>
+            <p>
+                We added a simple shader compiling step in
+                <a href="https://doc.rust-lang.org/cargo/reference/build-scripts.html"><code>build.rs</code></a>
+                which builds
+                <code>.glsl</code> into <code>.spv</code> using Google's <a
+                    href="https://github.com/google/shaderc/tree/main/glslc"><code>glslc</code></a>,
+                which is included in <a href="https://vulkan.lunarg.com/sdk/home">LunarG's Vulkan
+                    SDK</a>.
+            </p>
 
-        <p>
-            Commit:
-            <code>
+            <p>
+                Next we will implement device memory allocations in order to
+                load a 3D model from a file.
+            </p>
+
+            <p>
+                Commit:
+                <code>
                 <a href="https://github.com/phoekz/raydiance/commit/c8f9ef2c0f3b51ddfd71f33ec086fca1531051ab">c8f9ef2c</a>
             </code>
-        </p>
+            </p>
 
-    </section>
-    <hr>
+        </article>
 
-    <section>
-        <h2>2023/01/08 - Clearing window with <code>VK_KHR_dynamic_rendering</code></h2>
+        <article>
+            <h2>Clearing window with <code>VK_KHR_dynamic_rendering</code></h2>
+            <div class="article-date">2023-01-08</div>
 
-        <img src="images/20230108-170100.webp">
+            <img src="images/20230108-170100.webp">
 
-        <p>
-            After around 1000 LOC, we have a barebones Vulkan application which:
-        </p>
+            <p>
+                After around 1000 LOC, we have a barebones Vulkan application which:
+            </p>
 
-        <ol>
-            <li>Load Vulkan with <a href="https://crates.io/crates/ash"><code>ash</code></a> crate.</li>
-            <li>Creates Vulkan instance with <code>VK_LAYER_KHRONOS_validation</code> and debug utilities.</li>
-            <li>Creates window surface with <a href="https://crates.io/crates/ash-window"><code>ash-window</code></a>
-                and
-                <a href="https://crates.io/crates/raw-window-handle"><code>raw-window-handle</code></a> crates.
-            </li>
-            <li>Creates logical device and queues.</li>
-            <li>Creates command pool and buffers.</li>
-            <li>Creates swapchain.</li>
-            <li>Creates semaphores and fences for host to host and host to device synchronization.</li>
-            <li>Clears the screen with a different color every frame.</li>
-        </ol>
+            <ol>
+                <li>Load Vulkan with <a href="https://crates.io/crates/ash"><code>ash</code></a> crate.</li>
+                <li>Creates Vulkan instance with <code>VK_LAYER_KHRONOS_validation</code> and debug utilities.</li>
+                <li>Creates window surface with <a
+                        href="https://crates.io/crates/ash-window"><code>ash-window</code></a>
+                    and
+                    <a href="https://crates.io/crates/raw-window-handle"><code>raw-window-handle</code></a> crates.
+                </li>
+                <li>Creates logical device and queues.</li>
+                <li>Creates command pool and buffers.</li>
+                <li>Creates swapchain.</li>
+                <li>Creates semaphores and fences for host to host and host to device synchronization.</li>
+                <li>Clears the screen with a different color every frame.</li>
+            </ol>
 
-        <p>
-            We also handle tricky situations such as user resizing the window and minimizing the window.
-        </p>
+            <p>
+                We also handle tricky situations such as user resizing the window and minimizing the window.
+            </p>
 
-        <p>
-            Notably we are not creating render passes or framebuffers, thanks to
-            <code>VK_KHR_dynamic_rendering</code>. We do have to specify some
-            render pass parameters when we record command buffers, but reducing
-            the number of API abstractions simplifies the implementation
-            signifcantly. We used this <a
-                href="https://github.com/SaschaWillems/Vulkan/blob/313ac10de4a765997ddf5202c599e4a0ca32c8ca/examples/dynamicrendering/dynamicrendering.cpp">example</a>
-            as a reference.
-        </p>
+            <p>
+                Notably we are not creating render passes or framebuffers, thanks to
+                <code>VK_KHR_dynamic_rendering</code>. We do have to specify some
+                render pass parameters when we record command buffers, but reducing
+                the number of API abstractions simplifies the implementation
+                signifcantly. We used this <a
+                    href="https://github.com/SaschaWillems/Vulkan/blob/313ac10de4a765997ddf5202c599e4a0ca32c8ca/examples/dynamicrendering/dynamicrendering.cpp">example</a>
+                as a reference.
+            </p>
 
-        <p>
-            Everything is written under <code>main()</code> with minimal
-            abstractions and with liberal use of <code>unsafe</code>. We will do
-            a <a href="https://caseymuratori.com/blog_0015">semantic
-                compression</a>
-            pass later once we have learned more about how the program should be
-            laid out.
-        </p>
+            <p>
+                Everything is written under <code>main()</code> with minimal
+                abstractions and with liberal use of <code>unsafe</code>. We
+                will do a <a href="https://caseymuratori.com/blog_0015">semantic
+                    compression</a>
+                pass later once we have learned more about how the program should be
+                laid out.
+            </p>
 
-        <p>
-            Next we will continue with more Vulkan code to get a triangle on the screen.
-        </p>
+            <p>
+                Next we will continue with more Vulkan code to get a triangle on the screen.
+            </p>
 
-        <p>
-            Commit:
-            <code>
+            <p>
+                Commit:
+                <code>
                 <a href="https://github.com/phoekz/raydiance/commit/0f6d7f1bf1b22d1fff43e87080c854eadb3e459d">0f6d7f1b</a>
             </code>
-        </p>
+            </p>
 
-    </section>
-    <hr>
+        </article>
 
-    <section>
-        <h2>2023/01/07 - Hello, winit!</h2>
+        <article>
+            <h2>Hello, winit!</h2>
+            <div class="article-date">2023-01-07</div>
 
-        <img src="images/20230107-161828.png" />
+            <img src="images/20230107-161828.png" />
 
-        <p>
-            Before anything interesting can happen, we are going to need a window to draw on. We use <a
-                href="https://crates.io/crates/winit"><code>winit</code></a>
-            crate for windowing and handling inputs. For convenience, we bound the Escape key to close the window and
-            center the window in the middle of the primary monitor.
-        </p>
+            <p>
+                Before anything interesting can happen, we are going to need a window to draw on. We use <a
+                    href="https://crates.io/crates/winit"><code>winit</code></a>
+                crate for windowing and handling inputs. For convenience, we
+                bound the Escape key to close the window and center the window
+                in the middle of the primary monitor.
+            </p>
 
-        <p>
-            For simple logging we use <a href="https://crates.io/crates/log"><code>log</code></a> and <a
-                href="https://crates.io/crates/env_logger"><code>env_logger</code></a>, and for application-level error
-            handling we use <a href="https://crates.io/crates/anyhow"><code>anyhow</code></a>.
-        </p>
+            <p>
+                For simple logging we use <a href="https://crates.io/crates/log"><code>log</code></a> and <a
+                    href="https://crates.io/crates/env_logger"><code>env_logger</code></a>,
+                and for application-level error handling we use <a
+                    href="https://crates.io/crates/anyhow"><code>anyhow</code></a>.
+            </p>
 
-        <p>
-            Next we are going to slog through a huge amount of Vulkan boilerplate to begin drawing something on our
-            blank window.
-        </p>
+            <p>
+                Next we are going to slog through a huge amount of Vulkan
+                boilerplate to begin drawing something on our blank window.
+            </p>
 
-        <p>
-            Commit:
-            <code>
+            <p>
+                Commit:
+                <code>
                 <a href="https://github.com/phoekz/raydiance/commit/ff4c31c2c6c2039d33bfd07865448da963febfd6">ff4c31c2</a>
             </code>
-        </p>
+            </p>
+        </article>
+
+        <!-- Footer -->
+        <div>
+            <p style="float: left"><a href="https://github.com/phoekz/raydiance">GitHub</a></p>
+            <p style="text-align: right; float: right">© 2023 Vinh Truong</p>
+        </div>
     </section>
-    <hr>
-
-    <!-- Footer -->
-    <a href="https://github.com/phoekz/raydiance">GitHub</a>
-    <br>
-    © 2023 Vinh Truong
-
 </body>
 
 </html>
