@@ -19,6 +19,39 @@
 
     <!-- Posts -->
     <section>
+        <h2>2023/01/08 - The first triangle</h2>
+
+        <img src="images/20230108-193100.webp">
+
+        <p>
+            This is the simplest triangle example rendered without any memory
+            allocations. The triangle is hard coded in the vertex shader and we
+            index into its attributes with vertex index.
+        </p>
+
+        <p>
+            We added a simple shader compiling step in
+            <code>build.rs</code> which builds
+            <code>.glsl</code> into <code>.spv</code> using Google's <a
+                href="https://github.com/google/shaderc/tree/main/glslc"><code>glslc</code></a>,
+            which is included in <a href="https://vulkan.lunarg.com/sdk/home">LunarG's Vulkan SDK</a>.
+        </p>
+
+        <p>
+            Next we will implement memory allocation in order to load a 3D model from a file.
+        </p>
+
+        <p>
+            Commit:
+            <code>
+                <a href="https://github.com/phoekz/raydiance/commit/c8f9ef2c0f3b51ddfd71f33ec086fca1531051ab">c8f9ef2c</a>
+            </code>
+        </p>
+
+    </section>
+    <hr>
+
+    <section>
         <h2>2023/01/08 - Clearing window with <code>VK_KHR_dynamic_rendering</code></h2>
 
         <img src="images/20230108-170100.webp">
