@@ -10,6 +10,7 @@
 use std::{
     borrow::Cow,
     ffi::{CStr, CString},
+    mem::transmute,
     slice,
 };
 
@@ -247,6 +248,28 @@ impl VulkanSwapchain {
     }
 }
 
+struct VulkanShader {
+    module: vk::ShaderModule,
+}
+
+impl VulkanShader {
+    unsafe fn new(device: &VulkanDevice, bytes: &[u8]) -> Result<Self> {
+        let dwords = bytes
+            .chunks_exact(4)
+            .map(|chunk| transmute([chunk[0], chunk[1], chunk[2], chunk[3]]))
+            .collect::<Vec<u32>>();
+        let module = device
+            .handle
+            .create_shader_module(&vk::ShaderModuleCreateInfo::builder().code(&dwords), None)
+            .context("Compiling shader")?;
+        Ok(Self { module })
+    }
+
+    unsafe fn destroy(&self, device: &VulkanDevice) {
+        device.handle.destroy_shader_module(self.module, None);
+    }
+}
+
 struct VulkanContext {
     instance: ash::Instance,
     debug: Option<VulkanDebug>,
@@ -258,6 +281,11 @@ struct VulkanContext {
     present_complete: Vec<vk::Semaphore>,
     rendering_complete: Vec<vk::Semaphore>,
     draw_commands_reuse: Vec<vk::Fence>,
+
+    vertex_shader: VulkanShader,
+    fragment_shader: VulkanShader,
+    graphics_pipeline: vk::Pipeline,
+    pipeline_layout: vk::PipelineLayout,
 }
 
 //
@@ -314,7 +342,10 @@ fn main() -> Result<()> {
     // Init winit.
     let window_title = env!("CARGO_PKG_NAME");
     let min_window_size = WindowSize { w: 320, h: 180 };
-    let mut window_size = WindowSize { w: 1280, h: 720 };
+    let mut window_size = WindowSize {
+        w: 1280 / 4,
+        h: 720 / 4,
+    };
     let mut resized_window_size = window_size;
     let (mut event_loop, window) = {
         // Create event loop.
@@ -693,34 +724,106 @@ fn main() -> Result<()> {
         let swapchain = VulkanSwapchain::new(&instance, &surface, &device, window_size.into())
             .context("Creating swapchain")?;
 
-        let mut present_complete = vec![];
-        let mut rendering_complete = vec![];
-        let mut draw_commands_reuse = vec![];
-        for _ in 0..MAX_CONCURRENT_FRAMES {
-            present_complete.push(
-                device
-                    .handle
-                    .create_semaphore(&vk::SemaphoreCreateInfo::default(), None)
-                    .context("Creating semaphore")?,
-            );
+        let (present_complete, rendering_complete, draw_commands_reuse) = {
+            let mut present_complete = vec![];
+            let mut rendering_complete = vec![];
+            let mut draw_commands_reuse = vec![];
+            for _ in 0..MAX_CONCURRENT_FRAMES {
+                present_complete.push(
+                    device
+                        .handle
+                        .create_semaphore(&vk::SemaphoreCreateInfo::default(), None)
+                        .context("Creating semaphore")?,
+                );
 
-            rendering_complete.push(
-                device
-                    .handle
-                    .create_semaphore(&vk::SemaphoreCreateInfo::default(), None)
-                    .context("Creating semaphore")?,
-            );
+                rendering_complete.push(
+                    device
+                        .handle
+                        .create_semaphore(&vk::SemaphoreCreateInfo::default(), None)
+                        .context("Creating semaphore")?,
+                );
 
-            draw_commands_reuse.push(
-                device
-                    .handle
-                    .create_fence(
-                        &vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::SIGNALED),
-                        None,
-                    )
-                    .context("Creating fence")?,
-            );
-        }
+                draw_commands_reuse.push(
+                    device
+                        .handle
+                        .create_fence(
+                            &vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::SIGNALED),
+                            None,
+                        )
+                        .context("Creating fence")?,
+                );
+            }
+            (present_complete, rendering_complete, draw_commands_reuse)
+        };
+
+        let (vertex_shader, fragment_shader) = (
+            VulkanShader::new(&device, include_bytes!("shaders/spv/triangle.vert"))?,
+            VulkanShader::new(&device, include_bytes!("shaders/spv/triangle.frag"))?,
+        );
+
+        let (graphics_pipeline, pipeline_layout) = {
+            // Stages.
+            let entry_point = CStr::from_bytes_with_nul(b"main\0")?;
+            let vertex_stage = vk::PipelineShaderStageCreateInfo::builder()
+                .stage(vk::ShaderStageFlags::VERTEX)
+                .module(vertex_shader.module)
+                .name(entry_point);
+            let fragment_stage = vk::PipelineShaderStageCreateInfo::builder()
+                .stage(vk::ShaderStageFlags::FRAGMENT)
+                .module(fragment_shader.module)
+                .name(entry_point);
+            let stages = [*vertex_stage, *fragment_stage];
+
+            // Rasterizer.
+            let rasterization_state = vk::PipelineRasterizationStateCreateInfo::builder()
+                .polygon_mode(vk::PolygonMode::FILL)
+                .line_width(1.0)
+                .cull_mode(vk::CullModeFlags::BACK)
+                .front_face(vk::FrontFace::CLOCKWISE);
+
+            // Vertex input.
+            let vertex_input_state = vk::PipelineVertexInputStateCreateInfo::builder();
+
+            // Input assembly.
+            let input_assembly_state = vk::PipelineInputAssemblyStateCreateInfo::builder()
+                .topology(vk::PrimitiveTopology::TRIANGLE_LIST);
+
+            // Dynamic state.
+            let dynamic_state = vk::PipelineDynamicStateCreateInfo::builder()
+                .dynamic_states(&[vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR]);
+
+            // Viewport stage.
+            let viewport_state = vk::PipelineViewportStateCreateInfo::builder()
+                .viewport_count(1)
+                .scissor_count(1);
+
+            // Pipeline layout.
+            let pipeline_layout = device
+                .handle
+                .create_pipeline_layout(&vk::PipelineLayoutCreateInfo::builder(), None)
+                .context("Creating pipeline layout")?;
+
+            // Pipeline.
+            let graphics_pipeline = device
+                .handle
+                .create_graphics_pipelines(
+                    vk::PipelineCache::null(),
+                    slice::from_ref(
+                        &vk::GraphicsPipelineCreateInfo::builder()
+                            .stages(&stages)
+                            .rasterization_state(&rasterization_state)
+                            .vertex_input_state(&vertex_input_state)
+                            .input_assembly_state(&input_assembly_state)
+                            .dynamic_state(&dynamic_state)
+                            .viewport_state(&viewport_state)
+                            .layout(pipeline_layout),
+                    ),
+                    None,
+                )
+                .unwrap();
+
+            (graphics_pipeline[0], pipeline_layout)
+        };
 
         VulkanContext {
             instance,
@@ -733,6 +836,11 @@ fn main() -> Result<()> {
             present_complete,
             rendering_complete,
             draw_commands_reuse,
+
+            vertex_shader,
+            fragment_shader,
+            graphics_pipeline,
+            pipeline_layout,
         }
     };
 
@@ -871,26 +979,6 @@ fn main() -> Result<()> {
                         )
                         .context("Beginning command buffer")
                         .unwrap();
-                    device.cmd_set_viewport(
-                        command_buffer,
-                        0,
-                        slice::from_ref(&vk::Viewport {
-                            x: 0.0,
-                            y: 0.0,
-                            width: window_size.w as f32,
-                            height: window_size.h as f32,
-                            min_depth: 0.0,
-                            max_depth: 1.0,
-                        }),
-                    );
-                    device.cmd_set_scissor(
-                        command_buffer,
-                        0,
-                        slice::from_ref(&vk::Rect2D {
-                            offset: vk::Offset2D { x: 0, y: 0 },
-                            extent: window_size.into(),
-                        }),
-                    );
                     device.cmd_pipeline_barrier(
                         command_buffer,
                         vk::PipelineStageFlags::TOP_OF_PIPE,
@@ -914,6 +1002,32 @@ fn main() -> Result<()> {
                         ),
                     );
                     device.cmd_begin_rendering(command_buffer, &rendering_info);
+                    device.cmd_set_viewport(
+                        command_buffer,
+                        0,
+                        slice::from_ref(&vk::Viewport {
+                            x: 0.0,
+                            y: 0.0,
+                            width: window_size.w as f32,
+                            height: window_size.h as f32,
+                            min_depth: 0.0,
+                            max_depth: 1.0,
+                        }),
+                    );
+                    device.cmd_set_scissor(
+                        command_buffer,
+                        0,
+                        slice::from_ref(&vk::Rect2D {
+                            offset: vk::Offset2D { x: 0, y: 0 },
+                            extent: window_size.into(),
+                        }),
+                    );
+                    device.cmd_bind_pipeline(
+                        command_buffer,
+                        vk::PipelineBindPoint::GRAPHICS,
+                        vulkan.graphics_pipeline,
+                    );
+                    device.cmd_draw(command_buffer, 3, 1, 0, 0);
                     device.cmd_end_rendering(command_buffer);
                     device.cmd_pipeline_barrier(
                         command_buffer,
@@ -999,6 +1113,12 @@ fn main() -> Result<()> {
         device
             .device_wait_idle()
             .context("Waiting for device idle")?;
+
+        vulkan.vertex_shader.destroy(&vulkan.device);
+        vulkan.fragment_shader.destroy(&vulkan.device);
+        device.destroy_pipeline(vulkan.graphics_pipeline, None);
+        device.destroy_pipeline_layout(vulkan.pipeline_layout, None);
+
         for i in 0..MAX_CONCURRENT_FRAMES {
             let i = i as usize;
             device.destroy_semaphore(vulkan.present_complete[i], None);
