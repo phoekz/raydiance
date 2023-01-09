@@ -5,13 +5,49 @@
     <meta charset="utf-8">
     <title>raydiance - blog</title>
     <style>
+        @font-face {
+            font-family: "Source Sans Pro - Regular";
+            src: url("fonts/SourceSansPro-Regular.ttf") format("truetype");
+        }
+
+        @font-face {
+            font-family: "Source Sans Pro - SemiBold";
+            src: url("fonts/SourceSansPro-SemiBold.ttf") format("truetype");
+        }
+
+        @font-face {
+            font-family: "Source Code Pro";
+            src: url("fonts/SourceCodePro-Regular.ttf") format("truetype");
+        }
+
+        * {
+            font-family: "Source Sans Pro - Regular";
+        }
+
+        h1,
+        h2,
+        h3 {
+            font-family: "Source Sans Pro - SemiBold";
+            font-weight: 400;
+        }
+
+        code {
+            font-family: "Source Code Pro";
+        }
+
+        body {
+            line-height: 1.5;
+            font-size: 18px;
+        }
+
+        header {
+            font-size: 22px;
+            border-bottom: 2px solid #bbb
+        }
+
         a {
             color: darkorange;
             text-decoration: none;
-        }
-
-        .title {
-            border-bottom: 1px solid #bbb
         }
 
         section {
@@ -20,7 +56,7 @@
         }
 
         article {
-            margin: 30px 0 5px 0;
+            padding-bottom: 16px;
             border-bottom: 1px solid #bbb
         }
 
@@ -28,22 +64,31 @@
             margin: 20px 0;
             color: #666;
         }
+
+        .commit {
+            font-size: 14px;
+            color: #666;
+        }
+
+        footer {
+            padding: 20px 10px 40px 10px;
+        }
     </style>
 </head>
 
 <body>
     <section>
         <!-- Header -->
-        <div class="title">
-            <h1>raydiance - blog</h1>
-        </div>
+        <header>
+            <h1>Raydiance Blog</h1>
+        </header>
 
         <!-- Posts -->
         <article>
             <h2>Adding multisampled anti-aliasing (MSAA)</h2>
             <div class="article-date">2023-01-10</div>
 
-            <img src="images/20230110-001539.png">
+            <img src="images/20230110-001539.png" width="100%">
 
             <p>
                 This was pretty easy. Similarly to depth buffer, we create a new
@@ -55,12 +100,12 @@
                 jagged edges.
             </p>
 
-            <p>
+            <div class="commit">
                 Commit:
-                <code>
-                    <a href="https://github.com/phoekz/raydiance/commit/ca2a23caaa5e9d9b321a50389af492fbc708b560">ca2a23ca</a>
-                </code>
-            </p>
+                <a href="https://github.com/phoekz/raydiance/commit/ca2a23caaa5e9d9b321a50389af492fbc708b560">
+                    <code>ca2a23ca</code>
+                </a>
+            </div>
         </article>
 
         <article>
@@ -77,7 +122,7 @@
 
             <h3>Loading and rendering GLTF scenes</h3>
 
-            <img src="images/20230109-182433.png">
+            <img src="images/20230109-182433.png" width="100%">
 
             <p>
                 We created a simple "cube on a plane" scene in Blender. Each
@@ -161,12 +206,12 @@
                 depth texture for rendering.
             </p>
 
-            <p>
+            <div class="commit">
                 Commit:
-                <code>
-                    <a href="https://github.com/phoekz/raydiance/commit/cb1bcc1975e3860b7208cffb4286fec3e91cc5d2">cb1bcc19</a>
-                </code>
-            </p>
+                <a href="https://github.com/phoekz/raydiance/commit/cb1bcc1975e3860b7208cffb4286fec3e91cc5d2">
+                    <code>cb1bcc19</code>
+                </a>
+            </div>
 
         </article>
 
@@ -198,13 +243,12 @@
                 load a 3D model from a file.
             </p>
 
-            <p>
+            <div class="commit">
                 Commit:
-                <code>
-                    <a href="https://github.com/phoekz/raydiance/commit/c8f9ef2c0f3b51ddfd71f33ec086fca1531051ab">c8f9ef2c</a>
-                </code>
-            </p>
-
+                <a href="https://github.com/phoekz/raydiance/commit/c8f9ef2c0f3b51ddfd71f33ec086fca1531051ab">
+                    <code>c8f9ef2c</code>
+                </a>
+            </div>
         </article>
 
         <article>
@@ -259,17 +303,16 @@
                 Next we will continue with more Vulkan code to get a triangle on the screen.
             </p>
 
-            <p>
+            <div class="commit">
                 Commit:
-                <code>
-                    <a href="https://github.com/phoekz/raydiance/commit/0f6d7f1bf1b22d1fff43e87080c854eadb3e459d">0f6d7f1b</a>
-                </code>
-            </p>
-
+                <a href="https://github.com/phoekz/raydiance/commit/0f6d7f1bf1b22d1fff43e87080c854eadb3e459d">
+                    <code>0f6d7f1b</code>
+                </a>
+            </div>
         </article>
 
         <article>
-            <h2>Hello, winit!</h2>
+            <h2>Hello, <code>winit</code>!</h2>
             <div class="article-date">2023-01-07</div>
 
             <img src="images/20230107-161828.png" />
@@ -294,19 +337,19 @@
                 boilerplate to begin drawing something on our blank window.
             </p>
 
-            <p>
+            <div class="commit">
                 Commit:
-                <code>
-                    <a href="https://github.com/phoekz/raydiance/commit/ff4c31c2c6c2039d33bfd07865448da963febfd6">ff4c31c2</a>
-                </code>
-            </p>
+                <a href="https://github.com/phoekz/raydiance/commit/ff4c31c2c6c2039d33bfd07865448da963febfd6">
+                    <code>ff4c31c2</code>
+                </a>
+            </div>
         </article>
 
         <!-- Footer -->
-        <div>
-            <p style="float: left"><a href="https://github.com/phoekz/raydiance">GitHub</a></p>
-            <p style="text-align: right; float: right">© 2023 Vinh Truong</p>
-        </div>
+        <footer>
+            <div style="float: left"><a href="https://github.com/phoekz/raydiance">GitHub</a></div>
+            <div style="text-align: right; float: right">© 2023 Vinh Truong</div>
+        </footer>
     </section>
 </body>
 
