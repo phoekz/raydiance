@@ -17,7 +17,6 @@ layout(location = 1) out vec3 frag_color;
 void main()
 {
     gl_Position = push.transform * vec4(in_position, 1.0);
-    gl_Position.y = -(gl_Position.y);
     frag_normal = in_normal;
     frag_color = push.base_color.xyz;
 }

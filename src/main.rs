@@ -1705,14 +1705,23 @@ fn main() -> Result<()> {
                     device.cmd_set_viewport(
                         command_buffer,
                         0,
-                        slice::from_ref(&vk::Viewport {
-                            x: 0.0,
-                            y: 0.0,
-                            width: window_size.w as f32,
-                            height: window_size.h as f32,
-                            min_depth: 0.0,
-                            max_depth: 1.0,
-                        }),
+                        slice::from_ref(
+                            // VK_KHR_maintenance1: Allow negative height to be
+                            // specified in the VkViewport::height field to
+                            // perform y-inversion of the clip-space to
+                            // framebuffer-space transform. This allows apps to
+                            // avoid having to use gl_Position.y =
+                            // -gl_Position.y in shaders also targeting other
+                            // APIs.
+                            &vk::Viewport {
+                                x: 0.0,
+                                y: window_size.h as f32,
+                                width: window_size.w as f32,
+                                height: -(window_size.h as f32),
+                                min_depth: 0.0,
+                                max_depth: 1.0,
+                            },
+                        ),
                     );
                     device.cmd_set_scissor(
                         command_buffer,
