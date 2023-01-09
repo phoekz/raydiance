@@ -24,7 +24,6 @@ use ash::{
 };
 use bytemuck::{Pod, Zeroable};
 use nalgebra as na;
-use palette::FromColor;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use winit::{
     dpi::{PhysicalPosition, PhysicalSize},
@@ -1608,9 +1607,6 @@ fn main() -> Result<()> {
                         .unwrap();
 
                     // Setup dynamic rendering.
-                    let hue = (frame_count % 2000) as f32 / 2000.0;
-                    let hsv = palette::Hsv::with_wp(hue * 360.0, 0.75, 1.0);
-                    let rgb = palette::LinSrgb::from_color(hsv);
                     let color_attachment = vk::RenderingAttachmentInfo::builder()
                         .image_view(color_target.view)
                         .image_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
@@ -1621,7 +1617,7 @@ fn main() -> Result<()> {
                         .store_op(vk::AttachmentStoreOp::STORE)
                         .clear_value(vk::ClearValue {
                             color: vk::ClearColorValue {
-                                float32: [rgb.red, rgb.green, rgb.blue, 1.0],
+                                float32: [0.0, 0.0, 0.0, 1.0],
                             },
                         });
                     let depth_attachment = vk::RenderingAttachmentInfo::builder()
