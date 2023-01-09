@@ -45,10 +45,11 @@ mod assets;
 
 const VULKAN_API_VERSION: u32 = vk::make_api_version(0, 1, 3, 0);
 const MAX_CONCURRENT_FRAMES: u32 = 3;
-const DEFAULT_SURFACE_FORMAT: vk::Format = vk::Format::B8G8R8A8_SRGB;
-const DEFAULT_SURFACE_COLOR_SPACE: vk::ColorSpaceKHR = vk::ColorSpaceKHR::SRGB_NONLINEAR;
-const DEFAULT_PRESENT_MODE: vk::PresentModeKHR = vk::PresentModeKHR::FIFO;
 const DEFAULT_DEPTH_FORMAT: vk::Format = vk::Format::D32_SFLOAT;
+const DEFAULT_SAMPLE_COUNT: vk::SampleCountFlags = vk::SampleCountFlags::TYPE_8;
+const DEFAULT_PRESENT_MODE: vk::PresentModeKHR = vk::PresentModeKHR::FIFO;
+const DEFAULT_SURFACE_COLOR_SPACE: vk::ColorSpaceKHR = vk::ColorSpaceKHR::SRGB_NONLINEAR;
+const DEFAULT_SURFACE_FORMAT: vk::Format = vk::Format::B8G8R8A8_SRGB;
 
 struct VulkanInstance {
     handle: ash::Instance,
@@ -312,15 +313,15 @@ impl VulkanDevice {
                     if properties.device_type != vk::PhysicalDeviceType::DISCRETE_GPU {
                         return None;
                     }
+
+                    // Check limits.
                     let limits = properties.limits;
-                    info!(
-                        "max_push_constants_size: {}",
-                        limits.max_push_constants_size
-                    );
-                    info!(
-                        "max_memory_allocation_count: {}",
-                        limits.max_memory_allocation_count
-                    );
+                    if !limits
+                        .framebuffer_color_sample_counts
+                        .contains(DEFAULT_SAMPLE_COUNT)
+                    {
+                        return None;
+                    }
 
                     // Make sure the device supports the queue types we
                     // need. Todo: We assume that there is at least one
@@ -842,13 +843,91 @@ impl VulkanMesh {
     }
 }
 
-struct VulkanDepth {
+struct VulkanColorTarget {
     image: vk::Image,
     memory: vk::DeviceMemory,
     view: vk::ImageView,
 }
 
-impl VulkanDepth {
+impl VulkanColorTarget {
+    unsafe fn create(device: &VulkanDevice, window_size: vk::Extent2D) -> Result<Self> {
+        // Image.
+        let image = device.create_image(
+            &vk::ImageCreateInfo::builder()
+                .image_type(vk::ImageType::TYPE_2D)
+                .format(DEFAULT_SURFACE_FORMAT)
+                .extent(vk::Extent3D {
+                    width: window_size.width,
+                    height: window_size.height,
+                    depth: 1,
+                })
+                .mip_levels(1)
+                .array_layers(1)
+                .samples(DEFAULT_SAMPLE_COUNT)
+                .tiling(vk::ImageTiling::OPTIMAL)
+                .usage(
+                    vk::ImageUsageFlags::TRANSIENT_ATTACHMENT
+                        | vk::ImageUsageFlags::COLOR_ATTACHMENT,
+                )
+                .initial_layout(vk::ImageLayout::UNDEFINED),
+            None,
+        )?;
+
+        // Allocate memory.
+        let requirements = device.get_image_memory_requirements(image);
+        let index =
+            device.find_memory_type_index(vk::MemoryPropertyFlags::DEVICE_LOCAL, requirements)?;
+        let memory = device.allocate_memory(
+            &vk::MemoryAllocateInfo::builder()
+                .allocation_size(requirements.size)
+                .memory_type_index(index),
+            None,
+        )?;
+        device.bind_image_memory(image, memory, 0)?;
+
+        // Image view.
+        let view = device.create_image_view(
+            &vk::ImageViewCreateInfo::builder()
+                .view_type(vk::ImageViewType::TYPE_2D)
+                .image(image)
+                .format(DEFAULT_SURFACE_FORMAT)
+                .subresource_range(vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    base_mip_level: 0,
+                    level_count: 1,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                }),
+            None,
+        )?;
+
+        Ok(Self {
+            image,
+            memory,
+            view,
+        })
+    }
+
+    unsafe fn recreate(&mut self, device: &VulkanDevice, window_size: vk::Extent2D) -> Result<()> {
+        self.destroy(device);
+        *self = Self::create(device, window_size)?;
+        Ok(())
+    }
+
+    unsafe fn destroy(&self, device: &VulkanDevice) {
+        device.destroy_image_view(self.view, None);
+        device.destroy_image(self.image, None);
+        device.free_memory(self.memory, None);
+    }
+}
+
+struct VulkanDepthTarget {
+    image: vk::Image,
+    memory: vk::DeviceMemory,
+    view: vk::ImageView,
+}
+
+impl VulkanDepthTarget {
     unsafe fn create(device: &VulkanDevice, window_size: vk::Extent2D) -> Result<Self> {
         // Image.
         let image = device.create_image(
@@ -862,9 +941,10 @@ impl VulkanDepth {
                 })
                 .mip_levels(1)
                 .array_layers(1)
-                .samples(vk::SampleCountFlags::TYPE_1)
+                .samples(DEFAULT_SAMPLE_COUNT)
                 .tiling(vk::ImageTiling::OPTIMAL)
-                .usage(vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT),
+                .usage(vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT)
+                .initial_layout(vk::ImageLayout::UNDEFINED),
             None,
         )?;
 
@@ -1131,6 +1211,10 @@ impl VulkanScene {
             let color_blend_state = vk::PipelineColorBlendStateCreateInfo::builder()
                 .attachments(slice::from_ref(&color_blend_attachment));
 
+            // Multisample state.
+            let multisample_state = vk::PipelineMultisampleStateCreateInfo::builder()
+                .rasterization_samples(DEFAULT_SAMPLE_COUNT);
+
             // Rendering.
             let mut rendering = vk::PipelineRenderingCreateInfo::builder()
                 .color_attachment_formats(&[DEFAULT_SURFACE_FORMAT])
@@ -1164,6 +1248,7 @@ impl VulkanScene {
                             .viewport_state(&viewport_state)
                             .depth_stencil_state(&depth_stencil_state)
                             .color_blend_state(&color_blend_state)
+                            .multisample_state(&multisample_state)
                             .push_next(&mut rendering)
                             .layout(pipeline_layout),
                     ),
@@ -1247,7 +1332,8 @@ struct VulkanContext {
     surface: VulkanSurface,
     device: VulkanDevice,
     swapchain: VulkanSwapchain,
-    depth: VulkanDepth,
+    color_target: VulkanColorTarget,
+    depth_target: VulkanDepthTarget,
     cmds: VulkanCommands,
     scene: VulkanScene,
 }
@@ -1274,7 +1360,8 @@ impl VulkanContext {
         let device = VulkanDevice::create(&instance, &surface)?;
         let cmds = VulkanCommands::create(&device)?;
         let swapchain = VulkanSwapchain::create(&instance, &surface, &device, window_size.into())?;
-        let depth = VulkanDepth::create(&device, window_size.into())?;
+        let color = VulkanColorTarget::create(&device, window_size.into())?;
+        let depth = VulkanDepthTarget::create(&device, window_size.into())?;
         let scene = VulkanScene::create(&device, assets_scene)?;
         Ok(Self {
             _entry: entry,
@@ -1283,7 +1370,8 @@ impl VulkanContext {
             surface,
             device,
             swapchain,
-            depth,
+            color_target: color,
+            depth_target: depth,
             cmds,
             scene,
         })
@@ -1293,7 +1381,8 @@ impl VulkanContext {
         self.device.device_wait_idle()?;
         self.scene.destroy(&self.device);
         self.cmds.destroy(&self.device);
-        self.depth.destroy(&self.device);
+        self.color_target.destroy(&self.device);
+        self.depth_target.destroy(&self.device);
         self.swapchain.destroy(&self.device);
         self.device.destroy();
         self.surface.destroy();
@@ -1464,7 +1553,8 @@ fn main() -> Result<()> {
                     let device = &vulkan.device;
                     let swapchain = &mut vulkan.swapchain;
                     let surface = &vulkan.surface;
-                    let depth = &mut vulkan.depth;
+                    let color_target = &mut vulkan.color_target;
+                    let depth_target = &mut vulkan.depth_target;
                     let scene = &vulkan.scene;
                     let cmds = &vulkan.cmds;
                     let command_buffers = &cmds.command_buffers;
@@ -1500,9 +1590,13 @@ fn main() -> Result<()> {
                             .recreate(surface, device, window_size.into())
                             .context("Recreating swapchain")
                             .unwrap();
-                        depth
+                        color_target
                             .recreate(device, window_size.into())
-                            .context("Recreating depth")
+                            .context("Recreating color target")
+                            .unwrap();
+                        depth_target
+                            .recreate(device, window_size.into())
+                            .context("Recreating depth target")
                             .unwrap();
                         return;
                     };
@@ -1518,8 +1612,11 @@ fn main() -> Result<()> {
                     let hsv = palette::Hsv::with_wp(hue * 360.0, 0.75, 1.0);
                     let rgb = palette::LinSrgb::from_color(hsv);
                     let color_attachment = vk::RenderingAttachmentInfo::builder()
-                        .image_view(swapchain.images[present_index as usize].1)
+                        .image_view(color_target.view)
                         .image_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
+                        .resolve_mode(vk::ResolveModeFlags::AVERAGE) // ResolveModeFlags,
+                        .resolve_image_view(swapchain.images[present_index as usize].1) // ImageView,
+                        .resolve_image_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL) // ImageLayout,
                         .load_op(vk::AttachmentLoadOp::CLEAR)
                         .store_op(vk::AttachmentStoreOp::STORE)
                         .clear_value(vk::ClearValue {
@@ -1528,7 +1625,7 @@ fn main() -> Result<()> {
                             },
                         });
                     let depth_attachment = vk::RenderingAttachmentInfo::builder()
-                        .image_view(depth.view)
+                        .image_view(depth_target.view)
                         .image_layout(vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL)
                         .load_op(vk::AttachmentLoadOp::CLEAR)
                         .store_op(vk::AttachmentStoreOp::STORE)
@@ -1560,6 +1657,30 @@ fn main() -> Result<()> {
                         .unwrap();
                     device.cmd_pipeline_barrier(
                         command_buffer,
+                        vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS
+                            | vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,
+                        vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS
+                            | vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,
+                        vk::DependencyFlags::empty(),
+                        &[],
+                        &[],
+                        slice::from_ref(
+                            &vk::ImageMemoryBarrier::builder()
+                                .dst_access_mask(vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE)
+                                .old_layout(vk::ImageLayout::UNDEFINED)
+                                .new_layout(vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL)
+                                .image(depth_target.image)
+                                .subresource_range(vk::ImageSubresourceRange {
+                                    aspect_mask: vk::ImageAspectFlags::DEPTH,
+                                    base_mip_level: 0,
+                                    level_count: 1,
+                                    base_array_layer: 0,
+                                    layer_count: 1,
+                                }),
+                        ),
+                    );
+                    device.cmd_pipeline_barrier(
+                        command_buffer,
                         vk::PipelineStageFlags::TOP_OF_PIPE,
                         vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
                         vk::DependencyFlags::empty(),
@@ -1573,30 +1694,6 @@ fn main() -> Result<()> {
                                 .image(swapchain.images[present_index as usize].0)
                                 .subresource_range(vk::ImageSubresourceRange {
                                     aspect_mask: vk::ImageAspectFlags::COLOR,
-                                    base_mip_level: 0,
-                                    level_count: 1,
-                                    base_array_layer: 0,
-                                    layer_count: 1,
-                                }),
-                        ),
-                    );
-                    device.cmd_pipeline_barrier(
-                        command_buffer,
-                        vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS
-                            | vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,
-                        vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS
-                            | vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,
-                        vk::DependencyFlags::empty(),
-                        &[],
-                        &[],
-                        slice::from_ref(
-                            &vk::ImageMemoryBarrier::builder()
-                                .dst_access_mask(vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE)
-                                .old_layout(vk::ImageLayout::UNDEFINED)
-                                .new_layout(vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL)
-                                .image(depth.image)
-                                .subresource_range(vk::ImageSubresourceRange {
-                                    aspect_mask: vk::ImageAspectFlags::DEPTH,
                                     base_mip_level: 0,
                                     level_count: 1,
                                     base_array_layer: 0,
@@ -1682,9 +1779,13 @@ fn main() -> Result<()> {
                             .recreate(surface, device, resized_window_size.into())
                             .context("Recreating swapchain")
                             .unwrap();
-                        depth
+                        color_target
                             .recreate(device, resized_window_size.into())
-                            .context("Recreating depth")
+                            .context("Recreating color target")
+                            .unwrap();
+                        depth_target
+                            .recreate(device, resized_window_size.into())
+                            .context("Recreating depth target")
                             .unwrap();
                         window_size = resized_window_size;
                     }
