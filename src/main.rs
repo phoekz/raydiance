@@ -4,21 +4,25 @@
 #![allow(
     clippy::too_many_lines,
     clippy::cast_precision_loss,
-    clippy::cast_possible_truncation
+    clippy::cast_possible_truncation,
+    clippy::wildcard_imports
 )]
 
 use std::{
     borrow::Cow,
     ffi::{CStr, CString},
-    mem::transmute,
+    mem::{size_of, transmute},
     slice,
+    time::Instant,
 };
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, ensure, Context, Result};
 use ash::{
     extensions::khr::{Surface, Swapchain},
     vk::{self, SwapchainCreateInfoKHR},
 };
+use bytemuck::{Pod, Zeroable};
+use nalgebra as na;
 use palette::FromColor;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use winit::{
@@ -28,8 +32,11 @@ use winit::{
     platform::run_return::EventLoopExtRunReturn,
     window::WindowBuilder,
 };
+
 #[macro_use]
 extern crate log;
+
+mod assets;
 
 //
 // Vulkan
@@ -40,6 +47,7 @@ const MAX_CONCURRENT_FRAMES: u32 = 3;
 const DEFAULT_SURFACE_FORMAT: vk::Format = vk::Format::B8G8R8A8_SRGB;
 const DEFAULT_SURFACE_COLOR_SPACE: vk::ColorSpaceKHR = vk::ColorSpaceKHR::SRGB_NONLINEAR;
 const DEFAULT_PRESENT_MODE: vk::PresentModeKHR = vk::PresentModeKHR::FIFO;
+const DEFAULT_DEPTH_FORMAT: vk::Format = vk::Format::D32_SFLOAT;
 
 struct VulkanDebug {
     utils: ash::extensions::ext::DebugUtils,
@@ -52,14 +60,39 @@ struct VulkanSurface {
 }
 
 struct VulkanQueue {
+    handle: vk::Queue,
     index: u32,
-    queue: vk::Queue,
 }
 
 struct VulkanDevice {
     handle: ash::Device,
     physical_device: vk::PhysicalDevice,
     queue: VulkanQueue,
+    memory_properties: vk::PhysicalDeviceMemoryProperties,
+}
+
+impl VulkanDevice {
+    unsafe fn find_memory_type_index(
+        &self,
+        property_flags: vk::MemoryPropertyFlags,
+        memory_requirements: vk::MemoryRequirements,
+    ) -> Result<u32> {
+        let properties = &self.memory_properties;
+        let requirements = &memory_requirements;
+        properties.memory_types[..properties.memory_type_count as _]
+            .iter()
+            .enumerate()
+            .find(|&(index, memory_type)| {
+                (1 << index) & requirements.memory_type_bits != 0
+                    && memory_type.property_flags & property_flags == property_flags
+            })
+            .map(|(index, _)| index as u32)
+            .ok_or_else(|| {
+                anyhow!(
+                    "Unable to find suitable memory type for the buffer, requirements={memory_requirements:?}"
+                )
+            })
+    }
 }
 
 struct VulkanSwapchain {
@@ -73,7 +106,7 @@ impl VulkanSwapchain {
     const COMPOSITE_TRANSFORM: vk::CompositeAlphaFlagsKHR = vk::CompositeAlphaFlagsKHR::OPAQUE;
     const IMAGE_USAGE: vk::ImageUsageFlags = vk::ImageUsageFlags::COLOR_ATTACHMENT;
 
-    unsafe fn new(
+    unsafe fn create(
         instance: &ash::Instance,
         surface: &VulkanSurface,
         device: &VulkanDevice,
@@ -253,7 +286,7 @@ struct VulkanShader {
 }
 
 impl VulkanShader {
-    unsafe fn new(device: &VulkanDevice, bytes: &[u8]) -> Result<Self> {
+    unsafe fn create(device: &VulkanDevice, bytes: &[u8]) -> Result<Self> {
         let dwords = bytes
             .chunks_exact(4)
             .map(|chunk| transmute([chunk[0], chunk[1], chunk[2], chunk[3]]))
@@ -270,22 +303,521 @@ impl VulkanShader {
     }
 }
 
+struct VulkanBuffer {
+    handle: vk::Buffer,
+    memory: vk::DeviceMemory,
+    byte_count: usize,
+}
+
+impl VulkanBuffer {
+    unsafe fn create(
+        device: &VulkanDevice,
+        usage_flags: vk::BufferUsageFlags,
+        property_flags: vk::MemoryPropertyFlags,
+        byte_count: usize,
+        bytes: &[u8],
+    ) -> Result<Self> {
+        // Create initial buffer.
+        let buffer = device
+            .handle
+            .create_buffer(
+                &vk::BufferCreateInfo::builder()
+                    .size(byte_count as u64)
+                    .usage(usage_flags)
+                    .sharing_mode(vk::SharingMode::EXCLUSIVE),
+                None,
+            )
+            .with_context(|| format!("Creating buffer of bytes={byte_count}"))?;
+
+        // Find memory type index.
+        let requirements = device.handle.get_buffer_memory_requirements(buffer);
+        let index = device.find_memory_type_index(property_flags, requirements)?;
+
+        // Create allocation.
+        let allocate_info = vk::MemoryAllocateInfo::builder()
+            .allocation_size(requirements.size)
+            .memory_type_index(index)
+            .build();
+        let memory = device.handle.allocate_memory(&allocate_info, None)?;
+
+        // Copy to staging buffer.
+        if !bytes.is_empty() {
+            let map_flags = vk::MemoryMapFlags::empty();
+            let ptr = device
+                .handle
+                .map_memory(memory, 0, requirements.size, map_flags)?;
+            let ptr = ptr.cast::<u8>();
+            let mapped_slice = std::slice::from_raw_parts_mut(ptr, byte_count);
+            mapped_slice.copy_from_slice(bytes);
+            device.handle.unmap_memory(memory);
+        }
+
+        // Bind memory.
+        device.handle.bind_buffer_memory(buffer, memory, 0)?;
+
+        Ok(Self {
+            handle: buffer,
+            memory,
+            byte_count,
+        })
+    }
+
+    unsafe fn create_init<T: Copy + Zeroable + Pod>(
+        device: &VulkanDevice,
+        usage_flags: vk::BufferUsageFlags,
+        elements: &[T],
+    ) -> Result<Self> {
+        // Calculate sizes.
+        let element_byte_count = size_of::<T>();
+        let byte_count = element_byte_count * elements.len();
+
+        // Create host buffer.
+        let host_usage_flags = vk::BufferUsageFlags::TRANSFER_SRC;
+        let property_flags = vk::MemoryPropertyFlags::HOST_VISIBLE;
+        let bytes = bytemuck::cast_slice(elements);
+        let host_buffer =
+            Self::create(device, host_usage_flags, property_flags, byte_count, bytes)?;
+
+        // Create device buffer.
+        let device_usage_flags =
+            usage_flags | vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::TRANSFER_DST;
+        let property_flags = vk::MemoryPropertyFlags::DEVICE_LOCAL;
+        let device_buffer =
+            Self::create(device, device_usage_flags, property_flags, byte_count, &[])?;
+
+        // Copy.
+        host_buffer.copy_to(device, &device_buffer)?;
+
+        // Cleanup.
+        host_buffer.destroy(device);
+
+        Ok(device_buffer)
+    }
+
+    unsafe fn copy_to(&self, device: &VulkanDevice, dst: &Self) -> Result<()> {
+        // Validate.
+        if self.byte_count != dst.byte_count {
+            bail!(
+                "src and dst must have the same size, got src={} and dst={} instead",
+                self.byte_count,
+                dst.byte_count
+            );
+        }
+
+        // Create temporary upload setup.
+        let pool = device.handle.create_command_pool(
+            &vk::CommandPoolCreateInfo::builder()
+                .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
+                .queue_family_index(device.queue.index),
+            None,
+        )?;
+        let cmd = device.handle.allocate_command_buffers(
+            &vk::CommandBufferAllocateInfo::builder()
+                .command_pool(pool)
+                .level(vk::CommandBufferLevel::PRIMARY)
+                .command_buffer_count(1),
+        )?[0];
+        let fence = device.handle.create_fence(
+            &vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::empty()),
+            None,
+        )?;
+
+        // Record commands.
+        device
+            .handle
+            .begin_command_buffer(cmd, &vk::CommandBufferBeginInfo::builder())?;
+        device.handle.cmd_copy_buffer(
+            cmd,
+            self.handle,
+            dst.handle,
+            &[vk::BufferCopy {
+                src_offset: 0,
+                dst_offset: 0,
+                size: self.byte_count as u64,
+            }],
+        );
+        device.handle.end_command_buffer(cmd)?;
+
+        // Submit and wait.
+        device.handle.queue_submit(
+            device.queue.handle,
+            &[*vk::SubmitInfo::builder().command_buffers(&[cmd])],
+            fence,
+        )?;
+        device.handle.wait_for_fences(&[fence], true, u64::MAX)?;
+
+        // Cleanup.
+        device.handle.destroy_fence(fence, None);
+        device.handle.free_command_buffers(pool, &[cmd]);
+        device.handle.destroy_command_pool(pool, None);
+
+        Ok(())
+    }
+
+    unsafe fn destroy(&self, device: &VulkanDevice) {
+        device.handle.destroy_buffer(self.handle, None);
+        device.handle.free_memory(self.memory, None);
+    }
+}
+
+struct VulkanMesh {
+    positions: VulkanBuffer,
+    normals: VulkanBuffer,
+    indices: VulkanBuffer,
+    index_count: u32,
+    transform: na::Matrix4<f32>,
+    base_color: na::Vector4<f32>,
+}
+
+impl VulkanMesh {
+    unsafe fn destroy(&self, device: &VulkanDevice) {
+        self.positions.destroy(device);
+        self.normals.destroy(device);
+        self.indices.destroy(device);
+    }
+}
+
+struct VulkanDepth {
+    image: vk::Image,
+    memory: vk::DeviceMemory,
+    view: vk::ImageView,
+}
+
+impl VulkanDepth {
+    unsafe fn create(device: &VulkanDevice, window_size: vk::Extent2D) -> Result<Self> {
+        // Image.
+        let image = device.handle.create_image(
+            &vk::ImageCreateInfo::builder()
+                .image_type(vk::ImageType::TYPE_2D)
+                .format(DEFAULT_DEPTH_FORMAT)
+                .extent(vk::Extent3D {
+                    width: window_size.width,
+                    height: window_size.height,
+                    depth: 1,
+                })
+                .mip_levels(1)
+                .array_layers(1)
+                .samples(vk::SampleCountFlags::TYPE_1)
+                .tiling(vk::ImageTiling::OPTIMAL)
+                .usage(vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT),
+            None,
+        )?;
+
+        // Allocate memory.
+        let requirements = device.handle.get_image_memory_requirements(image);
+        let index =
+            device.find_memory_type_index(vk::MemoryPropertyFlags::DEVICE_LOCAL, requirements)?;
+        let memory = device.handle.allocate_memory(
+            &vk::MemoryAllocateInfo::builder()
+                .allocation_size(requirements.size)
+                .memory_type_index(index),
+            None,
+        )?;
+        device.handle.bind_image_memory(image, memory, 0)?;
+
+        // Image view.
+        let view = device.handle.create_image_view(
+            &vk::ImageViewCreateInfo::builder()
+                .view_type(vk::ImageViewType::TYPE_2D)
+                .image(image)
+                .format(DEFAULT_DEPTH_FORMAT)
+                .subresource_range(vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::DEPTH,
+                    base_mip_level: 0,
+                    level_count: 1,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                }),
+            None,
+        )?;
+
+        Ok(Self {
+            image,
+            memory,
+            view,
+        })
+    }
+
+    unsafe fn recreate(&mut self, device: &VulkanDevice, window_size: vk::Extent2D) -> Result<()> {
+        self.destroy(device);
+        *self = Self::create(device, window_size)?;
+        Ok(())
+    }
+
+    unsafe fn destroy(&self, device: &VulkanDevice) {
+        let device = &device.handle;
+        device.destroy_image_view(self.view, None);
+        device.destroy_image(self.image, None);
+        device.free_memory(self.memory, None);
+    }
+}
+
+#[repr(C)]
+#[derive(Zeroable, Pod, Clone, Copy)]
+struct VulkanPushConstants {
+    transform: na::Matrix4<f32>,
+    base_color: na::Vector4<f32>,
+}
+
+struct VulkanScene {
+    meshes: Vec<VulkanMesh>,
+    vertex_shader: VulkanShader,
+    fragment_shader: VulkanShader,
+    graphics_pipeline: vk::Pipeline,
+    pipeline_layout: vk::PipelineLayout,
+}
+
+impl VulkanScene {
+    unsafe fn create(device: &VulkanDevice, assets_scene: &assets::Scene) -> Result<Self> {
+        // Todo: Allocating meshes individually will eventually crash due to
+        // `max_memory_allocation_count`, which is only 4096 on most NVIDIA
+        // hardware. At that point, we need to start packing meshes into a
+        // single allocation.
+        let meshes = {
+            let mut meshes = vec![];
+            for assets_mesh in &assets_scene.meshes {
+                let positions = assets_mesh.positions.0.as_ref();
+                let normals = assets_mesh.normals.0.as_ref();
+                let indices = assets_mesh.indices.0.as_ref();
+                let transform = assets_mesh.transform;
+                let base_color = assets_mesh.material.base_color;
+
+                meshes.push(VulkanMesh {
+                    positions: VulkanBuffer::create_init(
+                        device,
+                        vk::BufferUsageFlags::VERTEX_BUFFER,
+                        positions,
+                    )?,
+                    normals: VulkanBuffer::create_init(
+                        device,
+                        vk::BufferUsageFlags::VERTEX_BUFFER,
+                        normals,
+                    )?,
+                    indices: VulkanBuffer::create_init(
+                        device,
+                        vk::BufferUsageFlags::INDEX_BUFFER,
+                        indices,
+                    )?,
+                    index_count: assets_mesh.indices.index_count(),
+                    transform,
+                    base_color,
+                });
+            }
+            meshes
+        };
+
+        // Pipelines.
+        let (vertex_shader, fragment_shader) = (
+            VulkanShader::create(device, include_bytes!("shaders/spv/triangle.vert"))?,
+            VulkanShader::create(device, include_bytes!("shaders/spv/triangle.frag"))?,
+        );
+        let (graphics_pipeline, pipeline_layout) = {
+            // Stages.
+            let entry_point = CStr::from_bytes_with_nul(b"main\0")?;
+            let vertex_stage = vk::PipelineShaderStageCreateInfo::builder()
+                .stage(vk::ShaderStageFlags::VERTEX)
+                .module(vertex_shader.module)
+                .name(entry_point);
+            let fragment_stage = vk::PipelineShaderStageCreateInfo::builder()
+                .stage(vk::ShaderStageFlags::FRAGMENT)
+                .module(fragment_shader.module)
+                .name(entry_point);
+            let stages = [*vertex_stage, *fragment_stage];
+
+            // Rasterizer.
+            let rasterization_state = vk::PipelineRasterizationStateCreateInfo::builder()
+                .polygon_mode(vk::PolygonMode::FILL)
+                .line_width(1.0)
+                .cull_mode(vk::CullModeFlags::BACK)
+                .front_face(vk::FrontFace::COUNTER_CLOCKWISE);
+
+            // Vertex input.
+            let position_binding_descriptions = vk::VertexInputBindingDescription::builder()
+                .binding(0)
+                .input_rate(vk::VertexInputRate::VERTEX)
+                .stride((3 * size_of::<f32>()) as u32);
+            let position_attribute_descriptions = vk::VertexInputAttributeDescription::builder()
+                .binding(0)
+                .location(0)
+                .format(vk::Format::R32G32B32_SFLOAT)
+                .offset(0);
+            let normal_binding_descriptions = vk::VertexInputBindingDescription::builder()
+                .binding(1)
+                .input_rate(vk::VertexInputRate::VERTEX)
+                .stride((3 * size_of::<f32>()) as u32);
+            let normal_attribute_descriptions = vk::VertexInputAttributeDescription::builder()
+                .binding(1)
+                .location(1)
+                .format(vk::Format::R32G32B32_SFLOAT)
+                .offset(0);
+            let vertex_binding_descriptions =
+                [*position_binding_descriptions, *normal_binding_descriptions];
+            let vertex_attribute_descriptions = [
+                *position_attribute_descriptions,
+                *normal_attribute_descriptions,
+            ];
+            let vertex_input_state = vk::PipelineVertexInputStateCreateInfo::builder()
+                .vertex_binding_descriptions(&vertex_binding_descriptions)
+                .vertex_attribute_descriptions(&vertex_attribute_descriptions);
+
+            // Input assembly.
+            let input_assembly_state = vk::PipelineInputAssemblyStateCreateInfo::builder()
+                .topology(vk::PrimitiveTopology::TRIANGLE_LIST);
+
+            // Dynamic state.
+            let dynamic_state = vk::PipelineDynamicStateCreateInfo::builder()
+                .dynamic_states(&[vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR]);
+
+            // Viewport stage.
+            let viewport_state = vk::PipelineViewportStateCreateInfo::builder()
+                .viewport_count(1)
+                .scissor_count(1);
+
+            // Depth stencil state.
+            let depth_stencil_state = vk::PipelineDepthStencilStateCreateInfo::builder()
+                .depth_test_enable(true)
+                .depth_write_enable(true)
+                .depth_compare_op(vk::CompareOp::LESS_OR_EQUAL)
+                .back(*vk::StencilOpState::builder().compare_op(vk::CompareOp::ALWAYS));
+
+            // Color blend state.
+            let color_blend_attachment = vk::PipelineColorBlendAttachmentState::builder()
+                .blend_enable(true)
+                .src_color_blend_factor(vk::BlendFactor::SRC_ALPHA)
+                .dst_color_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
+                .color_blend_op(vk::BlendOp::ADD)
+                .src_alpha_blend_factor(vk::BlendFactor::ONE)
+                .dst_alpha_blend_factor(vk::BlendFactor::ONE)
+                .alpha_blend_op(vk::BlendOp::ADD)
+                .color_write_mask(vk::ColorComponentFlags::RGBA);
+            let color_blend_state = vk::PipelineColorBlendStateCreateInfo::builder()
+                .attachments(slice::from_ref(&color_blend_attachment));
+
+            // Rendering.
+            let mut rendering = vk::PipelineRenderingCreateInfo::builder()
+                .color_attachment_formats(&[DEFAULT_SURFACE_FORMAT])
+                .depth_attachment_format(DEFAULT_DEPTH_FORMAT);
+
+            // Pipeline layout.
+            let pipeline_layout = device
+                .handle
+                .create_pipeline_layout(
+                    &vk::PipelineLayoutCreateInfo::builder().push_constant_ranges(&[
+                        vk::PushConstantRange {
+                            stage_flags: vk::ShaderStageFlags::VERTEX,
+                            offset: 0,
+                            size: size_of::<VulkanPushConstants>() as u32,
+                        },
+                    ]),
+                    None,
+                )
+                .context("Creating pipeline layout")?;
+
+            // Pipeline.
+            let graphics_pipeline = device
+                .handle
+                .create_graphics_pipelines(
+                    vk::PipelineCache::null(),
+                    slice::from_ref(
+                        &vk::GraphicsPipelineCreateInfo::builder()
+                            .stages(&stages)
+                            .rasterization_state(&rasterization_state)
+                            .vertex_input_state(&vertex_input_state)
+                            .input_assembly_state(&input_assembly_state)
+                            .dynamic_state(&dynamic_state)
+                            .viewport_state(&viewport_state)
+                            .depth_stencil_state(&depth_stencil_state)
+                            .color_blend_state(&color_blend_state)
+                            .push_next(&mut rendering)
+                            .layout(pipeline_layout),
+                    ),
+                    None,
+                )
+                .unwrap();
+
+            (graphics_pipeline[0], pipeline_layout)
+        };
+
+        Ok(Self {
+            meshes,
+            vertex_shader,
+            fragment_shader,
+            graphics_pipeline,
+            pipeline_layout,
+        })
+    }
+
+    unsafe fn draw(
+        &self,
+        device: &VulkanDevice,
+        cmd: vk::CommandBuffer,
+        time: f32,
+        assets_scene: &assets::Scene,
+    ) {
+        // Prepare matrices.
+        let camera = &assets_scene.cameras[0];
+        let projection = *camera.projection().as_matrix();
+        let view = camera.view().try_inverse().unwrap();
+        let rotation = na::Matrix4::from_axis_angle(&na::Vector3::y_axis(), time);
+
+        // Render meshes.
+        let device = &device.handle;
+        device.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, self.graphics_pipeline);
+        for mesh in &self.meshes {
+            // Prepare push constants.
+            let push = VulkanPushConstants {
+                // Pre-multiply all matrices to save space.
+                // `max_push_constants_size` is typically in order of 128 to 256
+                // bytes.
+                transform: projection * view * rotation * mesh.transform,
+                base_color: mesh.base_color,
+            };
+            let constants = bytemuck::cast_slice(slice::from_ref(&push));
+
+            // Bind resources.
+            device.cmd_bind_vertex_buffers(cmd, 0, slice::from_ref(&mesh.positions.handle), &[0]);
+            device.cmd_bind_vertex_buffers(cmd, 1, slice::from_ref(&mesh.normals.handle), &[0]);
+            device.cmd_bind_index_buffer(cmd, mesh.indices.handle, 0, vk::IndexType::UINT32);
+            device.cmd_push_constants(
+                cmd,
+                self.pipeline_layout,
+                vk::ShaderStageFlags::VERTEX,
+                0,
+                constants,
+            );
+
+            // Draw.
+            device.cmd_draw_indexed(cmd, mesh.index_count, 1, 0, 0, 0);
+        }
+    }
+
+    unsafe fn destroy(&self, device: &VulkanDevice) {
+        self.vertex_shader.destroy(device);
+        self.fragment_shader.destroy(device);
+        for mesh in &self.meshes {
+            mesh.destroy(device);
+        }
+
+        let device = &device.handle;
+        device.destroy_pipeline(self.graphics_pipeline, None);
+        device.destroy_pipeline_layout(self.pipeline_layout, None);
+    }
+}
+
 struct VulkanContext {
     instance: ash::Instance,
     debug: Option<VulkanDebug>,
     surface: VulkanSurface,
     device: VulkanDevice,
     swapchain: VulkanSwapchain,
+    depth: VulkanDepth,
     command_pool: vk::CommandPool,
     command_buffers: Vec<vk::CommandBuffer>,
     present_complete: Vec<vk::Semaphore>,
     rendering_complete: Vec<vk::Semaphore>,
     draw_commands_reuse: Vec<vk::Fence>,
 
-    vertex_shader: VulkanShader,
-    fragment_shader: VulkanShader,
-    graphics_pipeline: vk::Pipeline,
-    pipeline_layout: vk::PipelineLayout,
+    scene: VulkanScene,
 }
 
 //
@@ -378,6 +910,9 @@ fn main() -> Result<()> {
 
         (event_loop, window)
     };
+
+    // Init scene.
+    let assets_scene = assets::Scene::create(include_bytes!("assets/rounded_cube.glb"))?;
 
     // Init Vulkan.
     let vulkan_validation = std::env::var("VULKAN_VALIDATION").is_ok();
@@ -576,6 +1111,15 @@ fn main() -> Result<()> {
                         if properties.device_type != vk::PhysicalDeviceType::DISCRETE_GPU {
                             return None;
                         }
+                        let limits = properties.limits;
+                        info!(
+                            "max_push_constants_size: {}",
+                            limits.max_push_constants_size
+                        );
+                        info!(
+                            "max_memory_allocation_count: {}",
+                            limits.max_memory_allocation_count
+                        );
 
                         // Make sure the device supports the queue types we
                         // need. Todo: We assume that there is at least one
@@ -684,16 +1228,20 @@ fn main() -> Result<()> {
                     .context("Creating device")?
             };
 
+            // Memory properties.
+            let memory_properties = instance.get_physical_device_memory_properties(physical_device);
+
             // Create queue.
             let queue = VulkanQueue {
                 index: queue_family_index,
-                queue: device.get_device_queue(queue_family_index, 0),
+                handle: device.get_device_queue(queue_family_index, 0),
             };
 
             VulkanDevice {
                 handle: device,
                 physical_device,
                 queue,
+                memory_properties,
             }
         };
 
@@ -721,8 +1269,10 @@ fn main() -> Result<()> {
                 .context("Allocating command buffers")?
         };
 
-        let swapchain = VulkanSwapchain::new(&instance, &surface, &device, window_size.into())
+        let swapchain = VulkanSwapchain::create(&instance, &surface, &device, window_size.into())
             .context("Creating swapchain")?;
+
+        let depth = VulkanDepth::create(&device, window_size.into()).context("Creating depth")?;
 
         let (present_complete, rendering_complete, draw_commands_reuse) = {
             let mut present_complete = vec![];
@@ -756,74 +1306,7 @@ fn main() -> Result<()> {
             (present_complete, rendering_complete, draw_commands_reuse)
         };
 
-        let (vertex_shader, fragment_shader) = (
-            VulkanShader::new(&device, include_bytes!("shaders/spv/triangle.vert"))?,
-            VulkanShader::new(&device, include_bytes!("shaders/spv/triangle.frag"))?,
-        );
-
-        let (graphics_pipeline, pipeline_layout) = {
-            // Stages.
-            let entry_point = CStr::from_bytes_with_nul(b"main\0")?;
-            let vertex_stage = vk::PipelineShaderStageCreateInfo::builder()
-                .stage(vk::ShaderStageFlags::VERTEX)
-                .module(vertex_shader.module)
-                .name(entry_point);
-            let fragment_stage = vk::PipelineShaderStageCreateInfo::builder()
-                .stage(vk::ShaderStageFlags::FRAGMENT)
-                .module(fragment_shader.module)
-                .name(entry_point);
-            let stages = [*vertex_stage, *fragment_stage];
-
-            // Rasterizer.
-            let rasterization_state = vk::PipelineRasterizationStateCreateInfo::builder()
-                .polygon_mode(vk::PolygonMode::FILL)
-                .line_width(1.0)
-                .cull_mode(vk::CullModeFlags::BACK)
-                .front_face(vk::FrontFace::CLOCKWISE);
-
-            // Vertex input.
-            let vertex_input_state = vk::PipelineVertexInputStateCreateInfo::builder();
-
-            // Input assembly.
-            let input_assembly_state = vk::PipelineInputAssemblyStateCreateInfo::builder()
-                .topology(vk::PrimitiveTopology::TRIANGLE_LIST);
-
-            // Dynamic state.
-            let dynamic_state = vk::PipelineDynamicStateCreateInfo::builder()
-                .dynamic_states(&[vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR]);
-
-            // Viewport stage.
-            let viewport_state = vk::PipelineViewportStateCreateInfo::builder()
-                .viewport_count(1)
-                .scissor_count(1);
-
-            // Pipeline layout.
-            let pipeline_layout = device
-                .handle
-                .create_pipeline_layout(&vk::PipelineLayoutCreateInfo::builder(), None)
-                .context("Creating pipeline layout")?;
-
-            // Pipeline.
-            let graphics_pipeline = device
-                .handle
-                .create_graphics_pipelines(
-                    vk::PipelineCache::null(),
-                    slice::from_ref(
-                        &vk::GraphicsPipelineCreateInfo::builder()
-                            .stages(&stages)
-                            .rasterization_state(&rasterization_state)
-                            .vertex_input_state(&vertex_input_state)
-                            .input_assembly_state(&input_assembly_state)
-                            .dynamic_state(&dynamic_state)
-                            .viewport_state(&viewport_state)
-                            .layout(pipeline_layout),
-                    ),
-                    None,
-                )
-                .unwrap();
-
-            (graphics_pipeline[0], pipeline_layout)
-        };
+        let scene = VulkanScene::create(&device, &assets_scene)?;
 
         VulkanContext {
             instance,
@@ -831,20 +1314,19 @@ fn main() -> Result<()> {
             surface,
             device,
             swapchain,
+            depth,
             command_pool,
             command_buffers,
             present_complete,
             rendering_complete,
             draw_commands_reuse,
 
-            vertex_shader,
-            fragment_shader,
-            graphics_pipeline,
-            pipeline_layout,
+            scene,
         }
     };
 
     // Main event loop.
+    let instant_start = Instant::now();
     let mut frame_index = 0_u64;
     let mut frame_count = 0_u64;
     event_loop.run_return(|event, _, control_flow| {
@@ -900,7 +1382,7 @@ fn main() -> Result<()> {
                 // logic.
                 unsafe {
                     let device = &vulkan.device.handle;
-                    let queue = &vulkan.device.queue.queue;
+                    let queue = &vulkan.device.queue.handle;
 
                     // Wait until previous frame is done.
                     device
@@ -936,6 +1418,11 @@ fn main() -> Result<()> {
                             .recreate(&vulkan.surface, &vulkan.device, window_size.into())
                             .context("Recreating swapchain")
                             .unwrap();
+                        vulkan
+                            .depth
+                            .recreate(&vulkan.device, window_size.into())
+                            .context("Recreating depth")
+                            .unwrap();
                         return;
                     };
 
@@ -951,7 +1438,7 @@ fn main() -> Result<()> {
                     let hue = (frame_count % 2000) as f32 / 2000.0;
                     let hsv = palette::Hsv::with_wp(hue * 360.0, 0.75, 1.0);
                     let rgb = palette::LinSrgb::from_color(hsv);
-                    let color_attachment_info = vk::RenderingAttachmentInfo::builder()
+                    let color_attachment = vk::RenderingAttachmentInfo::builder()
                         .image_view(vulkan.swapchain.images[present_index as usize].1)
                         .image_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
                         .load_op(vk::AttachmentLoadOp::CLEAR)
@@ -961,13 +1448,26 @@ fn main() -> Result<()> {
                                 float32: [rgb.red, rgb.green, rgb.blue, 1.0],
                             },
                         });
+                    let depth_attachment = vk::RenderingAttachmentInfo::builder()
+                        .image_view(vulkan.depth.view)
+                        .image_layout(vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL)
+                        .load_op(vk::AttachmentLoadOp::CLEAR)
+                        .store_op(vk::AttachmentStoreOp::STORE)
+                        .clear_value(vk::ClearValue {
+                            depth_stencil: vk::ClearDepthStencilValue {
+                                depth: 1.0,
+                                stencil: 0,
+                            },
+                        });
+
                     let rendering_info = vk::RenderingInfo::builder()
                         .render_area(vk::Rect2D {
                             offset: vk::Offset2D::default(),
                             extent: window_size.into(),
                         })
                         .layer_count(1)
-                        .color_attachments(slice::from_ref(&color_attachment_info));
+                        .color_attachments(slice::from_ref(&color_attachment))
+                        .depth_attachment(&depth_attachment);
 
                     // Record command buffer.
                     let command_buffer = vulkan.command_buffers[present_index as usize];
@@ -1001,6 +1501,30 @@ fn main() -> Result<()> {
                                 }),
                         ),
                     );
+                    device.cmd_pipeline_barrier(
+                        command_buffer,
+                        vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS
+                            | vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,
+                        vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS
+                            | vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,
+                        vk::DependencyFlags::empty(),
+                        &[],
+                        &[],
+                        slice::from_ref(
+                            &vk::ImageMemoryBarrier::builder()
+                                .dst_access_mask(vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE)
+                                .old_layout(vk::ImageLayout::UNDEFINED)
+                                .new_layout(vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL)
+                                .image(vulkan.depth.image)
+                                .subresource_range(vk::ImageSubresourceRange {
+                                    aspect_mask: vk::ImageAspectFlags::DEPTH,
+                                    base_mip_level: 0,
+                                    level_count: 1,
+                                    base_array_layer: 0,
+                                    layer_count: 1,
+                                }),
+                        ),
+                    );
                     device.cmd_begin_rendering(command_buffer, &rendering_info);
                     device.cmd_set_viewport(
                         command_buffer,
@@ -1022,12 +1546,12 @@ fn main() -> Result<()> {
                             extent: window_size.into(),
                         }),
                     );
-                    device.cmd_bind_pipeline(
-                        command_buffer,
-                        vk::PipelineBindPoint::GRAPHICS,
-                        vulkan.graphics_pipeline,
-                    );
-                    device.cmd_draw(command_buffer, 3, 1, 0, 0);
+
+                    let time = instant_start.elapsed().as_secs_f32();
+                    vulkan
+                        .scene
+                        .draw(&vulkan.device, command_buffer, time, &assets_scene);
+
                     device.cmd_end_rendering(command_buffer);
                     device.cmd_pipeline_barrier(
                         command_buffer,
@@ -1095,6 +1619,11 @@ fn main() -> Result<()> {
                             .recreate(&vulkan.surface, &vulkan.device, resized_window_size.into())
                             .context("Recreating swapchain")
                             .unwrap();
+                        vulkan
+                            .depth
+                            .recreate(&vulkan.device, resized_window_size.into())
+                            .context("Recreating depth")
+                            .unwrap();
                         window_size = resized_window_size;
                     }
                 }
@@ -1114,10 +1643,7 @@ fn main() -> Result<()> {
             .device_wait_idle()
             .context("Waiting for device idle")?;
 
-        vulkan.vertex_shader.destroy(&vulkan.device);
-        vulkan.fragment_shader.destroy(&vulkan.device);
-        device.destroy_pipeline(vulkan.graphics_pipeline, None);
-        device.destroy_pipeline_layout(vulkan.pipeline_layout, None);
+        vulkan.scene.destroy(&vulkan.device);
 
         for i in 0..MAX_CONCURRENT_FRAMES {
             let i = i as usize;
@@ -1128,6 +1654,7 @@ fn main() -> Result<()> {
 
         device.free_command_buffers(vulkan.command_pool, &vulkan.command_buffers);
         device.destroy_command_pool(vulkan.command_pool, None);
+        vulkan.depth.destroy(&vulkan.device);
         vulkan.swapchain.destroy(&vulkan.device);
         device.destroy_device(None);
         vulkan
