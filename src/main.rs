@@ -12,6 +12,7 @@ use std::{
     borrow::Cow,
     ffi::{CStr, CString},
     mem::{size_of, transmute},
+    ops::Deref,
     slice,
     time::Instant,
 };
@@ -49,9 +50,174 @@ const DEFAULT_SURFACE_COLOR_SPACE: vk::ColorSpaceKHR = vk::ColorSpaceKHR::SRGB_N
 const DEFAULT_PRESENT_MODE: vk::PresentModeKHR = vk::PresentModeKHR::FIFO;
 const DEFAULT_DEPTH_FORMAT: vk::Format = vk::Format::D32_SFLOAT;
 
+struct VulkanInstance {
+    handle: ash::Instance,
+}
+
+impl Deref for VulkanInstance {
+    type Target = ash::Instance;
+
+    fn deref(&self) -> &Self::Target {
+        &self.handle
+    }
+}
+
+impl VulkanInstance {
+    unsafe fn create(entry: &ash::Entry, validation: bool, window_title: &str) -> Result<Self> {
+        // Application metadata.
+        let application_name = CString::new(window_title)?;
+        let engine_name = CString::new(window_title)?;
+        let application_info = vk::ApplicationInfo::builder()
+            .application_name(application_name.as_c_str())
+            .application_version(1)
+            .engine_name(engine_name.as_c_str())
+            .engine_version(1)
+            .api_version(VULKAN_API_VERSION);
+
+        // Layers.
+        let enabled_layers = {
+            let check_support = |layers: &[vk::LayerProperties], layer_name: &CStr| -> Result<()> {
+                if layers
+                    .iter()
+                    .any(|layer| CStr::from_ptr(layer.layer_name.as_ptr()) == layer_name)
+                {
+                    return Ok(());
+                }
+                bail!("Instance must support layer={layer_name:?}");
+            };
+
+            let layers = entry
+                .enumerate_instance_layer_properties()
+                .context("Getting instance layers")?;
+            debug!("{layers:#?}");
+
+            let khronos_validation = CStr::from_bytes_with_nul(b"VK_LAYER_KHRONOS_validation\0")?;
+            check_support(&layers, khronos_validation)?;
+            let mut enabled_layers = vec![];
+            if validation {
+                enabled_layers.push(khronos_validation.as_ptr());
+            }
+            enabled_layers
+        };
+
+        // Extensions.
+        let enabled_extensions = {
+            let check_support =
+                |extensions: &[vk::ExtensionProperties], extension_name: &CStr| -> Result<()> {
+                    if extensions.iter().any(|extension| {
+                        CStr::from_ptr(extension.extension_name.as_ptr()) == extension_name
+                    }) {
+                        return Ok(());
+                    }
+                    bail!("Instance must support extension={:?}", extension_name);
+                };
+
+            let extensions = entry
+                .enumerate_instance_extension_properties(None)
+                .context("Getting instance extensions")?;
+            debug!("{extensions:#?}");
+
+            let mut enabled_extensions = vec![];
+            enabled_extensions.push(vk::KhrSurfaceFn::name());
+            enabled_extensions.push(vk::KhrWin32SurfaceFn::name());
+            if validation {
+                enabled_extensions.push(vk::ExtDebugUtilsFn::name());
+            }
+            for enabled_extension in &enabled_extensions {
+                check_support(&extensions, enabled_extension)?;
+            }
+            enabled_extensions
+                .into_iter()
+                .map(CStr::as_ptr)
+                .collect::<Vec<_>>()
+        };
+
+        // Create.
+        let instance = entry
+            .create_instance(
+                &vk::InstanceCreateInfo::builder()
+                    .application_info(&application_info)
+                    .enabled_layer_names(&enabled_layers)
+                    .enabled_extension_names(&enabled_extensions),
+                None,
+            )
+            .context("Creating Vulkan instance")?;
+
+        Ok(Self { handle: instance })
+    }
+
+    unsafe fn destroy(&self) {
+        self.destroy_instance(None);
+    }
+}
+
 struct VulkanDebug {
     utils: ash::extensions::ext::DebugUtils,
     callback: vk::DebugUtilsMessengerEXT,
+}
+
+impl VulkanDebug {
+    unsafe fn create(entry: &ash::Entry, instance: &VulkanInstance) -> Result<Self> {
+        unsafe extern "system" fn debug_callback(
+            message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
+            message_type: vk::DebugUtilsMessageTypeFlagsEXT,
+            p_callback_data: *const vk::DebugUtilsMessengerCallbackDataEXT,
+            _user_data: *mut std::os::raw::c_void,
+        ) -> vk::Bool32 {
+            let callback_data = *p_callback_data;
+            let message_id_number = callback_data.message_id_number;
+            let message_id_name = if callback_data.p_message_id_name.is_null() {
+                Cow::from("")
+            } else {
+                CStr::from_ptr(callback_data.p_message_id_name).to_string_lossy()
+            };
+            let message = if callback_data.p_message.is_null() {
+                Cow::from("")
+            } else {
+                CStr::from_ptr(callback_data.p_message).to_string_lossy()
+            };
+
+            #[allow(clippy::match_same_arms)]
+            let level = match message_severity {
+                vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE => log::Level::Debug,
+                vk::DebugUtilsMessageSeverityFlagsEXT::INFO => log::Level::Info,
+                vk::DebugUtilsMessageSeverityFlagsEXT::WARNING => log::Level::Warn,
+                vk::DebugUtilsMessageSeverityFlagsEXT::ERROR => log::Level::Error,
+                _ => log::Level::Warn,
+            };
+
+            log!(level, "Vulkan: type={message_type:?} id={message_id_number:?} name={message_id_name:?} message={message}");
+
+            vk::FALSE
+        }
+
+        let utils = ash::extensions::ext::DebugUtils::new(entry, instance);
+        let callback = utils
+            .create_debug_utils_messenger(
+                &vk::DebugUtilsMessengerCreateInfoEXT::builder()
+                    .message_severity(
+                        vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
+                            | vk::DebugUtilsMessageSeverityFlagsEXT::INFO
+                            | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
+                            | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR,
+                    )
+                    .message_type(
+                        vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
+                            | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION
+                            | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE,
+                    )
+                    .pfn_user_callback(Some(debug_callback)),
+                None,
+            )
+            .context("Creating Vulkan debug utils messenger")?;
+
+        Ok(Self { utils, callback })
+    }
+
+    unsafe fn destroy(&self) {
+        self.utils
+            .destroy_debug_utils_messenger(self.callback, None);
+    }
 }
 
 struct VulkanSurface {
@@ -59,9 +225,44 @@ struct VulkanSurface {
     loader: ash::extensions::khr::Surface,
 }
 
+impl VulkanSurface {
+    unsafe fn create(
+        entry: &ash::Entry,
+        instance: &VulkanInstance,
+        window: &winit::window::Window,
+    ) -> Result<Self> {
+        let surface = ash_window::create_surface(
+            entry,
+            instance,
+            window.raw_display_handle(),
+            window.raw_window_handle(),
+            None,
+        )
+        .context("Creating surface")?;
+        let loader = Surface::new(entry, instance);
+
+        Ok(Self {
+            handle: surface,
+            loader,
+        })
+    }
+
+    unsafe fn destroy(&self) {
+        self.loader.destroy_surface(self.handle, None);
+    }
+}
+
 struct VulkanQueue {
     handle: vk::Queue,
     index: u32,
+}
+
+impl Deref for VulkanQueue {
+    type Target = vk::Queue;
+
+    fn deref(&self) -> &Self::Target {
+        &self.handle
+    }
 }
 
 struct VulkanDevice {
@@ -71,7 +272,179 @@ struct VulkanDevice {
     memory_properties: vk::PhysicalDeviceMemoryProperties,
 }
 
+impl Deref for VulkanDevice {
+    type Target = ash::Device;
+
+    fn deref(&self) -> &Self::Target {
+        &self.handle
+    }
+}
+
 impl VulkanDevice {
+    unsafe fn create(instance: &VulkanInstance, surface: &VulkanSurface) -> Result<Self> {
+        // Find physical device and its queues.
+        let (physical_device, queue_family_index) = if let Some((physical_device, queue_families)) =
+            instance
+                .enumerate_physical_devices()
+                .context("Enumerating physical devices")?
+                .into_iter()
+                .find_map(|physical_device| {
+                    // Make sure the device supports the features we need.
+                    let mut features_11 = vk::PhysicalDeviceVulkan11Features::default();
+                    let mut features_12 = vk::PhysicalDeviceVulkan12Features::default();
+                    let mut features_13 = vk::PhysicalDeviceVulkan13Features::default();
+                    let mut features = vk::PhysicalDeviceFeatures2::builder()
+                        .push_next(&mut features_11)
+                        .push_next(&mut features_12)
+                        .push_next(&mut features_13);
+                    instance.get_physical_device_features2(physical_device, &mut features);
+                    let features_10 = features.features;
+                    debug!("{:#?}", features_10);
+                    debug!("{:#?}", features_11);
+                    debug!("{:#?}", features_12);
+                    debug!("{:#?}", features_13);
+                    if features_13.dynamic_rendering == vk::FALSE {
+                        return None;
+                    }
+
+                    // We only support discrete GPUs at this point.
+                    let properties = instance.get_physical_device_properties(physical_device);
+                    if properties.device_type != vk::PhysicalDeviceType::DISCRETE_GPU {
+                        return None;
+                    }
+                    let limits = properties.limits;
+                    info!(
+                        "max_push_constants_size: {}",
+                        limits.max_push_constants_size
+                    );
+                    info!(
+                        "max_memory_allocation_count: {}",
+                        limits.max_memory_allocation_count
+                    );
+
+                    // Make sure the device supports the queue types we
+                    // need. Todo: We assume that there is at least one
+                    // queue that supports all operations. This might not be
+                    // true on all devices, so we need to come back later to
+                    // generalize this.
+                    let queue_families =
+                        instance.get_physical_device_queue_family_properties(physical_device);
+                    let queue = queue_families.into_iter().enumerate().find_map(
+                        |(queue_family_index, queue_family)| {
+                            if queue_family.queue_flags.contains(
+                                vk::QueueFlags::GRAPHICS
+                                    | vk::QueueFlags::COMPUTE
+                                    | vk::QueueFlags::TRANSFER,
+                            ) {
+                                return Some(queue_family_index);
+                            }
+                            None
+                        },
+                    );
+                    let queue = if let Some(queue) = queue {
+                        queue as u32
+                    } else {
+                        return None;
+                    };
+
+                    // Check for present support.
+                    if let Ok(supports_present) = surface
+                        .loader
+                        .get_physical_device_surface_support(physical_device, queue, surface.handle)
+                    {
+                        if !supports_present {
+                            return None;
+                        }
+                    } else {
+                        return None;
+                    }
+
+                    Some((physical_device, queue))
+                }) {
+            (physical_device, queue_families)
+        } else {
+            bail!("Failed to find any suitable physical devices");
+        };
+        let device_properties = instance.get_physical_device_properties(physical_device);
+        info!(
+            "Physical device: {:?}",
+            CStr::from_ptr(device_properties.device_name.as_ptr())
+        );
+
+        // Create device.
+        let device = {
+            // Queue infos.
+            let queue_create_info = vk::DeviceQueueCreateInfo::builder()
+                .queue_family_index(queue_family_index)
+                .queue_priorities(&[1.0])
+                .build();
+            let queue_create_infos = [queue_create_info];
+
+            // Extensions.
+            let enabled_extensions = {
+                let check_support =
+                    |extensions: &[vk::ExtensionProperties], extension_name: &CStr| -> Result<()> {
+                        if extensions.iter().any(|extension| {
+                            CStr::from_ptr(extension.extension_name.as_ptr()) == extension_name
+                        }) {
+                            return Ok(());
+                        }
+                        bail!("Device must support extension={extension_name:?}");
+                    };
+
+                let extensions = instance
+                    .enumerate_device_extension_properties(physical_device)
+                    .context("Getting device extensions")?;
+                debug!("{extensions:#?}");
+
+                let enabled_extensions = [vk::KhrSwapchainFn::name()];
+                for extension in &enabled_extensions {
+                    check_support(&extensions, extension)?;
+                }
+                enabled_extensions
+                    .into_iter()
+                    .map(CStr::as_ptr)
+                    .collect::<Vec<_>>()
+            };
+
+            // Features.
+            let mut dynamic_rendering_feature =
+                vk::PhysicalDeviceDynamicRenderingFeatures::builder().dynamic_rendering(true);
+
+            // Create.
+            instance
+                .create_device(
+                    physical_device,
+                    &vk::DeviceCreateInfo::builder()
+                        .queue_create_infos(&queue_create_infos)
+                        .enabled_extension_names(&enabled_extensions)
+                        .push_next(&mut dynamic_rendering_feature),
+                    None,
+                )
+                .context("Creating device")?
+        };
+
+        // Memory properties.
+        let memory_properties = instance.get_physical_device_memory_properties(physical_device);
+
+        // Create queue.
+        let queue = VulkanQueue {
+            index: queue_family_index,
+            handle: device.get_device_queue(queue_family_index, 0),
+        };
+
+        Ok(Self {
+            handle: device,
+            physical_device,
+            queue,
+            memory_properties,
+        })
+    }
+
+    unsafe fn destroy(&self) {
+        self.destroy_device(None);
+    }
+
     unsafe fn find_memory_type_index(
         &self,
         property_flags: vk::MemoryPropertyFlags,
@@ -182,7 +555,7 @@ impl VulkanSwapchain {
         }
 
         // Create loader.
-        let loader = Swapchain::new(instance, &device.handle);
+        let loader = Swapchain::new(instance, device);
 
         // Create swapchain.
         let mut swapchain = Self {
@@ -199,7 +572,7 @@ impl VulkanSwapchain {
 
     unsafe fn destroy(&mut self, device: &VulkanDevice) {
         self.images.iter().for_each(|&images| {
-            device.handle.destroy_image_view(images.1, None);
+            device.destroy_image_view(images.1, None);
         });
         self.images.clear();
         if self.handle != vk::SwapchainKHR::null() {
@@ -215,7 +588,6 @@ impl VulkanSwapchain {
     ) -> Result<()> {
         // Flush pipeline.
         device
-            .handle
             .device_wait_idle()
             .context("Waiting for device idle")?;
 
@@ -267,7 +639,6 @@ impl VulkanSwapchain {
                     })
                     .image(image);
                 device
-                    .handle
                     .create_image_view(&create_view_info, None)
                     .context("Creating image view")
             })
@@ -292,14 +663,13 @@ impl VulkanShader {
             .map(|chunk| transmute([chunk[0], chunk[1], chunk[2], chunk[3]]))
             .collect::<Vec<u32>>();
         let module = device
-            .handle
             .create_shader_module(&vk::ShaderModuleCreateInfo::builder().code(&dwords), None)
             .context("Compiling shader")?;
         Ok(Self { module })
     }
 
     unsafe fn destroy(&self, device: &VulkanDevice) {
-        device.handle.destroy_shader_module(self.module, None);
+        device.destroy_shader_module(self.module, None);
     }
 }
 
@@ -319,7 +689,6 @@ impl VulkanBuffer {
     ) -> Result<Self> {
         // Create initial buffer.
         let buffer = device
-            .handle
             .create_buffer(
                 &vk::BufferCreateInfo::builder()
                     .size(byte_count as u64)
@@ -330,7 +699,7 @@ impl VulkanBuffer {
             .with_context(|| format!("Creating buffer of bytes={byte_count}"))?;
 
         // Find memory type index.
-        let requirements = device.handle.get_buffer_memory_requirements(buffer);
+        let requirements = device.get_buffer_memory_requirements(buffer);
         let index = device.find_memory_type_index(property_flags, requirements)?;
 
         // Create allocation.
@@ -338,22 +707,20 @@ impl VulkanBuffer {
             .allocation_size(requirements.size)
             .memory_type_index(index)
             .build();
-        let memory = device.handle.allocate_memory(&allocate_info, None)?;
+        let memory = device.allocate_memory(&allocate_info, None)?;
 
         // Copy to staging buffer.
         if !bytes.is_empty() {
             let map_flags = vk::MemoryMapFlags::empty();
-            let ptr = device
-                .handle
-                .map_memory(memory, 0, requirements.size, map_flags)?;
+            let ptr = device.map_memory(memory, 0, requirements.size, map_flags)?;
             let ptr = ptr.cast::<u8>();
             let mapped_slice = std::slice::from_raw_parts_mut(ptr, byte_count);
             mapped_slice.copy_from_slice(bytes);
-            device.handle.unmap_memory(memory);
+            device.unmap_memory(memory);
         }
 
         // Bind memory.
-        device.handle.bind_buffer_memory(buffer, memory, 0)?;
+        device.bind_buffer_memory(buffer, memory, 0)?;
 
         Ok(Self {
             handle: buffer,
@@ -405,28 +772,26 @@ impl VulkanBuffer {
         }
 
         // Create temporary upload setup.
-        let pool = device.handle.create_command_pool(
+        let pool = device.create_command_pool(
             &vk::CommandPoolCreateInfo::builder()
                 .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
                 .queue_family_index(device.queue.index),
             None,
         )?;
-        let cmd = device.handle.allocate_command_buffers(
+        let cmd = device.allocate_command_buffers(
             &vk::CommandBufferAllocateInfo::builder()
                 .command_pool(pool)
                 .level(vk::CommandBufferLevel::PRIMARY)
                 .command_buffer_count(1),
         )?[0];
-        let fence = device.handle.create_fence(
+        let fence = device.create_fence(
             &vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::empty()),
             None,
         )?;
 
         // Record commands.
-        device
-            .handle
-            .begin_command_buffer(cmd, &vk::CommandBufferBeginInfo::builder())?;
-        device.handle.cmd_copy_buffer(
+        device.begin_command_buffer(cmd, &vk::CommandBufferBeginInfo::builder())?;
+        device.cmd_copy_buffer(
             cmd,
             self.handle,
             dst.handle,
@@ -436,27 +801,27 @@ impl VulkanBuffer {
                 size: self.byte_count as u64,
             }],
         );
-        device.handle.end_command_buffer(cmd)?;
+        device.end_command_buffer(cmd)?;
 
         // Submit and wait.
-        device.handle.queue_submit(
-            device.queue.handle,
+        device.queue_submit(
+            *device.queue,
             &[*vk::SubmitInfo::builder().command_buffers(&[cmd])],
             fence,
         )?;
-        device.handle.wait_for_fences(&[fence], true, u64::MAX)?;
+        device.wait_for_fences(&[fence], true, u64::MAX)?;
 
         // Cleanup.
-        device.handle.destroy_fence(fence, None);
-        device.handle.free_command_buffers(pool, &[cmd]);
-        device.handle.destroy_command_pool(pool, None);
+        device.destroy_fence(fence, None);
+        device.free_command_buffers(pool, &[cmd]);
+        device.destroy_command_pool(pool, None);
 
         Ok(())
     }
 
     unsafe fn destroy(&self, device: &VulkanDevice) {
-        device.handle.destroy_buffer(self.handle, None);
-        device.handle.free_memory(self.memory, None);
+        device.destroy_buffer(self.handle, None);
+        device.free_memory(self.memory, None);
     }
 }
 
@@ -486,7 +851,7 @@ struct VulkanDepth {
 impl VulkanDepth {
     unsafe fn create(device: &VulkanDevice, window_size: vk::Extent2D) -> Result<Self> {
         // Image.
-        let image = device.handle.create_image(
+        let image = device.create_image(
             &vk::ImageCreateInfo::builder()
                 .image_type(vk::ImageType::TYPE_2D)
                 .format(DEFAULT_DEPTH_FORMAT)
@@ -504,19 +869,19 @@ impl VulkanDepth {
         )?;
 
         // Allocate memory.
-        let requirements = device.handle.get_image_memory_requirements(image);
+        let requirements = device.get_image_memory_requirements(image);
         let index =
             device.find_memory_type_index(vk::MemoryPropertyFlags::DEVICE_LOCAL, requirements)?;
-        let memory = device.handle.allocate_memory(
+        let memory = device.allocate_memory(
             &vk::MemoryAllocateInfo::builder()
                 .allocation_size(requirements.size)
                 .memory_type_index(index),
             None,
         )?;
-        device.handle.bind_image_memory(image, memory, 0)?;
+        device.bind_image_memory(image, memory, 0)?;
 
         // Image view.
-        let view = device.handle.create_image_view(
+        let view = device.create_image_view(
             &vk::ImageViewCreateInfo::builder()
                 .view_type(vk::ImageViewType::TYPE_2D)
                 .image(image)
@@ -545,10 +910,81 @@ impl VulkanDepth {
     }
 
     unsafe fn destroy(&self, device: &VulkanDevice) {
-        let device = &device.handle;
         device.destroy_image_view(self.view, None);
         device.destroy_image(self.image, None);
         device.free_memory(self.memory, None);
+    }
+}
+
+struct VulkanCommands {
+    command_pool: vk::CommandPool,
+    command_buffers: Vec<vk::CommandBuffer>,
+    present_complete: Vec<vk::Semaphore>,
+    rendering_complete: Vec<vk::Semaphore>,
+    draw_commands_reuse: Vec<vk::Fence>,
+}
+
+impl VulkanCommands {
+    unsafe fn create(device: &VulkanDevice) -> Result<Self> {
+        let command_pool = device
+            .create_command_pool(
+                &vk::CommandPoolCreateInfo::builder()
+                    .queue_family_index(device.queue.index)
+                    .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER),
+                None,
+            )
+            .context("Creating command pool")?;
+        let command_buffers = device
+            .allocate_command_buffers(
+                &vk::CommandBufferAllocateInfo::builder()
+                    .command_buffer_count(MAX_CONCURRENT_FRAMES)
+                    .command_pool(command_pool)
+                    .level(vk::CommandBufferLevel::PRIMARY),
+            )
+            .context("Allocating command buffers")?;
+
+        let mut present_complete = vec![];
+        let mut rendering_complete = vec![];
+        let mut draw_commands_reuse = vec![];
+        for _ in 0..MAX_CONCURRENT_FRAMES {
+            present_complete.push(
+                device
+                    .create_semaphore(&vk::SemaphoreCreateInfo::default(), None)
+                    .context("Creating semaphore")?,
+            );
+            rendering_complete.push(
+                device
+                    .create_semaphore(&vk::SemaphoreCreateInfo::default(), None)
+                    .context("Creating semaphore")?,
+            );
+            draw_commands_reuse.push(
+                device
+                    .create_fence(
+                        &vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::SIGNALED),
+                        None,
+                    )
+                    .context("Creating fence")?,
+            );
+        }
+
+        Ok(Self {
+            command_pool,
+            command_buffers,
+            present_complete,
+            rendering_complete,
+            draw_commands_reuse,
+        })
+    }
+
+    unsafe fn destroy(&self, device: &VulkanDevice) {
+        for i in 0..MAX_CONCURRENT_FRAMES {
+            let i = i as usize;
+            device.destroy_semaphore(self.present_complete[i], None);
+            device.destroy_semaphore(self.rendering_complete[i], None);
+            device.destroy_fence(self.draw_commands_reuse[i], None);
+        }
+        device.free_command_buffers(self.command_pool, &self.command_buffers);
+        device.destroy_command_pool(self.command_pool, None);
     }
 }
 
@@ -565,6 +1001,8 @@ struct VulkanScene {
     fragment_shader: VulkanShader,
     graphics_pipeline: vk::Pipeline,
     pipeline_layout: vk::PipelineLayout,
+    projection: na::Matrix4<f32>,
+    view: na::Matrix4<f32>,
 }
 
 impl VulkanScene {
@@ -700,7 +1138,6 @@ impl VulkanScene {
 
             // Pipeline layout.
             let pipeline_layout = device
-                .handle
                 .create_pipeline_layout(
                     &vk::PipelineLayoutCreateInfo::builder().push_constant_ranges(&[
                         vk::PushConstantRange {
@@ -715,7 +1152,6 @@ impl VulkanScene {
 
             // Pipeline.
             let graphics_pipeline = device
-                .handle
                 .create_graphics_pipelines(
                     vk::PipelineCache::null(),
                     slice::from_ref(
@@ -738,30 +1174,32 @@ impl VulkanScene {
             (graphics_pipeline[0], pipeline_layout)
         };
 
+        let (projection, view) = {
+            let camera = &assets_scene.cameras[0];
+            (
+                *camera.projection().as_matrix(),
+                camera.view().try_inverse().unwrap(),
+            )
+        };
+
         Ok(Self {
             meshes,
             vertex_shader,
             fragment_shader,
             graphics_pipeline,
             pipeline_layout,
+            projection,
+            view,
         })
     }
 
-    unsafe fn draw(
-        &self,
-        device: &VulkanDevice,
-        cmd: vk::CommandBuffer,
-        time: f32,
-        assets_scene: &assets::Scene,
-    ) {
+    unsafe fn draw(&self, device: &VulkanDevice, cmd: vk::CommandBuffer, time: f32) {
         // Prepare matrices.
-        let camera = &assets_scene.cameras[0];
-        let projection = *camera.projection().as_matrix();
-        let view = camera.view().try_inverse().unwrap();
+        let projection = self.projection;
+        let view = self.view;
         let rotation = na::Matrix4::from_axis_angle(&na::Vector3::y_axis(), time);
 
         // Render meshes.
-        let device = &device.handle;
         device.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, self.graphics_pipeline);
         for mesh in &self.meshes {
             // Prepare push constants.
@@ -797,27 +1235,74 @@ impl VulkanScene {
         for mesh in &self.meshes {
             mesh.destroy(device);
         }
-
-        let device = &device.handle;
         device.destroy_pipeline(self.graphics_pipeline, None);
         device.destroy_pipeline_layout(self.pipeline_layout, None);
     }
 }
 
 struct VulkanContext {
-    instance: ash::Instance,
+    _entry: ash::Entry,
+    instance: VulkanInstance,
     debug: Option<VulkanDebug>,
     surface: VulkanSurface,
     device: VulkanDevice,
     swapchain: VulkanSwapchain,
     depth: VulkanDepth,
-    command_pool: vk::CommandPool,
-    command_buffers: Vec<vk::CommandBuffer>,
-    present_complete: Vec<vk::Semaphore>,
-    rendering_complete: Vec<vk::Semaphore>,
-    draw_commands_reuse: Vec<vk::Fence>,
-
+    cmds: VulkanCommands,
     scene: VulkanScene,
+}
+
+impl VulkanContext {
+    unsafe fn create(
+        window: &winit::window::Window,
+        window_title: &str,
+        window_size: WindowSize,
+        assets_scene: &assets::Scene,
+    ) -> Result<Self> {
+        let validation = std::env::var("VULKAN_VALIDATION").is_ok();
+        if validation {
+            info!("Vulkan validation layers enabled");
+        }
+        let entry = unsafe { ash::Entry::load()? };
+        let instance = VulkanInstance::create(&entry, validation, window_title)?;
+        let debug = if validation {
+            Some(VulkanDebug::create(&entry, &instance)?)
+        } else {
+            None
+        };
+        let surface = VulkanSurface::create(&entry, &instance, window)?;
+        let device = VulkanDevice::create(&instance, &surface)?;
+        let cmds = VulkanCommands::create(&device)?;
+        let swapchain = VulkanSwapchain::create(&instance, &surface, &device, window_size.into())?;
+        let depth = VulkanDepth::create(&device, window_size.into())?;
+        let scene = VulkanScene::create(&device, assets_scene)?;
+        Ok(Self {
+            _entry: entry,
+            instance,
+            debug,
+            surface,
+            device,
+            swapchain,
+            depth,
+            cmds,
+            scene,
+        })
+    }
+
+    unsafe fn destroy(mut self) -> Result<()> {
+        self.device.device_wait_idle()?;
+        self.scene.destroy(&self.device);
+        self.cmds.destroy(&self.device);
+        self.depth.destroy(&self.device);
+        self.swapchain.destroy(&self.device);
+        self.device.destroy();
+        self.surface.destroy();
+        if let Some(debug) = self.debug {
+            debug.destroy();
+        }
+        self.instance.destroy();
+        Ok(())
+    }
 }
 
 //
@@ -915,415 +1400,8 @@ fn main() -> Result<()> {
     let assets_scene = assets::Scene::create(include_bytes!("assets/rounded_cube.glb"))?;
 
     // Init Vulkan.
-    let vulkan_validation = std::env::var("VULKAN_VALIDATION").is_ok();
-    if vulkan_validation {
-        info!("Vulkan validation layers enabled");
-    }
-    let vulkan_entry = unsafe { ash::Entry::load().context("Loading ash entry")? };
-    let mut vulkan = unsafe {
-        let instance = {
-            // Application metadata.
-            let application_name = CString::new(window_title)?;
-            let engine_name = CString::new(window_title)?;
-            let application_info = vk::ApplicationInfo::builder()
-                .application_name(application_name.as_c_str())
-                .application_version(1)
-                .engine_name(engine_name.as_c_str())
-                .engine_version(1)
-                .api_version(VULKAN_API_VERSION);
-
-            // Layers.
-            let enabled_layers = {
-                let check_support =
-                    |layers: &[vk::LayerProperties], layer_name: &CStr| -> Result<()> {
-                        if layers
-                            .iter()
-                            .any(|layer| CStr::from_ptr(layer.layer_name.as_ptr()) == layer_name)
-                        {
-                            return Ok(());
-                        }
-                        bail!("Instance must support layer={layer_name:?}");
-                    };
-
-                let layers = vulkan_entry
-                    .enumerate_instance_layer_properties()
-                    .context("Getting instance layers")?;
-                debug!("{layers:#?}");
-
-                let khronos_validation =
-                    CStr::from_bytes_with_nul(b"VK_LAYER_KHRONOS_validation\0")?;
-                check_support(&layers, khronos_validation)?;
-                let mut enabled_layers = vec![];
-                if vulkan_validation {
-                    enabled_layers.push(khronos_validation.as_ptr());
-                }
-                enabled_layers
-            };
-
-            // Extensions.
-            let enabled_extensions = {
-                let check_support =
-                    |extensions: &[vk::ExtensionProperties], extension_name: &CStr| -> Result<()> {
-                        if extensions.iter().any(|extension| {
-                            CStr::from_ptr(extension.extension_name.as_ptr()) == extension_name
-                        }) {
-                            return Ok(());
-                        }
-                        bail!("Instance must support extension={:?}", extension_name);
-                    };
-
-                let extensions = vulkan_entry
-                    .enumerate_instance_extension_properties(None)
-                    .context("Getting instance extensions")?;
-                debug!("{extensions:#?}");
-
-                let mut enabled_extensions = vec![];
-                enabled_extensions.push(vk::KhrSurfaceFn::name());
-                enabled_extensions.push(vk::KhrWin32SurfaceFn::name());
-                if vulkan_validation {
-                    enabled_extensions.push(vk::ExtDebugUtilsFn::name());
-                }
-                for enabled_extension in &enabled_extensions {
-                    check_support(&extensions, enabled_extension)?;
-                }
-                enabled_extensions
-                    .into_iter()
-                    .map(CStr::as_ptr)
-                    .collect::<Vec<_>>()
-            };
-
-            // Create.
-            vulkan_entry
-                .create_instance(
-                    &vk::InstanceCreateInfo::builder()
-                        .application_info(&application_info)
-                        .enabled_layer_names(&enabled_layers)
-                        .enabled_extension_names(&enabled_extensions),
-                    None,
-                )
-                .context("Creating Vulkan instance")?
-        };
-
-        let debug = if vulkan_validation {
-            unsafe extern "system" fn debug_callback(
-                message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
-                message_type: vk::DebugUtilsMessageTypeFlagsEXT,
-                p_callback_data: *const vk::DebugUtilsMessengerCallbackDataEXT,
-                _user_data: *mut std::os::raw::c_void,
-            ) -> vk::Bool32 {
-                let callback_data = *p_callback_data;
-                let message_id_number = callback_data.message_id_number;
-                let message_id_name = if callback_data.p_message_id_name.is_null() {
-                    Cow::from("")
-                } else {
-                    CStr::from_ptr(callback_data.p_message_id_name).to_string_lossy()
-                };
-                let message = if callback_data.p_message.is_null() {
-                    Cow::from("")
-                } else {
-                    CStr::from_ptr(callback_data.p_message).to_string_lossy()
-                };
-
-                #[allow(clippy::match_same_arms)]
-                let level = match message_severity {
-                    vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE => log::Level::Debug,
-                    vk::DebugUtilsMessageSeverityFlagsEXT::INFO => log::Level::Info,
-                    vk::DebugUtilsMessageSeverityFlagsEXT::WARNING => log::Level::Warn,
-                    vk::DebugUtilsMessageSeverityFlagsEXT::ERROR => log::Level::Error,
-                    _ => log::Level::Warn,
-                };
-
-                log!(level, "Vulkan: type={message_type:?} id={message_id_number:?} name={message_id_name:?} message={message}");
-
-                vk::FALSE
-            }
-
-            let utils = ash::extensions::ext::DebugUtils::new(&vulkan_entry, &instance);
-            let callback = utils
-                .create_debug_utils_messenger(
-                    &vk::DebugUtilsMessengerCreateInfoEXT::builder()
-                        .message_severity(
-                            vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
-                                | vk::DebugUtilsMessageSeverityFlagsEXT::INFO
-                                | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
-                                | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR,
-                        )
-                        .message_type(
-                            vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
-                                | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION
-                                | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE,
-                        )
-                        .pfn_user_callback(Some(debug_callback)),
-                    None,
-                )
-                .context("Creating Vulkan debug utils messenger")?;
-
-            Some(VulkanDebug { utils, callback })
-        } else {
-            None
-        };
-
-        let surface = {
-            let surface = ash_window::create_surface(
-                &vulkan_entry,
-                &instance,
-                window.raw_display_handle(),
-                window.raw_window_handle(),
-                None,
-            )
-            .context("Creating surface")?;
-            let loader = Surface::new(&vulkan_entry, &instance);
-
-            VulkanSurface {
-                handle: surface,
-                loader,
-            }
-        };
-
-        let device = {
-            // Find physical device and its queues.
-            let (physical_device, queue_family_index) =
-                if let Some((physical_device, queue_families)) = instance
-                    .enumerate_physical_devices()
-                    .context("Enumerating physical devices")?
-                    .into_iter()
-                    .find_map(|physical_device| {
-                        // Make sure the device supports the features we need.
-                        let mut features_11 = vk::PhysicalDeviceVulkan11Features::default();
-                        let mut features_12 = vk::PhysicalDeviceVulkan12Features::default();
-                        let mut features_13 = vk::PhysicalDeviceVulkan13Features::default();
-                        let mut features = vk::PhysicalDeviceFeatures2::builder()
-                            .push_next(&mut features_11)
-                            .push_next(&mut features_12)
-                            .push_next(&mut features_13);
-                        instance.get_physical_device_features2(physical_device, &mut features);
-                        let features_10 = features.features;
-                        debug!("{:#?}", features_10);
-                        debug!("{:#?}", features_11);
-                        debug!("{:#?}", features_12);
-                        debug!("{:#?}", features_13);
-                        if features_13.dynamic_rendering == vk::FALSE {
-                            return None;
-                        }
-
-                        // We only support discrete GPUs at this point.
-                        let properties = instance.get_physical_device_properties(physical_device);
-                        if properties.device_type != vk::PhysicalDeviceType::DISCRETE_GPU {
-                            return None;
-                        }
-                        let limits = properties.limits;
-                        info!(
-                            "max_push_constants_size: {}",
-                            limits.max_push_constants_size
-                        );
-                        info!(
-                            "max_memory_allocation_count: {}",
-                            limits.max_memory_allocation_count
-                        );
-
-                        // Make sure the device supports the queue types we
-                        // need. Todo: We assume that there is at least one
-                        // queue that supports all operations. This might not be
-                        // true on all devices, so we need to come back later to
-                        // generalize this.
-                        let queue_families =
-                            instance.get_physical_device_queue_family_properties(physical_device);
-                        let queue = queue_families.into_iter().enumerate().find_map(
-                            |(queue_family_index, queue_family)| {
-                                if queue_family.queue_flags.contains(
-                                    vk::QueueFlags::GRAPHICS
-                                        | vk::QueueFlags::COMPUTE
-                                        | vk::QueueFlags::TRANSFER,
-                                ) {
-                                    return Some(queue_family_index);
-                                }
-                                None
-                            },
-                        );
-                        let queue = if let Some(queue) = queue {
-                            queue as u32
-                        } else {
-                            return None;
-                        };
-
-                        // Check for present support.
-                        if let Ok(supports_present) =
-                            surface.loader.get_physical_device_surface_support(
-                                physical_device,
-                                queue,
-                                surface.handle,
-                            )
-                        {
-                            if !supports_present {
-                                return None;
-                            }
-                        } else {
-                            return None;
-                        }
-
-                        Some((physical_device, queue))
-                    })
-                {
-                    (physical_device, queue_families)
-                } else {
-                    bail!("Failed to find any suitable physical devices");
-                };
-            let device_properties = instance.get_physical_device_properties(physical_device);
-            info!(
-                "Physical device: {:?}",
-                CStr::from_ptr(device_properties.device_name.as_ptr())
-            );
-
-            // Create device.
-            let device = {
-                // Queue infos.
-                let queue_create_info = vk::DeviceQueueCreateInfo::builder()
-                    .queue_family_index(queue_family_index)
-                    .queue_priorities(&[1.0])
-                    .build();
-                let queue_create_infos = [queue_create_info];
-
-                // Extensions.
-                let enabled_extensions = {
-                    let check_support = |extensions: &[vk::ExtensionProperties],
-                                         extension_name: &CStr|
-                     -> Result<()> {
-                        if extensions.iter().any(|extension| {
-                            CStr::from_ptr(extension.extension_name.as_ptr()) == extension_name
-                        }) {
-                            return Ok(());
-                        }
-                        bail!("Device must support extension={extension_name:?}");
-                    };
-
-                    let extensions = instance
-                        .enumerate_device_extension_properties(physical_device)
-                        .context("Getting device extensions")?;
-                    debug!("{extensions:#?}");
-
-                    let enabled_extensions = [vk::KhrSwapchainFn::name()];
-                    for extension in &enabled_extensions {
-                        check_support(&extensions, extension)?;
-                    }
-                    enabled_extensions
-                        .into_iter()
-                        .map(CStr::as_ptr)
-                        .collect::<Vec<_>>()
-                };
-
-                // Features.
-                let mut dynamic_rendering_feature =
-                    vk::PhysicalDeviceDynamicRenderingFeatures::builder().dynamic_rendering(true);
-
-                // Create.
-                instance
-                    .create_device(
-                        physical_device,
-                        &vk::DeviceCreateInfo::builder()
-                            .queue_create_infos(&queue_create_infos)
-                            .enabled_extension_names(&enabled_extensions)
-                            .push_next(&mut dynamic_rendering_feature),
-                        None,
-                    )
-                    .context("Creating device")?
-            };
-
-            // Memory properties.
-            let memory_properties = instance.get_physical_device_memory_properties(physical_device);
-
-            // Create queue.
-            let queue = VulkanQueue {
-                index: queue_family_index,
-                handle: device.get_device_queue(queue_family_index, 0),
-            };
-
-            VulkanDevice {
-                handle: device,
-                physical_device,
-                queue,
-                memory_properties,
-            }
-        };
-
-        let command_pool = {
-            device
-                .handle
-                .create_command_pool(
-                    &vk::CommandPoolCreateInfo::builder()
-                        .queue_family_index(device.queue.index)
-                        .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER),
-                    None,
-                )
-                .context("Creating command pool")?
-        };
-
-        let command_buffers = {
-            device
-                .handle
-                .allocate_command_buffers(
-                    &vk::CommandBufferAllocateInfo::builder()
-                        .command_buffer_count(MAX_CONCURRENT_FRAMES)
-                        .command_pool(command_pool)
-                        .level(vk::CommandBufferLevel::PRIMARY),
-                )
-                .context("Allocating command buffers")?
-        };
-
-        let swapchain = VulkanSwapchain::create(&instance, &surface, &device, window_size.into())
-            .context("Creating swapchain")?;
-
-        let depth = VulkanDepth::create(&device, window_size.into()).context("Creating depth")?;
-
-        let (present_complete, rendering_complete, draw_commands_reuse) = {
-            let mut present_complete = vec![];
-            let mut rendering_complete = vec![];
-            let mut draw_commands_reuse = vec![];
-            for _ in 0..MAX_CONCURRENT_FRAMES {
-                present_complete.push(
-                    device
-                        .handle
-                        .create_semaphore(&vk::SemaphoreCreateInfo::default(), None)
-                        .context("Creating semaphore")?,
-                );
-
-                rendering_complete.push(
-                    device
-                        .handle
-                        .create_semaphore(&vk::SemaphoreCreateInfo::default(), None)
-                        .context("Creating semaphore")?,
-                );
-
-                draw_commands_reuse.push(
-                    device
-                        .handle
-                        .create_fence(
-                            &vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::SIGNALED),
-                            None,
-                        )
-                        .context("Creating fence")?,
-                );
-            }
-            (present_complete, rendering_complete, draw_commands_reuse)
-        };
-
-        let scene = VulkanScene::create(&device, &assets_scene)?;
-
-        VulkanContext {
-            instance,
-            debug,
-            surface,
-            device,
-            swapchain,
-            depth,
-            command_pool,
-            command_buffers,
-            present_complete,
-            rendering_complete,
-            draw_commands_reuse,
-
-            scene,
-        }
-    };
+    let mut vulkan =
+        unsafe { VulkanContext::create(&window, window_title, window_size, &assets_scene)? };
 
     // Main event loop.
     let instant_start = Instant::now();
@@ -1381,46 +1459,49 @@ fn main() -> Result<()> {
                 // resizing and minimizing logic separately from the application
                 // logic.
                 unsafe {
-                    let device = &vulkan.device.handle;
-                    let queue = &vulkan.device.queue.handle;
-
-                    // Wait until previous frame is done.
-                    device
-                        .wait_for_fences(
-                            slice::from_ref(&vulkan.draw_commands_reuse[frame_index as usize]),
-                            true,
-                            u64::MAX,
-                        )
-                        .context("Waiting for fence")
-                        .unwrap();
+                    // Aliases.
+                    let queue = &vulkan.device.queue;
+                    let device = &vulkan.device;
+                    let swapchain = &mut vulkan.swapchain;
+                    let surface = &vulkan.surface;
+                    let depth = &mut vulkan.depth;
+                    let scene = &vulkan.scene;
+                    let cmds = &vulkan.cmds;
+                    let command_buffers = &cmds.command_buffers;
+                    let draw_commands_reuse = &cmds.draw_commands_reuse[frame_index as usize];
+                    let present_complete = &cmds.present_complete[frame_index as usize];
+                    let rendering_complete = &cmds.rendering_complete[frame_index as usize];
 
                     // Stop rendering if is minimized (size equals to zero).
                     if resized_window_size.is_zero() {
                         return;
                     }
 
+                    // Wait until previous frame is done.
+                    device
+                        .wait_for_fences(slice::from_ref(draw_commands_reuse), true, u64::MAX)
+                        .context("Waiting for fence")
+                        .unwrap();
+
                     // Acquire image.
-                    let acquire_result = vulkan
-                        .swapchain
+                    let acquire_result = swapchain
                         .loader
                         .acquire_next_image(
-                            vulkan.swapchain.handle,
+                            swapchain.handle,
                             u64::MAX,
-                            vulkan.present_complete[frame_index as usize],
+                            *present_complete,
                             vk::Fence::null(),
                         )
                         .context("Acquiring next image");
                     let present_index = if let Ok((present_index, _)) = acquire_result {
                         present_index
                     } else {
-                        vulkan
-                            .swapchain
-                            .recreate(&vulkan.surface, &vulkan.device, window_size.into())
+                        swapchain
+                            .recreate(surface, device, window_size.into())
                             .context("Recreating swapchain")
                             .unwrap();
-                        vulkan
-                            .depth
-                            .recreate(&vulkan.device, window_size.into())
+                        depth
+                            .recreate(device, window_size.into())
                             .context("Recreating depth")
                             .unwrap();
                         return;
@@ -1428,9 +1509,7 @@ fn main() -> Result<()> {
 
                     // Synchronize previous frame.
                     device
-                        .reset_fences(slice::from_ref(
-                            &vulkan.draw_commands_reuse[frame_index as usize],
-                        ))
+                        .reset_fences(slice::from_ref(draw_commands_reuse))
                         .context("Resetting fences")
                         .unwrap();
 
@@ -1439,7 +1518,7 @@ fn main() -> Result<()> {
                     let hsv = palette::Hsv::with_wp(hue * 360.0, 0.75, 1.0);
                     let rgb = palette::LinSrgb::from_color(hsv);
                     let color_attachment = vk::RenderingAttachmentInfo::builder()
-                        .image_view(vulkan.swapchain.images[present_index as usize].1)
+                        .image_view(swapchain.images[present_index as usize].1)
                         .image_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
                         .load_op(vk::AttachmentLoadOp::CLEAR)
                         .store_op(vk::AttachmentStoreOp::STORE)
@@ -1449,7 +1528,7 @@ fn main() -> Result<()> {
                             },
                         });
                     let depth_attachment = vk::RenderingAttachmentInfo::builder()
-                        .image_view(vulkan.depth.view)
+                        .image_view(depth.view)
                         .image_layout(vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL)
                         .load_op(vk::AttachmentLoadOp::CLEAR)
                         .store_op(vk::AttachmentStoreOp::STORE)
@@ -1470,7 +1549,7 @@ fn main() -> Result<()> {
                         .depth_attachment(&depth_attachment);
 
                     // Record command buffer.
-                    let command_buffer = vulkan.command_buffers[present_index as usize];
+                    let command_buffer = command_buffers[present_index as usize];
                     device
                         .begin_command_buffer(
                             command_buffer,
@@ -1491,7 +1570,7 @@ fn main() -> Result<()> {
                                 .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
                                 .old_layout(vk::ImageLayout::UNDEFINED)
                                 .new_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-                                .image(vulkan.swapchain.images[present_index as usize].0)
+                                .image(swapchain.images[present_index as usize].0)
                                 .subresource_range(vk::ImageSubresourceRange {
                                     aspect_mask: vk::ImageAspectFlags::COLOR,
                                     base_mip_level: 0,
@@ -1515,7 +1594,7 @@ fn main() -> Result<()> {
                                 .dst_access_mask(vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE)
                                 .old_layout(vk::ImageLayout::UNDEFINED)
                                 .new_layout(vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL)
-                                .image(vulkan.depth.image)
+                                .image(depth.image)
                                 .subresource_range(vk::ImageSubresourceRange {
                                     aspect_mask: vk::ImageAspectFlags::DEPTH,
                                     base_mip_level: 0,
@@ -1546,12 +1625,8 @@ fn main() -> Result<()> {
                             extent: window_size.into(),
                         }),
                     );
-
                     let time = instant_start.elapsed().as_secs_f32();
-                    vulkan
-                        .scene
-                        .draw(&vulkan.device, command_buffer, time, &assets_scene);
-
+                    scene.draw(device, command_buffer, time);
                     device.cmd_end_rendering(command_buffer);
                     device.cmd_pipeline_barrier(
                         command_buffer,
@@ -1565,7 +1640,7 @@ fn main() -> Result<()> {
                                 .src_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
                                 .old_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
                                 .new_layout(vk::ImageLayout::PRESENT_SRC_KHR)
-                                .image(vulkan.swapchain.images[present_index as usize].0)
+                                .image(swapchain.images[present_index as usize].0)
                                 .subresource_range(vk::ImageSubresourceRange {
                                     aspect_mask: vk::ImageAspectFlags::COLOR,
                                     base_mip_level: 0,
@@ -1582,46 +1657,33 @@ fn main() -> Result<()> {
 
                     // Submit.
                     let submit_info = vk::SubmitInfo::builder()
-                        .wait_semaphores(slice::from_ref(
-                            &vulkan.present_complete[frame_index as usize],
-                        ))
+                        .wait_semaphores(slice::from_ref(present_complete))
                         .wait_dst_stage_mask(slice::from_ref(
                             &vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
                         ))
                         .command_buffers(slice::from_ref(&command_buffer))
-                        .signal_semaphores(slice::from_ref(
-                            &vulkan.rendering_complete[frame_index as usize],
-                        ));
+                        .signal_semaphores(slice::from_ref(rendering_complete));
                     device
-                        .queue_submit(
-                            *queue,
-                            slice::from_ref(&submit_info),
-                            vulkan.draw_commands_reuse[frame_index as usize],
-                        )
+                        .queue_submit(**queue, slice::from_ref(&submit_info), *draw_commands_reuse)
                         .context("Submitting to queue")
                         .unwrap();
 
                     // Present.
                     let present_info = vk::PresentInfoKHR::builder()
-                        .wait_semaphores(slice::from_ref(
-                            &vulkan.rendering_complete[frame_index as usize],
-                        ))
-                        .swapchains(slice::from_ref(&vulkan.swapchain.handle))
+                        .wait_semaphores(slice::from_ref(rendering_complete))
+                        .swapchains(slice::from_ref(&swapchain.handle))
                         .image_indices(slice::from_ref(&present_index));
-                    let present_result = vulkan
-                        .swapchain
+                    let present_result = swapchain
                         .loader
-                        .queue_present(*queue, &present_info)
+                        .queue_present(**queue, &present_info)
                         .context("Presenting");
                     if present_result.is_err() || window_size != resized_window_size {
-                        vulkan
-                            .swapchain
-                            .recreate(&vulkan.surface, &vulkan.device, resized_window_size.into())
+                        swapchain
+                            .recreate(surface, device, resized_window_size.into())
                             .context("Recreating swapchain")
                             .unwrap();
-                        vulkan
-                            .depth
-                            .recreate(&vulkan.device, resized_window_size.into())
+                        depth
+                            .recreate(device, resized_window_size.into())
                             .context("Recreating depth")
                             .unwrap();
                         window_size = resized_window_size;
@@ -1636,38 +1698,8 @@ fn main() -> Result<()> {
         }
     });
 
-    // Destroy Vulkan resources.
-    unsafe {
-        let device = &vulkan.device.handle;
-        device
-            .device_wait_idle()
-            .context("Waiting for device idle")?;
-
-        vulkan.scene.destroy(&vulkan.device);
-
-        for i in 0..MAX_CONCURRENT_FRAMES {
-            let i = i as usize;
-            device.destroy_semaphore(vulkan.present_complete[i], None);
-            device.destroy_semaphore(vulkan.rendering_complete[i], None);
-            device.destroy_fence(vulkan.draw_commands_reuse[i], None);
-        }
-
-        device.free_command_buffers(vulkan.command_pool, &vulkan.command_buffers);
-        device.destroy_command_pool(vulkan.command_pool, None);
-        vulkan.depth.destroy(&vulkan.device);
-        vulkan.swapchain.destroy(&vulkan.device);
-        device.destroy_device(None);
-        vulkan
-            .surface
-            .loader
-            .destroy_surface(vulkan.surface.handle, None);
-        if let Some(debug) = vulkan.debug {
-            debug
-                .utils
-                .destroy_debug_utils_messenger(debug.callback, None);
-        }
-        vulkan.instance.destroy_instance(None);
-    }
+    // Cleanup.
+    unsafe { vulkan.destroy()? };
 
     Ok(())
 }
