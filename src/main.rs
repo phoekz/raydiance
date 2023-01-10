@@ -2,9 +2,12 @@
 #![deny(nonstandard_style)]
 #![deny(clippy::pedantic)]
 #![allow(
-    clippy::too_many_lines,
-    clippy::cast_precision_loss,
     clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    clippy::many_single_char_names,
+    clippy::similar_names,
+    clippy::too_many_lines,
     clippy::wildcard_imports
 )]
 
@@ -21,6 +24,7 @@ use anyhow::{anyhow, bail, ensure, Context, Result};
 use ash::vk;
 use bytemuck::{Pod, Zeroable};
 use nalgebra as na;
+use palette::{LinSrgba, Pixel, Srgba};
 use winit::{
     dpi::{PhysicalPosition, PhysicalSize},
     event::{Event, KeyboardInput, VirtualKeyCode, WindowEvent},
@@ -32,7 +36,7 @@ use winit::{
 #[macro_use]
 extern crate log;
 
-mod assets;
+mod glb;
 mod vulkan;
 
 //
@@ -128,7 +132,7 @@ fn main() -> Result<()> {
     };
 
     // Init scene.
-    let assets_scene = assets::Scene::create(include_bytes!("assets/rounded_cube.glb"))?;
+    let assets_scene = glb::Scene::create(include_bytes!("assets/rounded_cube.glb"))?;
 
     // Init Vulkan renderer.
     let mut renderer =

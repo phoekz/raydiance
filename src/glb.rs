@@ -3,6 +3,7 @@ use super::*;
 pub struct Scene {
     pub cameras: Vec<Camera>,
     pub meshes: Vec<Mesh>,
+    pub materials: Vec<Material>,
 }
 
 pub struct Camera {
@@ -19,17 +20,17 @@ pub struct Mesh {
     pub transform: na::Matrix4<f32>,
     pub positions: Positions,
     pub normals: Normals,
-    pub indices: Indices,
-    pub material: Material,
+    pub triangles: Triangles,
+    pub material: u32,
 }
 
-pub struct Positions(pub Vec<na::Vector3<f32>>);
+pub struct Positions(pub Vec<na::Point3<f32>>);
 pub struct Normals(pub Vec<na::UnitVector3<f32>>);
-pub struct Indices(pub Vec<na::Vector3<u32>>);
+pub struct Triangles(pub Vec<na::Vector3<u32>>);
 
 pub struct Material {
     pub name: String,
-    pub base_color: na::Vector4<f32>,
+    pub base_color: LinSrgba,
     pub metallic: f32,
     pub roughness: f32,
 }
@@ -39,6 +40,7 @@ impl Scene {
         let mut scene = Self {
             cameras: vec![],
             meshes: vec![],
+            materials: vec![],
         };
         let (gltf_document, gltf_buffer_data, _) =
             gltf::import_slice(glb).context("Importing gltf model")?;
@@ -47,11 +49,21 @@ impl Scene {
                 if let Some(gltf_camera) = gltf_node.camera() {
                     scene.cameras.push(Camera::new(&gltf_node, &gltf_camera)?);
                 } else if let Some(gltf_mesh) = gltf_node.mesh() {
+                    use gltf::mesh::Mode;
+                    ensure!(gltf_mesh.primitives().count() == 1);
+                    let gltf_primitive = gltf_mesh.primitives().next().unwrap();
+                    if !matches!(gltf_primitive.mode(), Mode::Triangles) {
+                        bail!("Only triangle meshes are supported right now");
+                    }
                     scene.meshes.push(Mesh::new(
                         &gltf_node,
                         &gltf_mesh,
+                        &gltf_primitive,
                         &gltf_buffer_data[0].0[..],
                     )?);
+                    scene
+                        .materials
+                        .push(Material::new(&gltf_primitive.material())?);
                 }
             }
         }
@@ -92,12 +104,17 @@ impl Camera {
         }
     }
 
-    pub fn projection(&self) -> na::Perspective3<f32> {
+    pub fn clip_from_view(&self) -> na::Perspective3<f32> {
         na::Perspective3::new(self.aspect_ratio, self.yfov, self.znear, self.zfar)
     }
 
-    pub fn view(&self) -> na::Matrix4<f32> {
+    pub fn world_from_view(&self) -> na::Matrix4<f32> {
         self.transform
+    }
+
+    pub fn position(&self) -> na::Point3<f32> {
+        let coords: na::Vector3<f32> = self.transform.column(3).fixed_rows::<3>(0).into();
+        na::Point3::from(coords)
     }
 }
 
@@ -105,9 +122,9 @@ impl Mesh {
     fn new(
         gltf_node: &gltf::Node,
         gltf_mesh: &gltf::Mesh,
+        gltf_primitive: &gltf::Primitive,
         gltf_buffer_data: &[u8],
     ) -> Result<Self> {
-        use gltf::mesh::Mode;
         use gltf::mesh::Semantic;
 
         let name = gltf_mesh
@@ -118,15 +135,10 @@ impl Mesh {
         let matrix = gltf_node.transform().matrix();
         let transform: na::Matrix4<f32> = unsafe { transmute(matrix) };
 
-        ensure!(gltf_mesh.primitives().count() == 1);
-        let primitive = gltf_mesh.primitives().next().unwrap();
-        if !matches!(primitive.mode(), Mode::Triangles) {
-            bail!("Only triangle meshes are supported right now");
-        }
         let mut positions_accessor = None;
         let mut normals_accessor = None;
         let mut indices_accessor = None;
-        for attribute in primitive.attributes() {
+        for attribute in gltf_primitive.attributes() {
             let (semantic, accessor) = attribute;
             if matches!(semantic, Semantic::Positions) {
                 positions_accessor = Some(accessor.clone());
@@ -135,7 +147,7 @@ impl Mesh {
                 normals_accessor = Some(accessor.clone());
             }
         }
-        if let Some(accessor) = primitive.indices() {
+        if let Some(accessor) = gltf_primitive.indices() {
             indices_accessor = Some(accessor.clone());
         }
         let positions_accessor =
@@ -146,18 +158,29 @@ impl Mesh {
             indices_accessor.with_context(|| format!("Mesh '{name}' is missing indices"))?;
         let positions = Positions::new(&positions_accessor, gltf_buffer_data)?;
         let normals = Normals::new(&normals_accessor, gltf_buffer_data)?;
-        let indices = Indices::new(&indices_accessor, gltf_buffer_data)?;
+        let triangles = Triangles::new(&indices_accessor, gltf_buffer_data)?;
 
-        let material = Material::new(&primitive.material())?;
+        let material = gltf_primitive
+            .material()
+            .index()
+            .context("Mesh must define a material")? as u32;
 
         Ok(Self {
             name,
             transform,
             positions,
             normals,
-            indices,
+            triangles,
             material,
         })
+    }
+
+    pub fn triangle_count(&self) -> u32 {
+        self.triangles.count()
+    }
+
+    pub fn index_count(&self) -> u32 {
+        self.triangles.index_count()
     }
 }
 
@@ -178,9 +201,17 @@ impl Positions {
         ensure!(length > 0);
         ensure!(length % 3 * size_of::<f32>() == 0);
         let slice_u8 = &data[offset..(offset + length)];
-        let slice_vec3: &[na::Vector3<f32>] = bytemuck::cast_slice(slice_u8);
+        let slice_vec3: &[na::Point3<f32>] = bytemuck::cast_slice(slice_u8);
 
         Ok(Self(slice_vec3.to_vec()))
+    }
+}
+
+impl Deref for Positions {
+    type Target = [na::Point3<f32>];
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_ref()
     }
 }
 
@@ -207,7 +238,15 @@ impl Normals {
     }
 }
 
-impl Indices {
+impl Deref for Normals {
+    type Target = [na::UnitVector3<f32>];
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_ref()
+    }
+}
+
+impl Triangles {
     fn new(acc: &gltf::Accessor, data: &[u8]) -> Result<Self> {
         use gltf::accessor::DataType;
         use gltf::accessor::Dimensions;
@@ -249,8 +288,20 @@ impl Indices {
         Ok(Self(slice_vec3))
     }
 
-    pub fn index_count(&self) -> u32 {
-        3 * self.0.len() as u32
+    fn count(&self) -> u32 {
+        self.0.len() as u32
+    }
+
+    fn index_count(&self) -> u32 {
+        3 * self.count()
+    }
+}
+
+impl Deref for Triangles {
+    type Target = [na::Vector3<u32>];
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_ref()
     }
 }
 
@@ -272,7 +323,13 @@ impl Material {
         let pbr = gltf_material.pbr_metallic_roughness();
         ensure!(pbr.base_color_texture().is_none());
         ensure!(pbr.metallic_roughness_texture().is_none());
-        let base_color = unsafe { transmute(pbr.base_color_factor()) };
+        let base_color_factor = pbr.base_color_factor();
+        let base_color = LinSrgba::new(
+            base_color_factor[0],
+            base_color_factor[1],
+            base_color_factor[2],
+            base_color_factor[3],
+        );
         let metallic = pbr.metallic_factor();
         let roughness = pbr.roughness_factor();
 

@@ -795,7 +795,7 @@ struct Mesh {
     indices: Buffer,
     index_count: u32,
     transform: na::Matrix4<f32>,
-    base_color: na::Vector4<f32>,
+    base_color: LinSrgba,
 }
 
 impl Mesh {
@@ -1035,7 +1035,7 @@ impl Commands {
 #[derive(Zeroable, Pod, Clone, Copy)]
 struct PushConstants {
     transform: na::Matrix4<f32>,
-    base_color: na::Vector4<f32>,
+    base_color: LinSrgba,
 }
 
 struct Scene {
@@ -1044,12 +1044,12 @@ struct Scene {
     fragment_shader: Shader,
     graphics_pipeline: vk::Pipeline,
     pipeline_layout: vk::PipelineLayout,
-    projection: na::Matrix4<f32>,
-    view: na::Matrix4<f32>,
+    clip_from_view: na::Matrix4<f32>,
+    view_from_world: na::Matrix4<f32>,
 }
 
 impl Scene {
-    unsafe fn create(device: &Device, assets_scene: &assets::Scene) -> Result<Self> {
+    unsafe fn create(device: &Device, assets_scene: &glb::Scene) -> Result<Self> {
         // Todo: Allocating meshes individually will eventually crash due to
         // `max_memory_allocation_count`, which is only 4096 on most NVIDIA
         // hardware. At that point, we need to start packing meshes into a
@@ -1059,9 +1059,9 @@ impl Scene {
             for assets_mesh in &assets_scene.meshes {
                 let positions = assets_mesh.positions.0.as_ref();
                 let normals = assets_mesh.normals.0.as_ref();
-                let indices = assets_mesh.indices.0.as_ref();
+                let triangles = assets_mesh.triangles.0.as_ref();
                 let transform = assets_mesh.transform;
-                let base_color = assets_mesh.material.base_color;
+                let base_color = assets_scene.materials[assets_mesh.material as usize].base_color;
 
                 meshes.push(Mesh {
                     positions: Buffer::create_init(
@@ -1077,9 +1077,9 @@ impl Scene {
                     indices: Buffer::create_init(
                         device,
                         vk::BufferUsageFlags::INDEX_BUFFER,
-                        indices,
+                        triangles,
                     )?,
-                    index_count: assets_mesh.indices.index_count(),
+                    index_count: assets_mesh.index_count(),
                     transform,
                     base_color,
                 });
@@ -1222,11 +1222,11 @@ impl Scene {
             (graphics_pipeline[0], pipeline_layout)
         };
 
-        let (projection, view) = {
+        let (clip_from_view, view_from_world) = {
             let camera = &assets_scene.cameras[0];
             (
-                *camera.projection().as_matrix(),
-                camera.view().try_inverse().unwrap(),
+                *camera.clip_from_view().as_matrix(),
+                camera.world_from_view().try_inverse().unwrap(),
             )
         };
 
@@ -1236,15 +1236,15 @@ impl Scene {
             fragment_shader,
             graphics_pipeline,
             pipeline_layout,
-            projection,
-            view,
+            clip_from_view,
+            view_from_world,
         })
     }
 
     unsafe fn draw(&self, device: &Device, cmd: vk::CommandBuffer, time: f32) {
         // Prepare matrices.
-        let projection = self.projection;
-        let view = self.view;
+        let clip_from_view = self.clip_from_view;
+        let view_from_world = self.view_from_world;
         let rotation = na::Matrix4::from_axis_angle(&na::Vector3::y_axis(), time);
 
         // Render meshes.
@@ -1255,7 +1255,7 @@ impl Scene {
                 // Pre-multiply all matrices to save space.
                 // `max_push_constants_size` is typically in order of 128 to 256
                 // bytes.
-                transform: projection * view * rotation * mesh.transform,
+                transform: clip_from_view * view_from_world * rotation * mesh.transform,
                 base_color: mesh.base_color,
             };
             let constants = bytemuck::cast_slice(slice::from_ref(&push));
@@ -1306,7 +1306,7 @@ impl Renderer {
         window: &winit::window::Window,
         window_title: &str,
         window_size: WindowSize,
-        assets_scene: &assets::Scene,
+        assets_scene: &glb::Scene,
     ) -> Result<Self> {
         let validation = std::env::var("VULKAN_VALIDATION").is_ok();
         if validation {
