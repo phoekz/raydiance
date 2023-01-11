@@ -13,6 +13,7 @@
 
 use std::{
     borrow::Cow,
+    f32::consts::{PI, TAU},
     ffi::{CStr, CString},
     mem::{size_of, transmute},
     ops::Deref,
@@ -24,7 +25,8 @@ use anyhow::{anyhow, bail, ensure, Context, Result};
 use ash::vk;
 use bytemuck::{Pod, Zeroable};
 use nalgebra as na;
-use palette::{LinSrgba, Pixel, Srgba};
+use palette::{LinSrgb, LinSrgba, Pixel, Srgba, WithAlpha};
+use rand::prelude::*;
 use winit::{
     dpi::{PhysicalPosition, PhysicalSize},
     event::{Event, KeyboardInput, VirtualKeyCode, WindowEvent},
@@ -36,8 +38,19 @@ use winit::{
 #[macro_use]
 extern crate log;
 
+mod aabb;
+mod bvh;
 mod glb;
+mod intersection;
+mod ray;
+mod raytracing;
+mod sampling;
+mod triangle;
 mod vulkan;
+
+use aabb::*;
+use ray::*;
+use triangle::*;
 
 //
 // Window
@@ -134,6 +147,19 @@ fn main() -> Result<()> {
     // Init scene.
     let assets_scene = glb::Scene::create(include_bytes!("assets/rounded_cube.glb"))?;
 
+    // Init raytracer.
+    let raytracing_scene = raytracing::Scene::create(&assets_scene);
+    let raytracing_params = raytracing::RenderParameters::default();
+    let raytracing_image_size = (window_size.w, window_size.h);
+    let _raytracing_image = raytracing::render(
+        &raytracing_params,
+        &raytracing_scene,
+        &assets_scene.cameras[0],
+        &assets_scene.materials,
+        raytracing_image_size,
+    );
+    // save_image(&_raytracing_image, raytracing_image_size, "target/test.png")?;
+
     // Init Vulkan renderer.
     let mut renderer =
         unsafe { vulkan::Renderer::create(&window, window_title, window_size, &assets_scene)? };
@@ -211,4 +237,23 @@ fn main() -> Result<()> {
     unsafe { renderer.destroy()? };
 
     Ok(())
+}
+
+#[allow(dead_code)]
+fn save_image(
+    image: &[LinSrgb],
+    (image_width, image_height): (u32, u32),
+    path: &str,
+) -> Result<()> {
+    let mut out_image = image::RgbaImage::new(image_width, image_height);
+    image
+        .iter()
+        .zip(out_image.pixels_mut())
+        .for_each(|(linear, dst)| {
+            let linear = linear.with_alpha(1.0);
+            let srgb = Srgba::from_linear(linear);
+            let bytes: [u8; 4] = srgb.into_format().into_raw();
+            *dst = image::Rgba(bytes);
+        });
+    Ok(out_image.save(path)?)
 }

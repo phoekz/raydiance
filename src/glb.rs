@@ -30,7 +30,7 @@ pub struct Triangles(pub Vec<na::Vector3<u32>>);
 
 pub struct Material {
     pub name: String,
-    pub base_color: LinSrgba,
+    pub base_color: LinSrgb,
     pub metallic: f32,
     pub roughness: f32,
 }
@@ -324,11 +324,10 @@ impl Material {
         ensure!(pbr.base_color_texture().is_none());
         ensure!(pbr.metallic_roughness_texture().is_none());
         let base_color_factor = pbr.base_color_factor();
-        let base_color = LinSrgba::new(
+        let base_color = LinSrgb::new(
             base_color_factor[0],
             base_color_factor[1],
             base_color_factor[2],
-            base_color_factor[3],
         );
         let metallic = pbr.metallic_factor();
         let roughness = pbr.roughness_factor();

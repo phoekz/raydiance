@@ -795,7 +795,7 @@ struct Mesh {
     indices: Buffer,
     index_count: u32,
     transform: na::Matrix4<f32>,
-    base_color: LinSrgba,
+    base_color: LinSrgb,
 }
 
 impl Mesh {
@@ -1256,7 +1256,7 @@ impl Scene {
                 // `max_push_constants_size` is typically in order of 128 to 256
                 // bytes.
                 transform: clip_from_view * view_from_world * rotation * mesh.transform,
-                base_color: mesh.base_color,
+                base_color: mesh.base_color.with_alpha(1.0),
             };
             let constants = bytemuck::cast_slice(slice::from_ref(&push));
 
