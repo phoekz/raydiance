@@ -7,6 +7,8 @@
     clippy::cast_sign_loss,
     clippy::many_single_char_names,
     clippy::similar_names,
+    clippy::struct_excessive_bools,
+    clippy::too_many_arguments,
     clippy::too_many_lines,
     clippy::wildcard_imports
 )]
@@ -157,52 +159,21 @@ fn main() -> Result<()> {
         (event_loop, window)
     };
 
-    // Init scene.
-    let assets_scene = glb::Scene::create(include_bytes!("assets/rounded_cube.glb"))?;
+    // Init GLB scene.
+    let glb_scene = glb::Scene::create(include_bytes!("assets/rounded_cube.glb"))?;
 
     // Init raytracer.
-    let (raytracing_thread_tx, raytracing_thread_rx) = mpsc::channel();
-    let (rendering_thread_tx, rendering_thread_rx) = mpsc::channel();
-    let mut raytracing_is_busy = false;
-    {
-        let assets_scene = assets_scene.clone();
-        thread::spawn(move || {
-            let raytracing_scene = raytracing::Scene::create(&assets_scene);
-            let raytracing_params = raytracing::RenderParameters {
-                samples_per_pixel: 16,
-                ..raytracing::RenderParameters::default()
-            };
-            let raytracing_image_size = (window_size.w, window_size.h);
-
-            #[allow(clippy::while_let_loop)]
-            loop {
-                let camera_transform = match raytracing_thread_rx.recv() {
-                    Ok(camera_transform) => camera_transform,
-                    Err(_) => {
-                        break;
-                    }
-                };
-                let raytracing_image = raytracing::render(
-                    &raytracing_params,
-                    &raytracing_scene,
-                    &assets_scene.cameras[0],
-                    &camera_transform,
-                    &assets_scene.materials,
-                    raytracing_image_size,
-                );
-                if rendering_thread_tx
-                    .send((raytracing_image, raytracing_image_size))
-                    .is_err()
-                {
-                    break;
-                }
-            }
-        });
-    }
+    let raytracer = raytracing::Raytracer::create(
+        raytracing::Params {
+            samples_per_pixel: 64,
+            ..raytracing::Params::default()
+        },
+        glb_scene.clone(),
+    );
 
     // Init Vulkan renderer.
     let mut renderer =
-        unsafe { vulkan::Renderer::create(&window, window_title, window_size, &assets_scene)? };
+        unsafe { vulkan::Renderer::create(&window, window_title, window_size, &glb_scene)? };
 
     // Main event loop.
     let mut current_time = Instant::now();
@@ -211,7 +182,6 @@ fn main() -> Result<()> {
     let mut input_state = InputState::default();
     let mut camera_angle = 0.0;
     let mut camera_transform = na::Matrix4::identity();
-    let mut camera_changed = false;
     let mut display_raytracing_image = true;
     event_loop.run_return(|event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -289,46 +259,37 @@ fn main() -> Result<()> {
             }
 
             Event::MainEventsCleared => {
+                // Update clock.
                 let delta_time = current_time.elapsed().as_secs_f32();
+                current_time = Instant::now();
 
-                if camera_changed && !raytracing_is_busy {
-                    raytracing_thread_tx.send(camera_transform).unwrap();
-                    raytracing_is_busy = true;
-                    info!("Sent camera transform to raytracing thread");
-                    camera_changed = false;
-                }
-
+                // Update camera.
                 let speed = TAU / 5.0;
                 if input_state.a {
                     camera_angle -= speed * delta_time;
-                    camera_changed = true;
                 }
                 if input_state.d {
                     camera_angle += speed * delta_time;
-                    camera_changed = true;
                 }
-                current_time = Instant::now();
                 camera_transform =
                     na::Matrix4::from_axis_angle(&na::Vector3::y_axis(), camera_angle);
 
+                // Update raytracer.
+                raytracer.send_input(raytracing::Input {
+                    camera_transform,
+                    image_size: (window_size.w, window_size.h),
+                });
+
+                // Draw screen.
                 window.request_redraw();
             }
 
             Event::RedrawRequested(_) => {
                 unsafe {
-                    match rendering_thread_rx.try_recv() {
-                        Ok((image, image_size)) => {
-                            renderer
-                                .update_raytracing_image(&image, image_size)
-                                .unwrap();
-                            raytracing_is_busy = false;
-                        }
-                        Err(err) => match err {
-                            mpsc::TryRecvError::Empty => {}
-                            mpsc::TryRecvError::Disconnected => {
-                                panic!("Raytracing thread channel disconnected")
-                            }
-                        },
+                    if let Some(output) = raytracer.try_recv_output() {
+                        renderer
+                            .update_raytracing_image(&output.image, output.image_size)
+                            .unwrap();
                     }
 
                     renderer
@@ -351,6 +312,7 @@ fn main() -> Result<()> {
     });
 
     // Cleanup.
+    raytracer.terminate();
     unsafe { renderer.destroy()? };
 
     Ok(())
