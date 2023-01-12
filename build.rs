@@ -52,13 +52,18 @@ fn glsl_to_spv(glslc: &Path, glsl_dir: &Path, spv_dir: &Path, shader: &str) -> R
     if !glsl.exists() {
         bail!("Could not find {} shader from {}", shader, glsl.display());
     }
-    Command::new(glslc)
+    let output = Command::new(glslc)
         .arg(glsl)
         .arg("--target-env=vulkan1.3")
         .arg("-O")
         .arg("-o")
         .arg(spv)
         .output()?;
-    build_print!("Built {shader}");
+    if output.status.success() {
+        build_print!("Built {shader}");
+    } else {
+        build_print!("Failed {shader}: {output:?}");
+        panic!();
+    }
     Ok(())
 }
