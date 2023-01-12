@@ -18,6 +18,8 @@ use std::{
     mem::{size_of, transmute},
     ops::Deref,
     slice,
+    sync::mpsc,
+    thread,
     time::Instant,
 };
 
@@ -97,6 +99,17 @@ impl From<WindowSize> for vk::Extent2D {
 }
 
 //
+// Input state
+//
+
+#[derive(Default)]
+struct InputState {
+    a: bool,
+    d: bool,
+    t: bool,
+}
+
+//
 // Main
 //
 
@@ -148,26 +161,58 @@ fn main() -> Result<()> {
     let assets_scene = glb::Scene::create(include_bytes!("assets/rounded_cube.glb"))?;
 
     // Init raytracer.
-    let raytracing_scene = raytracing::Scene::create(&assets_scene);
-    let raytracing_params = raytracing::RenderParameters::default();
-    let raytracing_image_size = (window_size.w, window_size.h);
-    let _raytracing_image = raytracing::render(
-        &raytracing_params,
-        &raytracing_scene,
-        &assets_scene.cameras[0],
-        &assets_scene.materials,
-        raytracing_image_size,
-    );
-    // save_image(&_raytracing_image, raytracing_image_size, "target/test.png")?;
+    let (raytracing_thread_tx, raytracing_thread_rx) = mpsc::channel();
+    let (rendering_thread_tx, rendering_thread_rx) = mpsc::channel();
+    let mut raytracing_is_busy = false;
+    {
+        let assets_scene = assets_scene.clone();
+        thread::spawn(move || {
+            let raytracing_scene = raytracing::Scene::create(&assets_scene);
+            let raytracing_params = raytracing::RenderParameters {
+                samples_per_pixel: 16,
+                ..raytracing::RenderParameters::default()
+            };
+            let raytracing_image_size = (window_size.w, window_size.h);
+
+            #[allow(clippy::while_let_loop)]
+            loop {
+                let camera_transform = match raytracing_thread_rx.recv() {
+                    Ok(camera_transform) => camera_transform,
+                    Err(_) => {
+                        break;
+                    }
+                };
+                let raytracing_image = raytracing::render(
+                    &raytracing_params,
+                    &raytracing_scene,
+                    &assets_scene.cameras[0],
+                    &camera_transform,
+                    &assets_scene.materials,
+                    raytracing_image_size,
+                );
+                if rendering_thread_tx
+                    .send((raytracing_image, raytracing_image_size))
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        });
+    }
 
     // Init Vulkan renderer.
     let mut renderer =
         unsafe { vulkan::Renderer::create(&window, window_title, window_size, &assets_scene)? };
 
     // Main event loop.
-    let app_start = Instant::now();
+    let mut current_time = Instant::now();
     let mut frame_index = 0_u64;
     let mut frame_count = 0_u64;
+    let mut input_state = InputState::default();
+    let mut camera_angle = 0.0;
+    let mut camera_transform = na::Matrix4::identity();
+    let mut camera_changed = false;
+    let mut display_raytracing_image = true;
     event_loop.run_return(|event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
 
@@ -177,21 +222,53 @@ fn main() -> Result<()> {
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 window_id,
-            } if window_id == window.id() => *control_flow = ControlFlow::Exit,
+            } if window_id == window.id() => {
+                *control_flow = ControlFlow::Exit;
+            }
 
-            // Close window if user hits the escape key.
             Event::WindowEvent {
-                event:
-                    WindowEvent::KeyboardInput {
-                        input:
-                            KeyboardInput {
-                                virtual_keycode: Some(VirtualKeyCode::Escape),
-                                ..
-                            },
-                        ..
-                    },
+                event: WindowEvent::KeyboardInput { input, .. },
                 window_id,
-            } if window_id == window.id() => *control_flow = ControlFlow::Exit,
+            } if window_id == window.id() => {
+                // Close window if user hits the escape key.
+                if let KeyboardInput {
+                    virtual_keycode: Some(VirtualKeyCode::Escape),
+                    ..
+                } = input
+                {
+                    *control_flow = ControlFlow::Exit;
+                    return;
+                }
+
+                // Camera controls.
+                if let Some(virtual_keycode) = input.virtual_keycode {
+                    match input.state {
+                        winit::event::ElementState::Pressed => {
+                            if virtual_keycode == VirtualKeyCode::A {
+                                input_state.a = true;
+                            }
+                            if virtual_keycode == VirtualKeyCode::D {
+                                input_state.d = true;
+                            }
+                            if virtual_keycode == VirtualKeyCode::T {
+                                input_state.t = true;
+                                display_raytracing_image = !display_raytracing_image;
+                            }
+                        }
+                        winit::event::ElementState::Released => {
+                            if virtual_keycode == VirtualKeyCode::A {
+                                input_state.a = false;
+                            }
+                            if virtual_keycode == VirtualKeyCode::D {
+                                input_state.d = false;
+                            }
+                            if virtual_keycode == VirtualKeyCode::T {
+                                input_state.t = false;
+                            }
+                        }
+                    }
+                }
+            }
 
             Event::WindowEvent {
                 event: WindowEvent::Resized(new_window_size),
@@ -212,16 +289,56 @@ fn main() -> Result<()> {
             }
 
             Event::MainEventsCleared => {
+                let delta_time = current_time.elapsed().as_secs_f32();
+
+                if camera_changed && !raytracing_is_busy {
+                    raytracing_thread_tx.send(camera_transform).unwrap();
+                    raytracing_is_busy = true;
+                    info!("Sent camera transform to raytracing thread");
+                    camera_changed = false;
+                }
+
+                let speed = TAU / 5.0;
+                if input_state.a {
+                    camera_angle -= speed * delta_time;
+                    camera_changed = true;
+                }
+                if input_state.d {
+                    camera_angle += speed * delta_time;
+                    camera_changed = true;
+                }
+                current_time = Instant::now();
+                camera_transform =
+                    na::Matrix4::from_axis_angle(&na::Vector3::y_axis(), camera_angle);
+
                 window.request_redraw();
             }
 
             Event::RedrawRequested(_) => {
-                // Todo: Decouple swapchain from rendering and handle swapchain
-                // resizing and minimizing logic separately from the application
-                // logic.
                 unsafe {
+                    match rendering_thread_rx.try_recv() {
+                        Ok((image, image_size)) => {
+                            renderer
+                                .update_raytracing_image(&image, image_size)
+                                .unwrap();
+                            raytracing_is_busy = false;
+                        }
+                        Err(err) => match err {
+                            mpsc::TryRecvError::Empty => {}
+                            mpsc::TryRecvError::Disconnected => {
+                                panic!("Raytracing thread channel disconnected")
+                            }
+                        },
+                    }
+
                     renderer
-                        .redraw(window_size, resized_window_size, frame_index, app_start)
+                        .redraw(
+                            window_size,
+                            resized_window_size,
+                            frame_index,
+                            camera_transform,
+                            display_raytracing_image,
+                        )
                         .unwrap();
                 }
                 frame_count += 1;

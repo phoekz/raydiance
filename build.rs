@@ -38,7 +38,12 @@ fn main() -> Result<()> {
     );
 
     // Build shaders.
-    let shaders = ["triangle.vert", "triangle.frag"];
+    let shaders = [
+        "triangle.vert",
+        "triangle.frag",
+        "raytracing_image.vert",
+        "raytracing_image.frag",
+    ];
     for shader in shaders {
         glsl_to_spv(&glslc, &glsl_dir, &spv_dir, shader)?;
     }

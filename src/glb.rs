@@ -1,11 +1,13 @@
 use super::*;
 
+#[derive(Clone)]
 pub struct Scene {
     pub cameras: Vec<Camera>,
     pub meshes: Vec<Mesh>,
     pub materials: Vec<Material>,
 }
 
+#[derive(Clone)]
 pub struct Camera {
     pub name: String,
     pub transform: na::Matrix4<f32>,
@@ -15,6 +17,7 @@ pub struct Camera {
     pub zfar: f32,
 }
 
+#[derive(Clone)]
 pub struct Mesh {
     pub name: String,
     pub transform: na::Matrix4<f32>,
@@ -24,10 +27,16 @@ pub struct Mesh {
     pub material: u32,
 }
 
+#[derive(Clone)]
 pub struct Positions(pub Vec<na::Point3<f32>>);
+
+#[derive(Clone)]
 pub struct Normals(pub Vec<na::UnitVector3<f32>>);
+
+#[derive(Clone)]
 pub struct Triangles(pub Vec<na::Vector3<u32>>);
 
+#[derive(Clone)]
 pub struct Material {
     pub name: String,
     pub base_color: LinSrgb,

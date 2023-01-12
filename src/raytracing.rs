@@ -64,15 +64,20 @@ pub fn render(
     params: &RenderParameters,
     scene: &Scene,
     camera: &glb::Camera,
+    camera_transform: &na::Matrix4<f32>,
     materials: &[glb::Material],
     image_size: (u32, u32),
 ) -> Vec<LinSrgb> {
     // Camera.
     let (world_from_clip, camera_position) = {
-        let camera_position = camera.position();
+        let camera_transform = camera_transform.try_inverse().unwrap();
+        let camera_position = camera_transform.transform_point(&camera.position());
         let view_from_clip = camera.clip_from_view().inverse();
         let world_from_view = camera.world_from_view();
-        (world_from_view * view_from_clip, camera_position)
+        (
+            camera_transform * world_from_view * view_from_clip,
+            camera_position,
+        )
     };
 
     // Path tracing.
