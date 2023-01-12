@@ -85,6 +85,29 @@
 
         <!-- Posts -->
         <article>
+            <h2>Progressive rendering</h2>
+            <div class="article-date">2023-01-12</div>
+
+            <img src="images/20230112-215200.webp">
+
+            <p>
+                Previously we waited until the entire image was completed before
+                displaying to the screen. In this commit we redesigned the path
+                tracing loop to render progressively and submit intermediate
+                frames as soon as they are finished. This significantly improves
+                interactivity.
+            </p>
+
+            <div class="commit">
+                Commit:
+                <a href="https://github.com/phoekz/raydiance/commit/f50c3b6f92eedd52e43406ee4960d3b50b5025ac">
+                    <code>f50c3b6f</code>
+                </a>
+            </div>
+
+        </article>
+
+        <article>
             <h2>Interactive CPU path tracer</h2>
             <div class="article-date">2023-01-12</div>
 
