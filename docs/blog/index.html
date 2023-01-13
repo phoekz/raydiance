@@ -85,6 +85,49 @@
 
         <!-- Posts -->
         <article>
+            <h2>Cosine-weighted hemisphere sampling</h2>
+            <div class="article-date">2023-01-13</div>
+
+            <img src="images/20230113-134900.webp">
+
+            <p>
+                To get a cleaner picture, we could increase the number of
+                samples, but that would increase render times, which forces us
+                to find ways to make the renderer run faster. Alternatively, we
+                could be smarter at using our limited number of samples. This
+                way of reducing noise in Monte Carlo simulations is called
+                <a href="https://en.wikipedia.org/wiki/Importance_sampling">importance sampling</a>.
+
+                For our simple diffuse cube scene, one of the most impactful
+                techniques is cosine-weighted hemisphere sampling. Since the
+                rendering equation has a cosine term, it makes sense to sample
+                from a distribution that is similar to that. Our implementation
+                is based on
+                <a href="https://www.pbr-book.org/3ed-2018/Monte_Carlo_Integration/2D_Sampling_with_Multidimensional_Transformations#Cosine-WeightedHemisphereSampling"><code>pbrt</code></a>.
+            </p>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
+                <div style="text-align: center; font-size: 0.8em;"><img src="images/20230113-134400-uniform.gif" width="100%">Uniform sampling</div>
+                <div style="text-align: center; font-size: 0.8em;"><img src="images/20230113-134400-cosine.gif" width="100%">Cosine-weighted sampling</div>
+            </div>
+
+            <p>
+                Here is the comparison between uniform sampling. It is clear that
+                with identical sample counts, cosine-weighted sampling results
+                in much cleaner picture than uniform sampling. And it does it at
+                pretty much equivalent time.
+            </p>
+
+            <div class="commit">
+                Commit:
+                <a href="https://github.com/phoekz/raydiance/commit/2e0e31997c20714ccc6a3735cf3a5c0a899f9ab9">
+                    <code>2e0e3199</code>
+                </a>
+            </div>
+
+        </article>
+
+        <article>
             <h2>Progressive rendering</h2>
             <div class="article-date">2023-01-12</div>
 
