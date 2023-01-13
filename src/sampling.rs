@@ -34,7 +34,50 @@ pub fn camera_ray_uniform(
     }
 }
 
-pub fn orthonormal_basis(n: &na::Vector3<f32>) -> (na::Vector3<f32>, na::Vector3<f32>) {
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum HemisphereSampler {
+    Uniform,
+    Cosine,
+}
+
+impl HemisphereSampler {
+    pub fn dir(self, n: &na::Vector3<f32>, s: f32, t: f32) -> na::UnitVector3<f32> {
+        let (b1, b2) = orthonormal_basis(n);
+        let dir = match self {
+            HemisphereSampler::Uniform => hemisphere_uniform(s, t),
+            HemisphereSampler::Cosine => hemisphere_cosine(s, t),
+        };
+        na::Unit::new_normalize(na::vector![
+            dir.dot(&na::vector![b1.x, n.x, b2.x]),
+            dir.dot(&na::vector![b1.y, n.y, b2.y]),
+            dir.dot(&na::vector![b1.z, n.z, b2.z])
+        ])
+    }
+
+    pub fn pdf(self, cos_theta: f32) -> f32 {
+        match self {
+            HemisphereSampler::Uniform => hemisphere_uniform_pdf(),
+            HemisphereSampler::Cosine => hemisphere_cosine_pdf(cos_theta),
+        }
+    }
+}
+
+impl Default for HemisphereSampler {
+    fn default() -> Self {
+        Self::Cosine
+    }
+}
+
+impl std::fmt::Display for HemisphereSampler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            HemisphereSampler::Uniform => "uniform",
+            HemisphereSampler::Cosine => "cosine",
+        })
+    }
+}
+
+fn orthonormal_basis(n: &na::Vector3<f32>) -> (na::Vector3<f32>, na::Vector3<f32>) {
     // Implementation based on "Building an Orthonormal Basis, Revisited".
     // https://graphics.pixar.com/library/OrthonormalB/paper.pdf
     let sign = f32::copysign(1.0, n.z);
@@ -46,7 +89,7 @@ pub fn orthonormal_basis(n: &na::Vector3<f32>) -> (na::Vector3<f32>, na::Vector3
     )
 }
 
-pub fn hemisphere_uniform(s: f32, t: f32) -> na::Vector3<f32> {
+fn hemisphere_uniform(s: f32, t: f32) -> na::Vector3<f32> {
     let u = TAU * s;
     let v = f32::sqrt(f32::max(0.0, 1.0 - t * t));
     let px = v * f32::cos(u);
@@ -55,12 +98,32 @@ pub fn hemisphere_uniform(s: f32, t: f32) -> na::Vector3<f32> {
     na::vector![px, py, pz]
 }
 
-pub fn direction_uniform(n: &na::Vector3<f32>, s: f32, t: f32) -> na::UnitVector3<f32> {
-    let (b1, b2) = orthonormal_basis(n);
-    let dir = hemisphere_uniform(s, t);
-    na::Unit::new_normalize(na::vector![
-        dir.dot(&na::vector![b1.x, n.x, b2.x]),
-        dir.dot(&na::vector![b1.y, n.y, b2.y]),
-        dir.dot(&na::vector![b1.z, n.z, b2.z])
-    ])
+fn hemisphere_uniform_pdf() -> f32 {
+    1.0 / (2.0 * PI)
+}
+
+fn concentric_disk(s: f32, t: f32) -> na::Vector2<f32> {
+    let s = 2.0 * s - 1.0;
+    let t = 2.0 * t - 1.0;
+    if s == 0.0 && t == 0.0 {
+        return na::vector![0.0, 0.0];
+    }
+
+    let (r, theta) = if f32::abs(s) > f32::abs(t) {
+        (s, (PI / 4.0) * (t / s))
+    } else {
+        (t, (PI / 2.0) - (PI / 4.0) * (s / t))
+    };
+
+    na::vector![r * f32::cos(theta), r * f32::sin(theta)]
+}
+
+fn hemisphere_cosine(s: f32, t: f32) -> na::Vector3<f32> {
+    let d = concentric_disk(s, t);
+    let y = f32::sqrt(f32::max(0.0, 1.0 - d.x * d.x - d.y * d.y));
+    na::vector![d.x, y, d.y]
+}
+
+fn hemisphere_cosine_pdf(cos_theta: f32) -> f32 {
+    cos_theta / PI
 }

@@ -22,7 +22,7 @@ use std::{
     slice,
     sync::mpsc,
     thread,
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use anyhow::{anyhow, bail, ensure, Context, Result};
@@ -183,6 +183,8 @@ fn main() -> Result<()> {
     let mut camera_angle = 0.0;
     let mut camera_transform = na::Matrix4::identity();
     let mut display_raytracing_image = true;
+    let mut hemisphere_sampler = sampling::HemisphereSampler::default();
+    let mut sample_state = (0, 0);
     event_loop.run_return(|event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
 
@@ -224,6 +226,13 @@ fn main() -> Result<()> {
                                 input_state.t = true;
                                 display_raytracing_image = !display_raytracing_image;
                             }
+                            if virtual_keycode == VirtualKeyCode::H {
+                                if hemisphere_sampler == sampling::HemisphereSampler::Uniform {
+                                    hemisphere_sampler = sampling::HemisphereSampler::Cosine;
+                                } else {
+                                    hemisphere_sampler = sampling::HemisphereSampler::Uniform;
+                                }
+                            }
                         }
                         winit::event::ElementState::Released => {
                             if virtual_keycode == VirtualKeyCode::A {
@@ -259,6 +268,13 @@ fn main() -> Result<()> {
             }
 
             Event::MainEventsCleared => {
+                // Update window title.
+                // Todo: replace with GUI.
+                window.set_title(&format!(
+                    "{window_title} - {hemisphere_sampler} - {}/{} samples",
+                    sample_state.0, sample_state.1
+                ));
+
                 // Update clock.
                 let delta_time = current_time.elapsed().as_secs_f32();
                 current_time = Instant::now();
@@ -278,6 +294,7 @@ fn main() -> Result<()> {
                 raytracer.send_input(raytracing::Input {
                     camera_transform,
                     image_size: (window_size.w, window_size.h),
+                    hemisphere_sampler,
                 });
 
                 // Draw screen.
@@ -290,6 +307,7 @@ fn main() -> Result<()> {
                         renderer
                             .update_raytracing_image(&output.image, output.image_size)
                             .unwrap();
+                        sample_state = (output.sample_index, output.sample_count);
                     }
 
                     renderer

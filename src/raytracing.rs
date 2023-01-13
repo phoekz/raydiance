@@ -64,6 +64,7 @@ impl Default for Params {
 pub struct Input {
     pub camera_transform: na::Matrix4<f32>,
     pub image_size: (u32, u32),
+    pub hemisphere_sampler: sampling::HemisphereSampler,
 }
 
 impl Default for Input {
@@ -71,6 +72,7 @@ impl Default for Input {
         Self {
             camera_transform: na::Matrix4::identity(),
             image_size: (0, 0),
+            hemisphere_sampler: sampling::HemisphereSampler::Uniform,
         }
     }
 }
@@ -90,6 +92,8 @@ impl Input {
 pub struct Output {
     pub image: Vec<LinSrgb>,
     pub image_size: (u32, u32),
+    pub sample_index: u32,
+    pub sample_count: u32,
 }
 
 pub struct Raytracer {
@@ -179,8 +183,6 @@ impl Raytracer {
 
                 // Render.
                 if sample_index < params.samples_per_pixel {
-                    info!("Rendering sample index: {sample_index}");
-
                     let image_size = input.image_size;
                     let pixel_count = image_size.0 * image_size.1;
                     for pixel_index in 0..pixel_count {
@@ -193,6 +195,7 @@ impl Raytracer {
                             world_from_clip,
                             &mut rng,
                             uniform_01,
+                            input.hemisphere_sampler,
                             &params,
                             &scene,
                             &mut ray_stats,
@@ -210,7 +213,12 @@ impl Raytracer {
                         .collect();
                     sample_index += 1;
 
-                    output_send.send(Output { image, image_size })?;
+                    output_send.send(Output {
+                        image,
+                        image_size,
+                        sample_index,
+                        sample_count: params.samples_per_pixel,
+                    })?;
 
                     // Rendering has completed.
                     if sample_index == params.samples_per_pixel {
@@ -222,6 +230,9 @@ impl Raytracer {
                         );
                         debug!("Stats: {ray_stats:#?}");
                     }
+                } else {
+                    // Avoid busy looping.
+                    thread::sleep(Duration::from_millis(1));
                 }
             }
 
@@ -262,6 +273,7 @@ fn radiance(
     world_from_clip: na::Matrix4<f32>,
     rng: &mut rand_pcg::Mcg128Xsl64,
     uniform_01: rand::distributions::Uniform<f32>,
+    hemisphere_sampler: sampling::HemisphereSampler,
     params: &Params,
     scene: &Scene,
     ray_stats: &mut intersection::RayBvhHitStats,
@@ -297,8 +309,8 @@ fn radiance(
         // Special case: ray hit the sky.
         if !found_hit {
             // Todo: Replace with a proper sky model.
-            let sun_direction = na::Vector3::new(1.0, 2.0, 1.0).normalize();
-            let sky_factor = 0.75 + 0.25 * sun_direction.dot(&ray.dir);
+            let sun_direction = na::Vector3::new(1.0, 3.0, 1.0).normalize();
+            let sky_factor = 0.5 + 0.5 * sun_direction.dot(&ray.dir);
             radiance += throughput * sky_factor;
             break;
         }
@@ -317,14 +329,13 @@ fn radiance(
 
         // Sample next direction, adjust closest hit to avoid spawning the next ray inside the surface.
         ray.origin += 0.999 * closest_hit * ray.dir.into_inner();
-        ray.dir =
-            sampling::direction_uniform(&normal, uniform_01.sample(rng), uniform_01.sample(rng));
+        ray.dir = hemisphere_sampler.dir(&normal, uniform_01.sample(rng), uniform_01.sample(rng));
 
         // Cos theta, clamp to avoid division with very small number.
         let cos_theta = f32::max(0.001, ray.dir.dot(&normal));
 
-        // PDF for uniformly sampled hemisphere.
-        let pdf = 1.0 / (2.0 * PI);
+        // Probability density function.
+        let pdf = hemisphere_sampler.pdf(cos_theta);
 
         // Update throughput.
         throughput *= brdf * cos_theta / pdf;
