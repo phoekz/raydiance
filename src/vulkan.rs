@@ -1718,7 +1718,7 @@ impl Renderer {
     pub unsafe fn create(
         window: &winit::window::Window,
         window_title: &str,
-        window_size: WindowSize,
+        window_size: window::Size,
         assets_scene: &glb::Scene,
     ) -> Result<Self> {
         let validation = std::env::var("VULKAN_VALIDATION").is_ok();
@@ -1757,8 +1757,8 @@ impl Renderer {
 
     pub unsafe fn redraw(
         &mut self,
-        window_size: WindowSize,
-        resized_window_size: WindowSize,
+        window_size: window::Size,
+        resized_window_size: window::Size,
         frame_index: u64,
         camera_transform: na::Matrix4<f32>,
         display_raytracing_image: bool,

@@ -36,7 +36,7 @@ use winit::{
     event::{Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     platform::run_return::EventLoopExtRunReturn,
-    window::WindowBuilder,
+    window::{Window, WindowBuilder},
 };
 
 #[macro_use]
@@ -51,54 +51,11 @@ mod raytracing;
 mod sampling;
 mod triangle;
 mod vulkan;
+mod window;
 
 use aabb::*;
 use ray::*;
 use triangle::*;
-
-//
-// Window
-//
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub struct WindowSize {
-    pub w: u32,
-    pub h: u32,
-}
-
-impl WindowSize {
-    #[must_use]
-    pub fn is_zero(self) -> bool {
-        self.w == 0 && self.h == 0
-    }
-}
-
-impl From<WindowSize> for PhysicalSize<u32> {
-    fn from(value: WindowSize) -> Self {
-        Self {
-            width: value.w,
-            height: value.h,
-        }
-    }
-}
-
-impl From<PhysicalSize<u32>> for WindowSize {
-    fn from(value: PhysicalSize<u32>) -> Self {
-        Self {
-            w: value.width,
-            h: value.height,
-        }
-    }
-}
-
-impl From<WindowSize> for vk::Extent2D {
-    fn from(value: WindowSize) -> Self {
-        Self {
-            width: value.w,
-            height: value.h,
-        }
-    }
-}
 
 //
 // Input state
@@ -121,43 +78,17 @@ fn main() -> Result<()> {
 
     // Init winit.
     let window_title = env!("CARGO_PKG_NAME");
-    let min_window_size = WindowSize { w: 320, h: 180 };
-    let mut window_size = WindowSize {
+    let min_window_size = window::Size { w: 320, h: 180 };
+    let mut window_size = window::Size {
         w: 1280 / 4,
         h: 720 / 4,
     };
     let mut resized_window_size = window_size;
-    let (mut event_loop, window) = {
-        // Create event loop.
-        let event_loop = EventLoop::new();
-
-        // Build window.
-        let window = WindowBuilder::new()
-            .with_title(window_title)
-            .with_inner_size::<PhysicalSize<_>>(window_size.into())
-            .with_min_inner_size::<PhysicalSize<_>>(min_window_size.into())
-            .with_always_on_top(true)
-            .with_resizable(true)
-            .build(&event_loop)
-            .context("Building winit window")?;
-
-        // Get primary monitor dimensions.
-        let (monitor_width, monitor_height) = {
-            let monitor = window
-                .primary_monitor()
-                .context("Getting primary monitor")?;
-            (monitor.size().width, monitor.size().height)
-        };
-        info!("Primary monitor dimensions: {monitor_width} x {monitor_height}");
-
-        // Center window.
-        window.set_outer_position(PhysicalPosition::new(
-            (monitor_width - window_size.w) / 2,
-            (monitor_height - window_size.h) / 2,
-        ));
-
-        (event_loop, window)
-    };
+    let (mut event_loop, window) = window::create(&window::Params {
+        title: window_title,
+        size: window_size,
+        min_size: min_window_size,
+    })?;
 
     // Init GLB scene.
     let glb_scene = glb::Scene::create(include_bytes!("assets/rounded_cube.glb"))?;
