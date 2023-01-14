@@ -6,6 +6,7 @@
     clippy::cast_precision_loss,
     clippy::cast_sign_loss,
     clippy::many_single_char_names,
+    clippy::module_name_repetitions,
     clippy::similar_names,
     clippy::struct_excessive_bools,
     clippy::too_many_arguments,
