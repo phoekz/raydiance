@@ -60,6 +60,13 @@ impl HemisphereSampler {
             HemisphereSampler::Cosine => hemisphere_cosine_pdf(cos_theta),
         }
     }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            HemisphereSampler::Uniform => "Uniform",
+            HemisphereSampler::Cosine => "Cosine",
+        }
+    }
 }
 
 impl Default for HemisphereSampler {
@@ -70,10 +77,7 @@ impl Default for HemisphereSampler {
 
 impl std::fmt::Display for HemisphereSampler {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            HemisphereSampler::Uniform => "uniform",
-            HemisphereSampler::Cosine => "cosine",
-        })
+        f.write_str(self.name())
     }
 }
 

@@ -43,6 +43,8 @@ fn main() -> Result<()> {
         "triangle.frag",
         "raytracing_image.vert",
         "raytracing_image.frag",
+        "imgui.vert",
+        "imgui.frag",
     ];
     for shader in shaders {
         glsl_to_spv(&glslc, &glsl_dir, &spv_dir, shader)?;

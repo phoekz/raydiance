@@ -154,6 +154,17 @@ impl Buffer {
         Ok(())
     }
 
+    pub unsafe fn copy_raw<T: Copy>(&self, device: &Device, src: &[T]) -> Result<()> {
+        let memory = self.memory;
+        let map_flags = vk::MemoryMapFlags::empty();
+        let ptr = device.map_memory(memory, 0, self.byte_count as vk::DeviceSize, map_flags)?;
+        let mapped_slice = std::slice::from_raw_parts_mut(ptr.cast::<T>(), src.len());
+        mapped_slice.copy_from_slice(src);
+        device.unmap_memory(memory);
+
+        Ok(())
+    }
+
     pub unsafe fn destroy(&self, device: &Device) {
         device.destroy_buffer(self.handle, None);
         device.free_memory(self.memory, None);

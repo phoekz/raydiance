@@ -44,6 +44,7 @@ pub struct Params<'a> {
     pub title: &'a str,
     pub size: Size,
     pub min_size: Size,
+    pub decorations: bool,
 }
 
 pub fn create(params: &Params) -> Result<(EventLoop<()>, Window)> {
@@ -57,6 +58,7 @@ pub fn create(params: &Params) -> Result<(EventLoop<()>, Window)> {
         .with_min_inner_size::<PhysicalSize<_>>(params.min_size.into())
         .with_always_on_top(true)
         .with_resizable(true)
+        .with_decorations(params.decorations)
         .build(&event_loop)
         .context("Building winit window")?;
 

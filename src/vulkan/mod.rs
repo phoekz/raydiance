@@ -5,6 +5,7 @@ mod color_target;
 mod debug;
 mod depth_target;
 mod device;
+mod gui;
 mod instance;
 mod raster_scene;
 mod raytracing_image;
@@ -17,6 +18,7 @@ use color_target::*;
 use debug::*;
 use depth_target::*;
 use device::*;
+use gui::*;
 use instance::*;
 use raster_scene::*;
 use raytracing_image::*;
@@ -113,6 +115,7 @@ pub struct Renderer {
     swapchain: Swapchain,
     color_target: ColorTarget,
     depth_target: DepthTarget,
+    gui: Gui,
     cmds: Commands,
     scene: RasterScene,
     rt_image: RaytracingImageRenderer,
@@ -127,6 +130,7 @@ impl Renderer {
         window_title: &str,
         window_size: window::Size,
         assets_scene: &glb::Scene,
+        font_atlas_texture: &imgui::FontAtlasTexture,
     ) -> Result<Self> {
         let validation = std::env::var("VULKAN_VALIDATION").is_ok();
         validation.then(|| info!("Vulkan validation layers enabled"));
@@ -140,7 +144,7 @@ impl Renderer {
         let swapchain = Swapchain::create(&instance, &surface, &device, window_size.into())?;
         let color = ColorTarget::create(&device, window_size.into())?;
         let depth = DepthTarget::create(&device, window_size.into())?;
-        let gui = Gui::create(&device)?;
+        let gui = Gui::create(&device, &font_atlas_texture)?;
         let cmds = Commands::create(&device)?;
         let scene = RasterScene::create(&device, assets_scene)?;
         let rt_image = RaytracingImageRenderer::create(&device)?;
@@ -153,6 +157,7 @@ impl Renderer {
             swapchain,
             color_target: color,
             depth_target: depth,
+            gui,
             cmds,
             scene,
             rt_image,
@@ -166,6 +171,7 @@ impl Renderer {
         frame_index: u64,
         camera_transform: na::Matrix4<f32>,
         display_raytracing_image: bool,
+        gui_data: &imgui::DrawData,
     ) -> Result<()> {
         // Aliases.
         let queue = self.device.queue();
@@ -176,6 +182,7 @@ impl Renderer {
         let depth_target = &mut self.depth_target;
         let scene = &self.scene;
         let rt_image = &self.rt_image;
+        let gui = &self.gui;
         let cmds = &self.cmds;
         let command_buffers = &cmds.command_buffers;
         let draw_commands_reuse = &cmds.draw_commands_reuse[frame_index as usize];
@@ -342,6 +349,7 @@ impl Renderer {
         if display_raytracing_image {
             rt_image.draw(device, command_buffer);
         }
+        gui.draw(device, command_buffer, frame_index, gui_data);
         device.cmd_end_rendering(command_buffer);
         device.cmd_pipeline_barrier(
             command_buffer,
@@ -415,6 +423,11 @@ impl Renderer {
         Ok(())
     }
 
+    pub unsafe fn update_gui(&self, frame_index: u64, gui_data: &imgui::DrawData) -> Result<()> {
+        self.gui.update(&self.device, frame_index, gui_data)?;
+        Ok(())
+    }
+
     pub unsafe fn destroy(mut self) -> Result<()> {
         self.device
             .device_wait_idle()
@@ -422,6 +435,7 @@ impl Renderer {
         self.rt_image.destroy(&self.device);
         self.scene.destroy(&self.device);
         self.cmds.destroy(&self.device);
+        self.gui.destroy(&self.device);
         self.color_target.destroy(&self.device);
         self.depth_target.destroy(&self.device);
         self.swapchain.destroy(&self.device);
