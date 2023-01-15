@@ -85,6 +85,37 @@
 
         <!-- Posts -->
         <article>
+            <h2>Basic texture support</h2>
+            <div class="article-date">2023-01-15</div>
+
+            <img src="images/20230115-204600.webp">
+
+            <p>
+                Raydiance now supports texture mapped surfaces. We used multiple
+                shortcuts to get a basic implementation going:
+            </p>
+
+            <ul>
+                <li>Only nearest neighbor filtering is supported.</li>
+                <li>No mipmaps.</li>
+                <li>No anisotropic filtering.</li>
+                <li>Only <code>R8G8B8A8_UNORM</code> pixel format is supported.</li>
+            </ul>
+
+            <p>
+                We will revisit these shortcuts later, once our scenes get more
+                complicated.
+            </p>
+
+            <div class="commit">
+                Commit:
+                <a href="https://github.com/phoekz/raydiance/commit/41a05a78d6fbba82436faece9815c4e8b3da9951">
+                    <code>41a05a78</code>
+                </a>
+            </div>
+        </article>
+
+        <article>
             <h2>New user interface</h2>
             <div class="article-date">2023-01-15</div>
 
