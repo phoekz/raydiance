@@ -85,6 +85,30 @@
 
         <!-- Posts -->
         <article>
+            <h2>New user interface</h2>
+            <img src="images/20230115-140255.webp">
+
+            <p>
+                It was time to replace the window title hacks and random
+                keybindings with a real graphical user interface. We use the the
+                excellent
+                <a href="https://github.com/ocornut/imgui">Dear ImGui</a>
+                library. Since our project is written in Rust, we use
+                <a href="https://crates.io/crates/imgui"><code>imgui</code></a> and
+                <a href="https://crates.io/crates/imgui"><code>imgui-winit-support</code></a>
+                crates to wrap the original C++ library and interface with
+                <a href="https://crates.io/crates/winit"><code>winit</code></a>.
+            </p>
+
+            <div class="commit">
+                Commit:
+                <a href="https://github.com/phoekz/raydiance/commit/9fb5a3800a337b5d663e1c83932e03fe96abfe0f">
+                    <code>9fb5a380</code>
+                </a>
+            </div>
+        </article>
+
+        <article>
             <h2>Cosine-weighted hemisphere sampling</h2>
             <div class="article-date">2023-01-13</div>
 
