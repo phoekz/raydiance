@@ -306,28 +306,16 @@ impl Gui {
             )?;
 
             // Transition image UNDEFINED -> TRANSFER_DST_OPTIMAL.
-            device.cmd_pipeline_barrier(
+            device.image_memory_barrier(
                 cmd,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                slice::from_ref(
-                    &vk::ImageMemoryBarrier::builder()
-                        .src_access_mask(vk::AccessFlags::empty())
-                        .dst_access_mask(vk::AccessFlags::TRANSFER_WRITE)
-                        .old_layout(vk::ImageLayout::UNDEFINED)
-                        .new_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
-                        .image(image)
-                        .subresource_range(vk::ImageSubresourceRange {
-                            aspect_mask: vk::ImageAspectFlags::COLOR,
-                            base_mip_level: 0,
-                            level_count: 1,
-                            base_array_layer: 0,
-                            layer_count: 1,
-                        }),
-                ),
+                image,
+                vk::PipelineStageFlags2::TOP_OF_PIPE,
+                vk::AccessFlags2::empty(),
+                vk::PipelineStageFlags2::TRANSFER,
+                vk::AccessFlags2::TRANSFER_WRITE,
+                vk::ImageLayout::UNDEFINED,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                vk::ImageAspectFlags::COLOR,
             );
 
             // Copy staging buffer to device image.
@@ -357,35 +345,27 @@ impl Gui {
             );
 
             // Transition TRANSFER_DST_OPTIMAL -> SHADER_READ_ONLY_OPTIMAL.
-            device.cmd_pipeline_barrier(
+            device.image_memory_barrier(
                 cmd,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::PipelineStageFlags::FRAGMENT_SHADER,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                slice::from_ref(
-                    &vk::ImageMemoryBarrier::builder()
-                        .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
-                        .dst_access_mask(vk::AccessFlags::SHADER_READ)
-                        .old_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
-                        .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                        .image(image)
-                        .subresource_range(vk::ImageSubresourceRange {
-                            aspect_mask: vk::ImageAspectFlags::COLOR,
-                            base_mip_level: 0,
-                            level_count: 1,
-                            base_array_layer: 0,
-                            layer_count: 1,
-                        }),
-                ),
+                image,
+                vk::PipelineStageFlags2::TRANSFER,
+                vk::AccessFlags2::TRANSFER_WRITE,
+                vk::PipelineStageFlags2::FRAGMENT_SHADER,
+                vk::AccessFlags2::SHADER_READ,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                vk::ImageAspectFlags::COLOR,
             );
 
             // Submit.
             device.end_command_buffer(cmd)?;
-            device.queue_submit(
+            device.queue_submit2(
                 **device.queue(),
-                slice::from_ref(&vk::SubmitInfo::builder().command_buffers(slice::from_ref(&cmd))),
+                slice::from_ref(
+                    &vk::SubmitInfo2::builder().command_buffer_infos(slice::from_ref(
+                        &vk::CommandBufferSubmitInfo::builder().command_buffer(cmd),
+                    )),
+                ),
                 vk::Fence::null(),
             )?;
             device.queue_wait_idle(**device.queue())?;

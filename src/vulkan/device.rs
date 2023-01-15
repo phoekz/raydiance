@@ -61,6 +61,9 @@ impl Device {
                     if features_13.dynamic_rendering == vk::FALSE {
                         return None;
                     }
+                    if features_13.synchronization2 == vk::FALSE {
+                        return None;
+                    }
 
                     // We only support discrete GPUs at this point.
                     let properties = instance.get_physical_device_properties(physical_device);
@@ -164,8 +167,10 @@ impl Device {
             };
 
             // Features.
-            let mut dynamic_rendering_feature =
-                vk::PhysicalDeviceDynamicRenderingFeatures::builder().dynamic_rendering(true);
+            let mut features_13 = vk::PhysicalDeviceVulkan13Features::builder()
+                .synchronization2(true)
+                .dynamic_rendering(true);
+            let mut features = vk::PhysicalDeviceFeatures2::builder().push_next(&mut features_13);
 
             // Create.
             instance
@@ -174,7 +179,7 @@ impl Device {
                     &vk::DeviceCreateInfo::builder()
                         .queue_create_infos(&queue_create_infos)
                         .enabled_extension_names(&enabled_extensions)
-                        .push_next(&mut dynamic_rendering_feature),
+                        .push_next(&mut features),
                     None,
                 )
                 .context("Creating device")?
@@ -237,5 +242,39 @@ impl Device {
                     "Unable to find suitable memory type for the buffer, requirements={memory_requirements:?}"
                 )
             })
+    }
+
+    pub unsafe fn image_memory_barrier(
+        &self,
+        command_buffer: vk::CommandBuffer,
+        image: vk::Image,
+        src_stage_mask: vk::PipelineStageFlags2,
+        src_access_mask: vk::AccessFlags2,
+        dst_stage_mask: vk::PipelineStageFlags2,
+        dst_access_mask: vk::AccessFlags2,
+        old_layout: vk::ImageLayout,
+        new_layout: vk::ImageLayout,
+        aspect_mask: vk::ImageAspectFlags,
+    ) {
+        self.cmd_pipeline_barrier2(
+            command_buffer,
+            &vk::DependencyInfo::builder().image_memory_barriers(slice::from_ref(
+                &vk::ImageMemoryBarrier2::builder()
+                    .src_stage_mask(src_stage_mask)
+                    .src_access_mask(src_access_mask)
+                    .dst_stage_mask(dst_stage_mask)
+                    .dst_access_mask(dst_access_mask)
+                    .old_layout(old_layout)
+                    .new_layout(new_layout)
+                    .image(image)
+                    .subresource_range(vk::ImageSubresourceRange {
+                        aspect_mask,
+                        base_mip_level: 0,
+                        level_count: 1,
+                        base_array_layer: 0,
+                        layer_count: 1,
+                    }),
+            )),
+        );
     }
 }

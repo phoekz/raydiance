@@ -139,9 +139,13 @@ impl Buffer {
         device.end_command_buffer(cmd)?;
 
         // Submit and wait.
-        device.queue_submit(
+        device.queue_submit2(
             **device.queue(),
-            &[*vk::SubmitInfo::builder().command_buffers(&[cmd])],
+            slice::from_ref(
+                &vk::SubmitInfo2::builder().command_buffer_infos(slice::from_ref(
+                    &vk::CommandBufferSubmitInfo::builder().command_buffer(cmd),
+                )),
+            ),
             fence,
         )?;
         device.wait_for_fences(&[fence], true, u64::MAX)?;

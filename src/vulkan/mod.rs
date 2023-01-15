@@ -271,51 +271,29 @@ impl Renderer {
                     .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
             )
             .context("Beginning command buffer")?;
-        device.cmd_pipeline_barrier(
+        device.image_memory_barrier(
             command_buffer,
-            vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS
-                | vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,
-            vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS
-                | vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,
-            vk::DependencyFlags::empty(),
-            &[],
-            &[],
-            slice::from_ref(
-                &vk::ImageMemoryBarrier::builder()
-                    .dst_access_mask(vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE)
-                    .old_layout(vk::ImageLayout::UNDEFINED)
-                    .new_layout(vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL)
-                    .image(depth_target.image())
-                    .subresource_range(vk::ImageSubresourceRange {
-                        aspect_mask: vk::ImageAspectFlags::DEPTH,
-                        base_mip_level: 0,
-                        level_count: 1,
-                        base_array_layer: 0,
-                        layer_count: 1,
-                    }),
-            ),
+            depth_target.image(),
+            vk::PipelineStageFlags2::EARLY_FRAGMENT_TESTS
+                | vk::PipelineStageFlags2::LATE_FRAGMENT_TESTS,
+            vk::AccessFlags2::empty(),
+            vk::PipelineStageFlags2::EARLY_FRAGMENT_TESTS
+                | vk::PipelineStageFlags2::LATE_FRAGMENT_TESTS,
+            vk::AccessFlags2::DEPTH_STENCIL_ATTACHMENT_WRITE,
+            vk::ImageLayout::UNDEFINED,
+            vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL,
+            vk::ImageAspectFlags::DEPTH,
         );
-        device.cmd_pipeline_barrier(
+        device.image_memory_barrier(
             command_buffer,
-            vk::PipelineStageFlags::TOP_OF_PIPE,
-            vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-            vk::DependencyFlags::empty(),
-            &[],
-            &[],
-            slice::from_ref(
-                &vk::ImageMemoryBarrier::builder()
-                    .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
-                    .old_layout(vk::ImageLayout::UNDEFINED)
-                    .new_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-                    .image(present_image.0)
-                    .subresource_range(vk::ImageSubresourceRange {
-                        aspect_mask: vk::ImageAspectFlags::COLOR,
-                        base_mip_level: 0,
-                        level_count: 1,
-                        base_array_layer: 0,
-                        layer_count: 1,
-                    }),
-            ),
+            present_image.0,
+            vk::PipelineStageFlags2::TOP_OF_PIPE,
+            vk::AccessFlags2::empty(),
+            vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT,
+            vk::AccessFlags2::COLOR_ATTACHMENT_WRITE,
+            vk::ImageLayout::UNDEFINED,
+            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+            vk::ImageAspectFlags::COLOR,
         );
         device.cmd_begin_rendering(command_buffer, &rendering_info);
         device.cmd_set_viewport(
@@ -351,42 +329,43 @@ impl Renderer {
         }
         gui.draw(device, command_buffer, frame_index, gui_data);
         device.cmd_end_rendering(command_buffer);
-        device.cmd_pipeline_barrier(
+        device.image_memory_barrier(
             command_buffer,
-            vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-            vk::PipelineStageFlags::BOTTOM_OF_PIPE,
-            vk::DependencyFlags::empty(),
-            &[],
-            &[],
-            slice::from_ref(
-                &vk::ImageMemoryBarrier::builder()
-                    .src_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
-                    .old_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-                    .new_layout(vk::ImageLayout::PRESENT_SRC_KHR)
-                    .image(present_image.0)
-                    .subresource_range(vk::ImageSubresourceRange {
-                        aspect_mask: vk::ImageAspectFlags::COLOR,
-                        base_mip_level: 0,
-                        level_count: 1,
-                        base_array_layer: 0,
-                        layer_count: 1,
-                    }),
-            ),
+            present_image.0,
+            vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT,
+            vk::AccessFlags2::COLOR_ATTACHMENT_WRITE,
+            vk::PipelineStageFlags2::BOTTOM_OF_PIPE,
+            vk::AccessFlags2::empty(),
+            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+            vk::ImageLayout::PRESENT_SRC_KHR,
+            vk::ImageAspectFlags::COLOR,
         );
         device
             .end_command_buffer(command_buffer)
             .context("Ending command buffer")?;
 
         // Submit.
-        let submit_info = vk::SubmitInfo::builder()
-            .wait_semaphores(slice::from_ref(present_complete))
-            .wait_dst_stage_mask(slice::from_ref(
-                &vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-            ))
-            .command_buffers(slice::from_ref(&command_buffer))
-            .signal_semaphores(slice::from_ref(rendering_complete));
         device
-            .queue_submit(**queue, slice::from_ref(&submit_info), *draw_commands_reuse)
+            .queue_submit2(
+                **queue,
+                slice::from_ref(
+                    &vk::SubmitInfo2::builder()
+                        .wait_semaphore_infos(slice::from_ref(
+                            &vk::SemaphoreSubmitInfo::builder()
+                                .semaphore(*present_complete)
+                                .stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT),
+                        ))
+                        .command_buffer_infos(slice::from_ref(
+                            &vk::CommandBufferSubmitInfo::builder().command_buffer(command_buffer),
+                        ))
+                        .signal_semaphore_infos(slice::from_ref(
+                            &vk::SemaphoreSubmitInfo::builder()
+                                .semaphore(*rendering_complete)
+                                .stage_mask(vk::PipelineStageFlags2::ALL_COMMANDS),
+                        )),
+                ),
+                *draw_commands_reuse,
+            )
             .context("Submitting to queue")?;
 
         // Present.
