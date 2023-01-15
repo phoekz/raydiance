@@ -12,7 +12,7 @@ layout(location = 0) in vec2 in_position;
 layout(location = 1) in vec2 in_uv;
 layout(location = 2) in vec4 in_color;
 
-layout(location = 0) out vec2 frag_uv;
+layout(location = 0) out vec2 frag_tex_coord;
 layout(location = 1) out vec4 frag_color;
 
 vec4 srgb_to_linear(vec4 srgb_color)
@@ -29,6 +29,6 @@ vec4 srgb_to_linear(vec4 srgb_color)
 void main()
 {
     gl_Position = vec4(in_position * push.scale + push.translation, 0.0, 1.0);
-    frag_uv = in_uv;
+    frag_tex_coord = in_uv;
     frag_color = srgb_to_linear(in_color);
 }

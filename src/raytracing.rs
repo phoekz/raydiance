@@ -6,18 +6,21 @@ pub struct Scene {
 }
 
 impl Scene {
-    pub fn create(assets_scene: &glb::Scene) -> Self {
-        let max_triangle_count = assets_scene
+    pub fn create(glb_scene: &glb::Scene) -> Self {
+        let max_triangle_count = glb_scene
             .meshes
             .iter()
             .map(glb::Mesh::triangle_count)
             .sum::<u32>();
         let mut triangles = Vec::with_capacity(max_triangle_count as usize);
-        for mesh in &assets_scene.meshes {
-            for triangle in mesh.triangles.iter() {
+        for mesh in &glb_scene.meshes {
+            for triangle in &mesh.triangles {
                 let position_0 = mesh.positions[triangle[0] as usize];
                 let position_1 = mesh.positions[triangle[1] as usize];
                 let position_2 = mesh.positions[triangle[2] as usize];
+                let tex_coord_0 = mesh.tex_coords[triangle[0] as usize];
+                let tex_coord_1 = mesh.tex_coords[triangle[1] as usize];
+                let tex_coord_2 = mesh.tex_coords[triangle[2] as usize];
                 let normal_0 = mesh.normals[triangle[0] as usize];
                 let normal_1 = mesh.normals[triangle[1] as usize];
                 let normal_2 = mesh.normals[triangle[2] as usize];
@@ -32,6 +35,7 @@ impl Scene {
                 triangles.push(Triangle {
                     positions: [position_0, position_1, position_2],
                     normals: [normal_0, normal_1, normal_2],
+                    tex_coords: [tex_coord_0, tex_coord_1, tex_coord_2],
                     material: mesh.material,
                 });
             }
@@ -113,6 +117,7 @@ impl Raytracer {
             let glb_scene = glb_scene;
             let scene = raytracing::Scene::create(&glb_scene);
             let materials = glb_scene.materials.as_ref();
+            let textures = glb_scene.textures.as_ref();
             let input_recv: mpsc::Receiver<Input> = input_recv;
             let output_send = output_send;
             let terminate_recv = terminate_recv;
@@ -200,6 +205,7 @@ impl Raytracer {
                             &scene,
                             &mut ray_stats,
                             materials,
+                            textures,
                         );
                         pixel_sample_buffer[pixel_index as usize] += radiance;
                     }
@@ -278,6 +284,7 @@ fn radiance(
     scene: &Scene,
     ray_stats: &mut intersection::RayBvhHitStats,
     materials: &[glb::Material],
+    textures: &[glb::Texture],
 ) -> LinSrgb {
     let mut ray = {
         sampling::camera_ray_uniform(
@@ -317,15 +324,26 @@ fn radiance(
 
         // Unpack triangle data.
         let triangle = &scene.triangles[triangle_index as usize];
+        let tex_coord = {
+            na::Point::from(
+                triangle.tex_coords[0].coords * barycentrics.x
+                    + triangle.tex_coords[1].coords * barycentrics.y
+                    + triangle.tex_coords[2].coords * barycentrics.z,
+            )
+        };
         let normal = {
             triangle.normals[0].into_inner() * barycentrics.x
                 + triangle.normals[1].into_inner() * barycentrics.y
                 + triangle.normals[2].into_inner() * barycentrics.z
         };
         let material = &materials[triangle.material as usize];
+        let texture = &textures[material.base_color as usize];
+
+        // Sample texture.
+        let base_color = texture.sample(tex_coord).color;
 
         // Lambertian BRDF, division of PI is the normalization factor.
-        let brdf = material.base_color / PI;
+        let brdf = base_color / PI;
 
         // Sample next direction, adjust closest hit to avoid spawning the next ray inside the surface.
         ray.origin += 0.999 * closest_hit * ray.dir.into_inner();

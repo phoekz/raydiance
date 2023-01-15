@@ -2,18 +2,36 @@ use super::*;
 
 struct RasterMesh {
     positions: Buffer,
+    tex_coords: Buffer,
     normals: Buffer,
     indices: Buffer,
     index_count: u32,
     transform: na::Matrix4<f32>,
-    base_color: LinSrgb,
+    texture: u32,
 }
 
 impl RasterMesh {
     unsafe fn destroy(&self, device: &Device) {
         self.positions.destroy(device);
+        self.tex_coords.destroy(device);
         self.normals.destroy(device);
         self.indices.destroy(device);
+    }
+}
+
+struct RasterTexture {
+    handle: vk::Image,
+    memory: vk::DeviceMemory,
+    view: vk::ImageView,
+    sampler: vk::Sampler,
+}
+
+impl RasterTexture {
+    unsafe fn destroy(&self, device: &Device) {
+        device.destroy_image_view(self.view, None);
+        device.destroy_image(self.handle, None);
+        device.free_memory(self.memory, None);
+        device.destroy_sampler(self.sampler, None);
     }
 }
 
@@ -21,11 +39,12 @@ impl RasterMesh {
 #[derive(Zeroable, Pod, Clone, Copy)]
 struct PushConstants {
     transform: na::Matrix4<f32>,
-    base_color: LinSrgba,
 }
 
 pub struct RasterScene {
     meshes: Vec<RasterMesh>,
+    textures: Vec<RasterTexture>,
+    desc_set_layout: vk::DescriptorSetLayout,
     vertex_shader: Shader,
     fragment_shader: Shader,
     graphics_pipeline: vk::Pipeline,
@@ -35,25 +54,31 @@ pub struct RasterScene {
 }
 
 impl RasterScene {
-    pub unsafe fn create(device: &Device, assets_scene: &glb::Scene) -> Result<Self> {
+    pub unsafe fn create(device: &Device, glb_scene: &glb::Scene) -> Result<Self> {
         // Todo: Allocating meshes individually will eventually crash due to
         // `max_memory_allocation_count`, which is only 4096 on most NVIDIA
         // hardware. At that point, we need to start packing meshes into a
         // single allocation.
         let meshes = {
             let mut meshes = vec![];
-            for assets_mesh in &assets_scene.meshes {
-                let positions = assets_mesh.positions.0.as_ref();
-                let normals = assets_mesh.normals.0.as_ref();
-                let triangles = assets_mesh.triangles.0.as_ref();
-                let transform = assets_mesh.transform;
-                let base_color = assets_scene.materials[assets_mesh.material as usize].base_color;
+            for glb_mesh in &glb_scene.meshes {
+                let positions = glb_mesh.positions.as_ref();
+                let tex_coords = glb_mesh.tex_coords.as_ref();
+                let normals = glb_mesh.normals.as_ref();
+                let triangles = glb_mesh.triangles.as_ref();
+                let transform = glb_mesh.transform;
+                let texture = glb_scene.materials[glb_mesh.material as usize].base_color;
 
                 meshes.push(RasterMesh {
                     positions: Buffer::create_init(
                         device,
                         vk::BufferUsageFlags::VERTEX_BUFFER,
                         positions,
+                    )?,
+                    tex_coords: Buffer::create_init(
+                        device,
+                        vk::BufferUsageFlags::VERTEX_BUFFER,
+                        tex_coords,
                     )?,
                     normals: Buffer::create_init(
                         device,
@@ -65,12 +90,206 @@ impl RasterScene {
                         vk::BufferUsageFlags::INDEX_BUFFER,
                         triangles,
                     )?,
-                    index_count: assets_mesh.index_count(),
+                    index_count: glb_mesh.index_count(),
                     transform,
-                    base_color,
+                    texture,
                 });
             }
             meshes
+        };
+
+        // Textures.
+        let textures = {
+            // Temporary uploader setup.
+            let command_pool = device.create_command_pool(
+                &vk::CommandPoolCreateInfo::builder()
+                    .queue_family_index(device.queue().index())
+                    .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER),
+                None,
+            )?;
+            let command_buffers = device.allocate_command_buffers(
+                &vk::CommandBufferAllocateInfo::builder()
+                    .command_buffer_count(1)
+                    .command_pool(command_pool)
+                    .level(vk::CommandBufferLevel::PRIMARY),
+            )?;
+            let cmd = command_buffers[0];
+
+            // Create textures.
+            let mut textures = vec![];
+            for glb_texture in &glb_scene.textures {
+                // Image.
+                let image = device.create_image(
+                    &vk::ImageCreateInfo::builder()
+                        .image_type(vk::ImageType::TYPE_2D)
+                        .format(vk::Format::R32G32B32A32_SFLOAT)
+                        .extent(vk::Extent3D {
+                            width: glb_texture.width,
+                            height: glb_texture.height,
+                            depth: 1,
+                        })
+                        .mip_levels(1)
+                        .array_layers(1)
+                        .samples(vk::SampleCountFlags::TYPE_1)
+                        .tiling(vk::ImageTiling::LINEAR)
+                        .usage(vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED)
+                        .initial_layout(vk::ImageLayout::UNDEFINED)
+                        .sharing_mode(vk::SharingMode::EXCLUSIVE),
+                    None,
+                )?;
+
+                // Allocate memory.
+                let requirements = device.get_image_memory_requirements(image);
+                let index = device
+                    .find_memory_type_index(vk::MemoryPropertyFlags::DEVICE_LOCAL, requirements)?;
+                let memory = device.allocate_memory(
+                    &vk::MemoryAllocateInfo::builder()
+                        .allocation_size(requirements.size)
+                        .memory_type_index(index),
+                    None,
+                )?;
+                device.bind_image_memory(image, memory, 0)?;
+
+                // Image view.
+                let view = device.create_image_view(
+                    &vk::ImageViewCreateInfo::builder()
+                        .view_type(vk::ImageViewType::TYPE_2D)
+                        .image(image)
+                        .format(vk::Format::R32G32B32A32_SFLOAT)
+                        .subresource_range(vk::ImageSubresourceRange {
+                            aspect_mask: vk::ImageAspectFlags::COLOR,
+                            base_mip_level: 0,
+                            level_count: 1,
+                            base_array_layer: 0,
+                            layer_count: 1,
+                        }),
+                    None,
+                )?;
+
+                // Staging buffer.
+                let staging = Buffer::create(
+                    device,
+                    vk::BufferUsageFlags::TRANSFER_SRC,
+                    vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+                    glb_texture.byte_count(),
+                    bytemuck::cast_slice(&glb_texture.pixels),
+                )?;
+
+                // Begin command buffer.
+                device.begin_command_buffer(
+                    cmd,
+                    &vk::CommandBufferBeginInfo::builder()
+                        .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
+                )?;
+
+                // Transition image UNDEFINED -> TRANSFER_DST_OPTIMAL.
+                device.image_memory_barrier(
+                    cmd,
+                    image,
+                    vk::PipelineStageFlags2::TOP_OF_PIPE,
+                    vk::AccessFlags2::empty(),
+                    vk::PipelineStageFlags2::TRANSFER,
+                    vk::AccessFlags2::TRANSFER_WRITE,
+                    vk::ImageLayout::UNDEFINED,
+                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                    vk::ImageAspectFlags::COLOR,
+                );
+
+                // Copy staging buffer to device image.
+                let region = vk::BufferImageCopy {
+                    buffer_offset: 0,
+                    buffer_row_length: 0,
+                    buffer_image_height: 0,
+                    image_subresource: vk::ImageSubresourceLayers {
+                        aspect_mask: vk::ImageAspectFlags::COLOR,
+                        mip_level: 0,
+                        base_array_layer: 0,
+                        layer_count: 1,
+                    },
+                    image_offset: vk::Offset3D { x: 0, y: 0, z: 0 },
+                    image_extent: vk::Extent3D {
+                        width: glb_texture.width,
+                        height: glb_texture.height,
+                        depth: 1,
+                    },
+                };
+                device.cmd_copy_buffer_to_image(
+                    cmd,
+                    *staging,
+                    image,
+                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                    slice::from_ref(&region),
+                );
+
+                // Transition TRANSFER_DST_OPTIMAL -> SHADER_READ_ONLY_OPTIMAL.
+                device.image_memory_barrier(
+                    cmd,
+                    image,
+                    vk::PipelineStageFlags2::TRANSFER,
+                    vk::AccessFlags2::TRANSFER_WRITE,
+                    vk::PipelineStageFlags2::FRAGMENT_SHADER,
+                    vk::AccessFlags2::SHADER_READ,
+                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                    vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                    vk::ImageAspectFlags::COLOR,
+                );
+
+                // Submit.
+                device.end_command_buffer(cmd)?;
+                device.queue_submit2(
+                    **device.queue(),
+                    slice::from_ref(&vk::SubmitInfo2::builder().command_buffer_infos(
+                        slice::from_ref(
+                            &vk::CommandBufferSubmitInfo::builder().command_buffer(cmd),
+                        ),
+                    )),
+                    vk::Fence::null(),
+                )?;
+                device.queue_wait_idle(**device.queue())?;
+
+                // Sampler.
+                let sampler = device.create_sampler(
+                    &vk::SamplerCreateInfo::builder()
+                        .mag_filter(vk::Filter::NEAREST)
+                        .min_filter(vk::Filter::NEAREST)
+                        .mipmap_mode(vk::SamplerMipmapMode::NEAREST)
+                        .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+                        .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+                        .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE),
+                    None,
+                )?;
+
+                // Cleanup.
+                staging.destroy(device);
+
+                textures.push(RasterTexture {
+                    handle: image,
+                    memory,
+                    view,
+                    sampler,
+                });
+            }
+
+            // Cleanup.
+            device.free_command_buffers(command_pool, slice::from_ref(&cmd));
+            device.destroy_command_pool(command_pool, None);
+
+            textures
+        };
+
+        // Descriptor set layout.
+        let desc_set_layout = {
+            let bindings = *vk::DescriptorSetLayoutBinding::builder()
+                .binding(0)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT);
+            device.create_descriptor_set_layout(
+                &vk::DescriptorSetLayoutCreateInfo::builder()
+                    .bindings(slice::from_ref(&bindings))
+                    .flags(vk::DescriptorSetLayoutCreateFlags::PUSH_DESCRIPTOR_KHR),
+                None,
+            )?
         };
 
         // Pipelines.
@@ -99,29 +318,33 @@ impl RasterScene {
                 .front_face(vk::FrontFace::COUNTER_CLOCKWISE);
 
             // Vertex input state.
-            let position_binding_descriptions = vk::VertexInputBindingDescription::builder()
-                .binding(0)
-                .input_rate(vk::VertexInputRate::VERTEX)
-                .stride((3 * size_of::<f32>()) as u32);
-            let position_attribute_descriptions = vk::VertexInputAttributeDescription::builder()
-                .binding(0)
-                .location(0)
-                .format(vk::Format::R32G32B32_SFLOAT)
-                .offset(0);
-            let normal_binding_descriptions = vk::VertexInputBindingDescription::builder()
-                .binding(1)
-                .input_rate(vk::VertexInputRate::VERTEX)
-                .stride((3 * size_of::<f32>()) as u32);
-            let normal_attribute_descriptions = vk::VertexInputAttributeDescription::builder()
-                .binding(1)
-                .location(1)
-                .format(vk::Format::R32G32B32_SFLOAT)
-                .offset(0);
-            let vertex_binding_descriptions =
-                [*position_binding_descriptions, *normal_binding_descriptions];
+            let vertex_binding_descriptions = [
+                *vk::VertexInputBindingDescription::builder()
+                    .binding(0)
+                    .input_rate(vk::VertexInputRate::VERTEX)
+                    .stride((3 * size_of::<f32>()) as u32),
+                *vk::VertexInputBindingDescription::builder()
+                    .binding(1)
+                    .input_rate(vk::VertexInputRate::VERTEX)
+                    .stride((2 * size_of::<f32>()) as u32),
+                *vk::VertexInputBindingDescription::builder()
+                    .binding(2)
+                    .input_rate(vk::VertexInputRate::VERTEX)
+                    .stride((3 * size_of::<f32>()) as u32),
+            ];
             let vertex_attribute_descriptions = [
-                *position_attribute_descriptions,
-                *normal_attribute_descriptions,
+                *vk::VertexInputAttributeDescription::builder()
+                    .binding(0)
+                    .location(0)
+                    .format(vk::Format::R32G32B32_SFLOAT),
+                *vk::VertexInputAttributeDescription::builder()
+                    .binding(1)
+                    .location(1)
+                    .format(vk::Format::R32G32_SFLOAT),
+                *vk::VertexInputAttributeDescription::builder()
+                    .binding(2)
+                    .location(2)
+                    .format(vk::Format::R32G32B32_SFLOAT),
             ];
             let vertex_input_state = vk::PipelineVertexInputStateCreateInfo::builder()
                 .vertex_binding_descriptions(&vertex_binding_descriptions)
@@ -172,13 +395,13 @@ impl RasterScene {
             // Pipeline layout.
             let pipeline_layout = device
                 .create_pipeline_layout(
-                    &vk::PipelineLayoutCreateInfo::builder().push_constant_ranges(&[
-                        vk::PushConstantRange {
+                    &vk::PipelineLayoutCreateInfo::builder()
+                        .set_layouts(slice::from_ref(&desc_set_layout))
+                        .push_constant_ranges(&[vk::PushConstantRange {
                             stage_flags: vk::ShaderStageFlags::VERTEX,
                             offset: 0,
                             size: size_of::<PushConstants>() as u32,
-                        },
-                    ]),
+                        }]),
                     None,
                 )
                 .context("Creating pipeline layout")?;
@@ -208,8 +431,9 @@ impl RasterScene {
             (graphics_pipeline[0], pipeline_layout)
         };
 
+        // Camera.
         let (clip_from_view, view_from_world) = {
-            let camera = &assets_scene.cameras[0];
+            let camera = &glb_scene.cameras[0];
             (
                 *camera.clip_from_view().as_matrix(),
                 camera.world_from_view().try_inverse().unwrap(),
@@ -218,6 +442,8 @@ impl RasterScene {
 
         Ok(Self {
             meshes,
+            textures,
+            desc_set_layout,
             vertex_shader,
             fragment_shader,
             graphics_pipeline,
@@ -246,13 +472,13 @@ impl RasterScene {
                 // `max_push_constants_size` is typically in order of 128 to 256
                 // bytes.
                 transform: clip_from_view * view_from_world * camera_transform * mesh.transform,
-                base_color: mesh.base_color.with_alpha(1.0),
             };
             let constants = bytemuck::cast_slice(slice::from_ref(&push));
 
             // Bind resources.
             device.cmd_bind_vertex_buffers(cmd, 0, slice::from_ref(&*mesh.positions), &[0]);
-            device.cmd_bind_vertex_buffers(cmd, 1, slice::from_ref(&*mesh.normals), &[0]);
+            device.cmd_bind_vertex_buffers(cmd, 1, slice::from_ref(&*mesh.tex_coords), &[0]);
+            device.cmd_bind_vertex_buffers(cmd, 2, slice::from_ref(&*mesh.normals), &[0]);
             device.cmd_bind_index_buffer(cmd, *mesh.indices, 0, vk::IndexType::UINT32);
             device.cmd_push_constants(
                 cmd,
@@ -262,16 +488,40 @@ impl RasterScene {
                 constants,
             );
 
+            // Bind texture and sampler.
+            {
+                let texture = &self.textures[mesh.texture as usize];
+                let image_info = *vk::DescriptorImageInfo::builder()
+                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                    .image_view(texture.view)
+                    .sampler(texture.sampler);
+                let write = *vk::WriteDescriptorSet::builder()
+                    .dst_binding(0)
+                    .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .image_info(slice::from_ref(&image_info));
+                device.push_descriptor_khr().cmd_push_descriptor_set(
+                    cmd,
+                    vk::PipelineBindPoint::GRAPHICS,
+                    self.pipeline_layout,
+                    0,
+                    slice::from_ref(&write),
+                );
+            }
+
             // Draw.
             device.cmd_draw_indexed(cmd, mesh.index_count, 1, 0, 0, 0);
         }
     }
 
     pub unsafe fn destroy(&self, device: &Device) {
+        device.destroy_descriptor_set_layout(self.desc_set_layout, None);
         self.vertex_shader.destroy(device);
         self.fragment_shader.destroy(device);
         for mesh in &self.meshes {
             mesh.destroy(device);
+        }
+        for texture in &self.textures {
+            texture.destroy(device);
         }
         device.destroy_pipeline(self.graphics_pipeline, None);
         device.destroy_pipeline_layout(self.pipeline_layout, None);

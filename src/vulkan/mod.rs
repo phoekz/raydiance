@@ -129,7 +129,7 @@ impl Renderer {
         window: &winit::window::Window,
         window_title: &str,
         window_size: window::Size,
-        assets_scene: &glb::Scene,
+        glb_scene: &glb::Scene,
         font_atlas_texture: &imgui::FontAtlasTexture,
     ) -> Result<Self> {
         let validation = std::env::var("VULKAN_VALIDATION").is_ok();
@@ -144,9 +144,9 @@ impl Renderer {
         let swapchain = Swapchain::create(&instance, &surface, &device, window_size.into())?;
         let color = ColorTarget::create(&device, window_size.into())?;
         let depth = DepthTarget::create(&device, window_size.into())?;
-        let gui = Gui::create(&device, &font_atlas_texture)?;
+        let gui = Gui::create(&device, font_atlas_texture)?;
         let cmds = Commands::create(&device)?;
-        let scene = RasterScene::create(&device, assets_scene)?;
+        let scene = RasterScene::create(&device, glb_scene)?;
         let rt_image = RaytracingImageRenderer::create(&device)?;
         Ok(Self {
             _entry: entry,

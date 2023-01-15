@@ -392,3 +392,21 @@ fn save_image(
         });
     Ok(out_image.save(path)?)
 }
+
+#[allow(dead_code)]
+fn create_checkerboard_texture() {
+    let w = 32;
+    let h = 32;
+    let mut img = vec![];
+    let b = 0.5;
+    for y in 0..h {
+        for x in 0..w {
+            if (x + y) % 2 == 0 {
+                img.push(LinSrgb::new(b, b, b));
+            } else {
+                img.push(LinSrgb::new(1.0, 1.0, 1.0));
+            }
+        }
+    }
+    save_image(&img, (w, h), "checkerboard.png").unwrap();
+}
