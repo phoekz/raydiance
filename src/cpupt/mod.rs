@@ -336,18 +336,10 @@ fn radiance(
 
         // Unpack triangle data.
         let triangle = &scene.triangles[triangle_index as usize];
-        let tex_coord = {
-            na::Point::from(
-                triangle.tex_coords[0].coords * barycentrics.x
-                    + triangle.tex_coords[1].coords * barycentrics.y
-                    + triangle.tex_coords[2].coords * barycentrics.z,
-            )
-        };
-        let normal = {
-            triangle.normals[0].into_inner() * barycentrics.x
-                + triangle.normals[1].into_inner() * barycentrics.y
-                + triangle.normals[2].into_inner() * barycentrics.z
-        };
+        let tex_coord = triangle.interpolated_tex_coord(&barycentrics);
+        let normal = triangle.interpolated_normal(&barycentrics);
+        let onb = sampling::OrthonormalBasis::new(&normal);
+
         let material = &materials[triangle.material as usize];
         let texture = &textures[material.base_color as usize];
 
@@ -359,7 +351,7 @@ fn radiance(
 
         // Sample next direction, adjust closest hit to avoid spawning the next ray inside the surface.
         ray.origin += 0.999 * closest_hit * ray.dir.into_inner();
-        ray.dir = hemisphere_sampler.dir(&normal, uniform_01.sample(rng), uniform_01.sample(rng));
+        ray.dir = hemisphere_sampler.dir(&onb, uniform_01.sample(rng), uniform_01.sample(rng));
 
         // Cos theta, clamp to avoid division with very small number.
         let cos_theta = f32::max(0.001, ray.dir.dot(&normal));

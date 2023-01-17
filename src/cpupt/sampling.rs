@@ -34,6 +34,35 @@ pub fn camera_ray_uniform(
     }
 }
 
+pub struct OrthonormalBasis {
+    world_from_local: na::Matrix3<f32>,
+    local_from_world: na::Matrix3<f32>,
+}
+
+impl OrthonormalBasis {
+    pub fn new(n: &na::UnitVector3<f32>) -> Self {
+        // Implementation based on "Building an Orthonormal Basis, Revisited".
+        // https://graphics.pixar.com/library/OrthonormalB/paper.pdf
+        let sign = f32::copysign(1.0, n.z);
+        let a = -1.0 / (sign + n.z);
+        let b = n.x * n.y * a;
+        let t = na::Unit::new_normalize(na::vector![
+            1.0 + sign * n.x * n.x * a,
+            sign * b,
+            -sign * n.x
+        ]);
+        let b = na::Unit::new_normalize(na::vector![b, sign + n.y * n.y * a, -n.y]);
+
+        let world_from_local =
+            na::Matrix3::from_columns(&[t.into_inner(), n.into_inner(), b.into_inner()]);
+        let local_from_world = world_from_local.transpose();
+        Self {
+            world_from_local,
+            local_from_world,
+        }
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum HemisphereSampler {
     Uniform,
@@ -41,17 +70,12 @@ pub enum HemisphereSampler {
 }
 
 impl HemisphereSampler {
-    pub fn dir(self, n: &na::Vector3<f32>, s: f32, t: f32) -> na::UnitVector3<f32> {
-        let (b1, b2) = orthonormal_basis(n);
+    pub fn dir(self, onb: &OrthonormalBasis, s: f32, t: f32) -> na::UnitVector3<f32> {
         let dir = match self {
             HemisphereSampler::Uniform => hemisphere_uniform(s, t),
             HemisphereSampler::Cosine => hemisphere_cosine(s, t),
         };
-        na::Unit::new_normalize(na::vector![
-            dir.dot(&na::vector![b1.x, n.x, b2.x]),
-            dir.dot(&na::vector![b1.y, n.y, b2.y]),
-            dir.dot(&na::vector![b1.z, n.z, b2.z])
-        ])
+        na::Unit::new_normalize(onb.world_from_local * dir)
     }
 
     pub fn pdf(self, cos_theta: f32) -> f32 {
@@ -79,18 +103,6 @@ impl std::fmt::Display for HemisphereSampler {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.name())
     }
-}
-
-fn orthonormal_basis(n: &na::Vector3<f32>) -> (na::Vector3<f32>, na::Vector3<f32>) {
-    // Implementation based on "Building an Orthonormal Basis, Revisited".
-    // https://graphics.pixar.com/library/OrthonormalB/paper.pdf
-    let sign = f32::copysign(1.0, n.z);
-    let a = -1.0 / (sign + n.z);
-    let b = n.x * n.y * a;
-    (
-        na::vector![1.0 + sign * n.x * n.x * a, sign * b, -sign * n.x],
-        na::vector![b, sign + n.y * n.y * a, -n.y],
-    )
 }
 
 fn hemisphere_uniform(s: f32, t: f32) -> na::Vector3<f32> {
