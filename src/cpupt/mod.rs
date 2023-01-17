@@ -134,8 +134,7 @@ impl Raytracer {
             let output_send = output_send;
             let terminate_recv = terminate_recv;
 
-            let mut rng = rand_pcg::Pcg64Mcg::seed_from_u64(params.seed);
-            let uniform_01 = rand::distributions::Uniform::new_inclusive(0.0_f32, 1.0_f32);
+            let mut uniform_sampler = sampling::UniformSampler::new();
 
             let mut input = Input::default();
             let mut sample_index = 0;
@@ -210,8 +209,7 @@ impl Raytracer {
                             image_size,
                             camera_position,
                             world_from_clip,
-                            &mut rng,
-                            uniform_01,
+                            &mut uniform_sampler,
                             input.hemisphere_sampler,
                             &params,
                             &scene,
@@ -285,13 +283,12 @@ impl Raytracer {
 }
 
 fn radiance(
-    (pixel_x, pixel_y): (u32, u32),
+    pixel: (u32, u32),
     image_size: (u32, u32),
     camera_position: na::Point3<f32>,
     world_from_clip: na::Matrix4<f32>,
-    rng: &mut rand_pcg::Mcg128Xsl64,
-    uniform_01: rand::distributions::Uniform<f32>,
-    hemisphere_sampler: sampling::HemisphereSampler,
+    uniform: &mut sampling::UniformSampler,
+    hemisphere: sampling::HemisphereSampler,
     params: &Params,
     scene: &Scene,
     ray_stats: &mut intersection::RayBvhHitStats,
@@ -299,13 +296,13 @@ fn radiance(
     textures: &[glb::Texture],
 ) -> LinSrgb {
     let mut ray = {
-        sampling::camera_ray_uniform(
-            (pixel_x, pixel_y),
+        sampling::primary_ray(
+            pixel,
             image_size,
             &camera_position,
             &world_from_clip,
-            uniform_01.sample(rng),
-            uniform_01.sample(rng),
+            uniform.sample(),
+            uniform.sample(),
         )
     };
     let mut radiance = LinSrgb::new(0.0, 0.0, 0.0);
@@ -351,13 +348,13 @@ fn radiance(
 
         // Sample next direction, adjust closest hit to avoid spawning the next ray inside the surface.
         ray.origin += 0.999 * closest_hit * ray.dir.into_inner();
-        ray.dir = hemisphere_sampler.dir(&onb, uniform_01.sample(rng), uniform_01.sample(rng));
+        ray.dir = hemisphere.sample(&onb, uniform.sample(), uniform.sample());
 
         // Cos theta, clamp to avoid division with very small number.
         let cos_theta = f32::max(0.001, ray.dir.dot(&normal));
 
         // Probability density function.
-        let pdf = hemisphere_sampler.pdf(cos_theta);
+        let pdf = hemisphere.pdf(cos_theta);
 
         // Update throughput.
         throughput *= brdf * cos_theta / pdf;

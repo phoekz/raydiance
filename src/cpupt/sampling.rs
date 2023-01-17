@@ -1,6 +1,28 @@
 use super::*;
 
-pub fn camera_ray_uniform(
+pub struct UniformSampler {
+    state: rand_pcg::Pcg64Mcg,
+    distribution: rand::distributions::Uniform<f32>,
+}
+
+impl UniformSampler {
+    pub fn new() -> Self {
+        Self::new_with_seed(0)
+    }
+
+    pub fn new_with_seed(seed: u64) -> Self {
+        Self {
+            state: rand_pcg::Pcg64Mcg::seed_from_u64(seed),
+            distribution: rand::distributions::Uniform::new_inclusive(0.0, 1.0),
+        }
+    }
+
+    pub fn sample(&mut self) -> f32 {
+        self.distribution.sample(&mut self.state)
+    }
+}
+
+pub fn primary_ray(
     (pixel_x, pixel_y): (u32, u32),
     (image_w, image_h): (u32, u32),
     camera_position: &na::Point3<f32>,
@@ -70,7 +92,7 @@ pub enum HemisphereSampler {
 }
 
 impl HemisphereSampler {
-    pub fn dir(self, onb: &OrthonormalBasis, s: f32, t: f32) -> na::UnitVector3<f32> {
+    pub fn sample(self, onb: &OrthonormalBasis, s: f32, t: f32) -> na::UnitVector3<f32> {
         let dir = match self {
             HemisphereSampler::Uniform => hemisphere_uniform(s, t),
             HemisphereSampler::Cosine => hemisphere_cosine(s, t),
