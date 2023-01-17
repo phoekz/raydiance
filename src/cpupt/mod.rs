@@ -1,5 +1,17 @@
 use super::*;
 
+pub mod sampling;
+
+mod aabb;
+mod bvh;
+mod intersection;
+mod ray;
+mod triangle;
+
+use aabb::*;
+use ray::*;
+use triangle::*;
+
 pub struct Scene {
     bvh_nodes: Vec<bvh::Node>,
     triangles: Vec<Triangle>,
@@ -115,7 +127,7 @@ impl Raytracer {
         let thread = thread::spawn(move || {
             let params = params;
             let glb_scene = glb_scene;
-            let scene = raytracing::Scene::create(&glb_scene);
+            let scene = Scene::create(&glb_scene);
             let materials = glb_scene.materials.as_ref();
             let textures = glb_scene.textures.as_ref();
             let input_recv: mpsc::Receiver<Input> = input_recv;

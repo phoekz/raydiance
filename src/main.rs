@@ -46,21 +46,13 @@ use winit::{
 #[macro_use]
 extern crate log;
 
-mod aabb;
-mod bvh;
+mod cpupt;
 mod glb;
 mod gui;
-mod intersection;
-mod ray;
-mod raytracing;
-mod sampling;
-mod triangle;
 mod vulkan;
 mod window;
 
-use aabb::*;
-use ray::*;
-use triangle::*;
+use cpupt::sampling::HemisphereSampler;
 
 //
 // Input state
@@ -151,14 +143,14 @@ fn main() -> Result<()> {
     // Init gui.
     let mut gui = gui::Gui::create(&window);
 
-    // Init GLB scene.
+    // Init glb scene.
     let glb_scene = glb::Scene::create(include_bytes!("assets/rounded_cube.glb"))?;
 
-    // Init raytracer.
-    let raytracer = raytracing::Raytracer::create(
-        raytracing::Params {
+    // Init cpupt.
+    let raytracer = cpupt::Raytracer::create(
+        cpupt::Params {
             samples_per_pixel: 64,
-            ..raytracing::Params::default()
+            ..cpupt::Params::default()
         },
         glb_scene.clone(),
     );
@@ -184,7 +176,7 @@ fn main() -> Result<()> {
     let mut camera_angle = 0.0;
     let mut camera_transform = na::Matrix4::identity();
     let mut display_raytracing_image = true;
-    let mut hemisphere_sampler = sampling::HemisphereSampler::default();
+    let mut hemisphere_sampler = HemisphereSampler::default();
     let mut sample_state = (0, 0);
     let mut any_window_focused = false;
     event_loop.run_return(|event, _, control_flow| {
@@ -281,7 +273,7 @@ fn main() -> Result<()> {
                     na::Matrix4::from_axis_angle(&na::Vector3::y_axis(), camera_angle);
 
                 // Update raytracer.
-                raytracer.send_input(raytracing::Input {
+                raytracer.send_input(cpupt::Input {
                     camera_transform,
                     image_size: (window_size.w, window_size.h),
                     hemisphere_sampler,
@@ -321,12 +313,12 @@ fn main() -> Result<()> {
                             if let Some(token) =
                                 ui.begin_combo("Hemisphere sampler", hemisphere_sampler.name())
                             {
-                                if ui.selectable(sampling::HemisphereSampler::Uniform.name()) {
-                                    hemisphere_sampler = sampling::HemisphereSampler::Uniform;
+                                if ui.selectable(HemisphereSampler::Uniform.name()) {
+                                    hemisphere_sampler = HemisphereSampler::Uniform;
                                 };
 
-                                if ui.selectable(sampling::HemisphereSampler::Cosine.name()) {
-                                    hemisphere_sampler = sampling::HemisphereSampler::Cosine;
+                                if ui.selectable(HemisphereSampler::Cosine.name()) {
+                                    hemisphere_sampler = HemisphereSampler::Cosine;
                                 };
 
                                 token.end();
