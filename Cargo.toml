@@ -22,6 +22,7 @@ palette = { version = "0.6.1", features = ["bytemuck"] }
 rand = "0.8.5"
 rand_pcg = "0.3.1"
 raw-window-handle = "0.5.0"
+time = { version = "0.3.17", features = ["local-offset", "formatting"] }
 winit = "0.27.5"
 
 [build-dependencies]

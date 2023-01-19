@@ -177,6 +177,7 @@ fn main() -> Result<()> {
     let mut camera_transform = na::Matrix4::identity();
     let mut display_raytracing_image = true;
     let mut hemisphere_sampler = HemisphereSampler::default();
+    let mut latest_output: Option<cpupt::Output> = None;
     let mut sample_state = (0, 0);
     let mut any_window_focused = false;
     event_loop.run_return(|event, _, control_flow| {
@@ -325,6 +326,27 @@ fn main() -> Result<()> {
                             }
 
                             ui.checkbox("Show raytracing image", &mut display_raytracing_image);
+
+                            if ui.button("Save image") {
+                                use time::format_description;
+                                use time::OffsetDateTime;
+
+                                if let Some(output) = &latest_output {
+                                    let local_time = OffsetDateTime::now_local()
+                                        .expect("Failed to get local time");
+                                    let format = format_description::parse(
+                                        "[year][month][day]-[hour][minute][second]",
+                                    )
+                                    .expect("Failed to parse format description");
+                                    let timestamp = local_time
+                                        .format(&format)
+                                        .expect("Failed to format local time");
+                                    info!("{timestamp}.png");
+                                    let path = format!("{timestamp}.png");
+                                    save_image(&output.image, output.image_size, &path)
+                                        .expect(&format!("Failed to save image to {path}"))
+                                }
+                            }
                         });
                 });
 
@@ -334,6 +356,7 @@ fn main() -> Result<()> {
                             .update_raytracing_image(&output.image, output.image_size)
                             .unwrap();
                         sample_state = (output.sample_index, output.sample_count);
+                        latest_output = Some(output);
                     }
 
                     let gui_data = gui.render();
@@ -382,6 +405,7 @@ fn save_image(
             let bytes: [u8; 4] = srgb.into_format().into_raw();
             *dst = image::Rgba(bytes);
         });
+    info!("Saving image to {path}");
     Ok(out_image.save(path)?)
 }
 
