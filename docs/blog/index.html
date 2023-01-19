@@ -85,6 +85,62 @@
 
         <!-- Posts -->
         <article>
+            <h2>Visualizing sample placement</h2>
+            <div class="article-date">2023-01-20</div>
+
+            <img src="images/20230120-011300-top.png" width="100%">
+            <img src="images/20230120-011300-side.png" width="100%">
+
+            <p>
+                Importance sampling Disney specular models is more challenging
+                than our current diffuse models. To improve our chances, we
+                created a small tool which visualizes where the sample are
+                placed around the hemisphere.
+            </p>
+
+            <p>
+                To make sure the tool works, we used our existing uniform and
+                cosine-weighted hemisphere samplers. We also added two
+                additional sample sequences for comparison:
+            </p>
+
+            <ol>
+                <li><code>grid</code> sequence, which uniformly samples the unit square.</li>
+                <li><code>sobol</code> sequence, which is provided by <a href="https://crates.io/crates/sobol_burley"><code>sobol_burley</code></a> crate. The crate implementation is based on <a href="https://www.jcgt.org/published/0009/04/01/">Practical Hash-based Owen Scrambling</a>.</li>
+            </ol>
+
+            <p>
+                The <code>top</code> plots view the hemisphere from above in
+                cartesian space. The <code>side</code> plots in
+                <code>x=[0,2pi]</code> and <code>y=[0,pi/2]</code> hemispherical
+                space.
+
+                For both sets of plots, the background brightness correspond to
+                the magnitude of <code>cos(theta)</code>.
+            </p>
+
+            <p>
+                Looking at the plots, we can intuitively say that <code>cosine</code>
+                performs better than <code>uniform</code>
+                sampling, because it places samples closer to the bright spots.
+                Similarly, <code>sobol</code> performs better than
+                <code>random</code> and <code>grid</code>.
+            </p>
+
+            <p>
+                Note that the new sequences are not currently available for
+                rendering. We will revisit low-discrepancy sequences later.
+            </p>
+
+            <div class="commit">
+                Commit:
+                <a href="https://github.com/phoekz/raydiance/commit/f5b806749234a4086d84388d7264c0f2fd43122a">
+                    <code>f5b80674</code>
+                </a>
+            </div>
+        </article>
+
+        <article>
             <h2>Implementing Disney BRDF - Diffuse model</h2>
             <div class="article-date">2023-01-19</div>
 
