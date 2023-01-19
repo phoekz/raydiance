@@ -40,6 +40,8 @@ pub struct Material {
 #[derive(Clone, Debug)]
 pub enum TextureKind {
     BaseColor,
+    Metallic,
+    Roughness,
 }
 
 #[derive(Clone, Debug)]
@@ -223,7 +225,6 @@ fn import_gltf_material(
     ensure!(gltf_material.occlusion_texture().is_none());
     ensure!(gltf_material.emissive_texture().is_none());
     let pbr = gltf_material.pbr_metallic_roughness();
-    ensure!(pbr.metallic_roughness_texture().is_none());
 
     // Base color.
     let base_color = {
@@ -295,13 +296,44 @@ fn import_gltf_material(
         texture_index
     };
 
+    // Roughness & metallic.
+    let (metallic, roughness) = {
+        let (metallic, roughness) = if let Some(_) = pbr.metallic_roughness_texture() {
+            todo!("Support metallic roughness textures");
+        } else {
+            let metallic_factor = pbr.metallic_factor();
+            let roughness_factor = pbr.roughness_factor();
+            (
+                Texture {
+                    kind: TextureKind::Metallic,
+                    width: 1,
+                    height: 1,
+                    pixels: vec![metallic_factor],
+                },
+                Texture {
+                    kind: TextureKind::Roughness,
+                    width: 1,
+                    height: 1,
+                    pixels: vec![roughness_factor],
+                },
+            )
+        };
+
+        // Append.
+        let metallic_index = scene.textures.len() as u32;
+        let roughness_index = scene.textures.len() as u32 + 1;
+        scene.textures.push(metallic);
+        scene.textures.push(roughness);
+        (metallic_index, roughness_index)
+    };
+
     // Append.
     let material_index = scene.materials.len() as u32;
     scene.materials.push(Material {
         name,
         base_color,
-        metallic: u32::MAX,
-        roughness: u32::MAX,
+        metallic,
+        roughness,
     });
 
     Ok(material_index)
@@ -508,21 +540,30 @@ impl Mesh {
 
 impl Texture {
     pub fn sample(&self, tex_coord: na::Point2<f32>) -> LinSrgba {
+        // Pixel location.
+        assert!(tex_coord.x >= 0.0);
+        assert!(tex_coord.y >= 0.0);
+        let x = f32::floor(tex_coord.x * self.width as f32) as usize;
+        let y = f32::floor(tex_coord.y * self.height as f32) as usize;
+        let x = usize::clamp(x, 0, (self.width - 1) as usize);
+        let y = usize::clamp(y, 0, (self.height - 1) as usize);
+        let offset = 4 * (y * self.width as usize + x);
+
+        // Fetch.
         match self.kind {
-            TextureKind::BaseColor => {
-                assert!(tex_coord.x >= 0.0);
-                assert!(tex_coord.y >= 0.0);
-                let x = f32::floor(tex_coord.x * self.width as f32) as usize;
-                let y = f32::floor(tex_coord.y * self.height as f32) as usize;
-                let x = usize::clamp(x, 0, (self.width - 1) as usize);
-                let y = usize::clamp(y, 0, (self.height - 1) as usize);
-                let offset = 4 * (y * self.width as usize + x);
-                LinSrgba::new(
-                    self.pixels[offset],
-                    self.pixels[offset + 1],
-                    self.pixels[offset + 2],
-                    self.pixels[offset + 3],
-                )
+            TextureKind::BaseColor => LinSrgba::new(
+                self.pixels[offset],
+                self.pixels[offset + 1],
+                self.pixels[offset + 2],
+                self.pixels[offset + 3],
+            ),
+            TextureKind::Metallic => {
+                let metallic = self.pixels[offset];
+                LinSrgba::new(metallic, metallic, metallic, metallic)
+            }
+            TextureKind::Roughness => {
+                let roughness = self.pixels[offset];
+                LinSrgba::new(roughness, roughness, roughness, roughness)
             }
         }
     }

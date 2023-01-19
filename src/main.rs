@@ -19,7 +19,6 @@
 use std::{
     borrow::Cow,
     collections::VecDeque,
-    f32::consts::{PI, TAU},
     ffi::{CStr, CString},
     mem::{size_of, transmute},
     ops::Deref,
@@ -52,7 +51,11 @@ mod gui;
 mod vulkan;
 mod window;
 
-use cpupt::sampling::HemisphereSampler;
+use cpupt::{bsdf::DiffuseModel, sampling::HemisphereSampler};
+
+const PI: f32 = std::f32::consts::PI;
+const TAU: f32 = std::f32::consts::TAU;
+const INV_PI: f32 = std::f32::consts::FRAC_1_PI;
 
 //
 // Input state
@@ -149,7 +152,7 @@ fn main() -> Result<()> {
     // Init cpupt.
     let raytracer = cpupt::Raytracer::create(
         cpupt::Params {
-            samples_per_pixel: 64,
+            samples_per_pixel: 256,
             ..cpupt::Params::default()
         },
         glb_scene.clone(),
@@ -177,6 +180,7 @@ fn main() -> Result<()> {
     let mut camera_transform = na::Matrix4::identity();
     let mut display_raytracing_image = true;
     let mut hemisphere_sampler = HemisphereSampler::default();
+    let mut diffuse_model = DiffuseModel::default();
     let mut latest_output: Option<cpupt::Output> = None;
     let mut sample_state = (0, 0);
     let mut any_window_focused = false;
@@ -278,6 +282,7 @@ fn main() -> Result<()> {
                     camera_transform,
                     image_size: (window_size.w, window_size.h),
                     hemisphere_sampler,
+                    diffuse_model,
                 });
 
                 // Draw screen.
@@ -292,7 +297,7 @@ fn main() -> Result<()> {
 
                     // Main window.
                     ui.window("Raydiance")
-                        .size([360.0, 140.0], imgui::Condition::FirstUseEver)
+                        .size([360.0, 200.0], imgui::Condition::FirstUseEver)
                         .position_pivot([0.0, 0.0])
                         .position([0.0, 0.0], imgui::Condition::FirstUseEver)
                         .collapsible(true)
@@ -320,6 +325,20 @@ fn main() -> Result<()> {
 
                                 if ui.selectable(HemisphereSampler::Cosine.name()) {
                                     hemisphere_sampler = HemisphereSampler::Cosine;
+                                };
+
+                                token.end();
+                            }
+
+                            if let Some(token) =
+                                ui.begin_combo("Diffuse model", diffuse_model.name())
+                            {
+                                if ui.selectable(DiffuseModel::Lambert.name()) {
+                                    diffuse_model = DiffuseModel::Lambert;
+                                };
+
+                                if ui.selectable(DiffuseModel::Disney.name()) {
+                                    diffuse_model = DiffuseModel::Disney;
                                 };
 
                                 token.end();

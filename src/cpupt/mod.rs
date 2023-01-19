@@ -1,5 +1,6 @@
 use super::*;
 
+pub mod bsdf;
 pub mod sampling;
 
 mod aabb;
@@ -81,6 +82,7 @@ pub struct Input {
     pub camera_transform: na::Matrix4<f32>,
     pub image_size: (u32, u32),
     pub hemisphere_sampler: sampling::HemisphereSampler,
+    pub diffuse_model: bsdf::DiffuseModel,
 }
 
 impl Default for Input {
@@ -88,7 +90,8 @@ impl Default for Input {
         Self {
             camera_transform: na::Matrix4::identity(),
             image_size: (0, 0),
-            hemisphere_sampler: sampling::HemisphereSampler::Uniform,
+            hemisphere_sampler: sampling::HemisphereSampler::default(),
+            diffuse_model: bsdf::DiffuseModel::default(),
         }
     }
 }
@@ -210,7 +213,7 @@ impl Raytracer {
                             camera_position,
                             world_from_clip,
                             &mut uniform_sampler,
-                            input.hemisphere_sampler,
+                            &input,
                             &params,
                             &scene,
                             &mut ray_stats,
@@ -288,13 +291,14 @@ fn radiance(
     camera_position: na::Point3<f32>,
     world_from_clip: na::Matrix4<f32>,
     uniform: &mut sampling::UniformSampler,
-    hemisphere: sampling::HemisphereSampler,
+    input: &Input,
     params: &Params,
     scene: &Scene,
     ray_stats: &mut intersection::RayBvhHitStats,
     materials: &[glb::Material],
     textures: &[glb::Texture],
 ) -> LinSrgb {
+    let hemisphere = &input.hemisphere_sampler;
     let mut ray = {
         sampling::primary_ray(
             pixel,
@@ -335,29 +339,42 @@ fn radiance(
         let triangle = &scene.triangles[triangle_index as usize];
         let tex_coord = triangle.interpolated_tex_coord(&barycentrics);
         let normal = triangle.interpolated_normal(&barycentrics);
+
+        // Sample textures.
+        let material = &materials[triangle.material as usize];
+        let base_color_texture = &textures[material.base_color as usize];
+        let roughness_texture = &textures[material.roughness as usize];
+        let base_color = base_color_texture.sample(tex_coord).color;
+        let roughness = roughness_texture.sample(tex_coord).alpha;
+
+        // Orthonormal basis.
         let onb = sampling::OrthonormalBasis::new(&normal);
 
-        let material = &materials[triangle.material as usize];
-        let texture = &textures[material.base_color as usize];
+        // View vector `v`. It points to where the ray came from, hence the
+        // negation.
+        let v_world = -ray.dir;
+        let v_local = onb.local_from_world() * v_world.into_inner();
 
-        // Sample texture.
-        let base_color = texture.sample(tex_coord).color;
+        // Light vector `l`. This is where the ray will go next. Since we don't
+        // have light sampling yet and our only light source is the sky, we can
+        // shortcut by using the cosine-weighted hemisphere sample directly.
+        let l_world = hemisphere.sample(&onb, uniform.sample(), uniform.sample());
+        let l_local = onb.local_from_world() * l_world.into_inner();
 
-        // Lambertian BRDF, division of PI is the normalization factor.
-        let brdf = base_color / PI;
+        // Evaluate BRDF.
+        let reflectance = match input.diffuse_model {
+            bsdf::DiffuseModel::Lambert => bsdf::lambert(base_color),
+            bsdf::DiffuseModel::Disney => bsdf::disney(base_color, roughness, &l_local, &v_local),
+        };
 
         // Sample next direction, adjust closest hit to avoid spawning the next ray inside the surface.
         ray.origin += 0.999 * closest_hit * ray.dir.into_inner();
-        ray.dir = hemisphere.sample(&onb, uniform.sample(), uniform.sample());
-
-        // Cos theta, clamp to avoid division with very small number.
-        let cos_theta = f32::max(0.001, ray.dir.dot(&normal));
-
-        // Probability density function.
-        let pdf = hemisphere.pdf(cos_theta);
+        ray.dir = l_world;
 
         // Update throughput.
-        throughput *= brdf * cos_theta / pdf;
+        let cos_theta = normal.dot(&v_world).abs();
+        let pdf = hemisphere.pdf(cos_theta);
+        throughput *= reflectance * cos_theta / pdf;
     }
     radiance
 }

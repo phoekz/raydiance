@@ -118,11 +118,18 @@ impl RasterScene {
             // Create textures.
             let mut textures = vec![];
             for glb_texture in &glb_scene.textures {
+                // Format.
+                let format = match glb_texture.kind {
+                    glb::TextureKind::BaseColor => vk::Format::R32G32B32A32_SFLOAT,
+                    glb::TextureKind::Metallic => vk::Format::R32_SFLOAT,
+                    glb::TextureKind::Roughness => vk::Format::R32_SFLOAT,
+                };
+
                 // Image.
                 let image = device.create_image(
                     &vk::ImageCreateInfo::builder()
                         .image_type(vk::ImageType::TYPE_2D)
-                        .format(vk::Format::R32G32B32A32_SFLOAT)
+                        .format(format)
                         .extent(vk::Extent3D {
                             width: glb_texture.width,
                             height: glb_texture.height,
@@ -155,7 +162,7 @@ impl RasterScene {
                     &vk::ImageViewCreateInfo::builder()
                         .view_type(vk::ImageViewType::TYPE_2D)
                         .image(image)
-                        .format(vk::Format::R32G32B32A32_SFLOAT)
+                        .format(format)
                         .subresource_range(vk::ImageSubresourceRange {
                             aspect_mask: vk::ImageAspectFlags::COLOR,
                             base_mip_level: 0,

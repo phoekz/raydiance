@@ -83,6 +83,10 @@ impl OrthonormalBasis {
             local_from_world,
         }
     }
+
+    pub fn local_from_world(&self) -> &na::Matrix3<f32> {
+        &self.local_from_world
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -101,10 +105,15 @@ impl HemisphereSampler {
     }
 
     pub fn pdf(self, cos_theta: f32) -> f32 {
-        match self {
+        let pdf = match self {
             HemisphereSampler::Uniform => hemisphere_uniform_pdf(),
             HemisphereSampler::Cosine => hemisphere_cosine_pdf(cos_theta),
-        }
+        };
+        assert!(
+            pdf >= 0.0 && pdf <= 1.0,
+            "pdf must be between 0..1, got {pdf} instead"
+        );
+        pdf
     }
 
     pub fn name(self) -> &'static str {
