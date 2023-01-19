@@ -10,6 +10,7 @@ approx = "0.5.1"
 ash = "0.37.1"
 ash-window = "0.12.0"
 bytemuck = { version = "1.12.3", features = ["derive"] }
+clap = { version = "4.1.1", features = ["derive"] }
 env_logger = "0.10.0"
 gltf = "1.0.0"
 image = "0.24.5"
@@ -22,6 +23,7 @@ palette = { version = "0.6.1", features = ["bytemuck"] }
 rand = "0.8.5"
 rand_pcg = "0.3.1"
 raw-window-handle = "0.5.0"
+sobol_burley = "0.4.0"
 time = { version = "0.3.17", features = ["local-offset", "formatting"] }
 winit = "0.27.5"
 
