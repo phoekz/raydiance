@@ -85,6 +85,93 @@
 
         <!-- Posts -->
         <article>
+            <h2>Implementing Disney BRDF - Diffuse model</h2>
+            <div class="article-date">2023-01-19</div>
+
+            <img src="images/20230119-035800.gif">
+
+            <p>
+                <a href="https://blog.selfshadow.com/publications/s2012-shading-course/burley/s2012_pbs_disney_brdf_notes_v3.pdf">Disney principled BRDF</a>
+
+                is a popular physically based reflectance model developed by
+                Brent Burley et al. at Disney. It is adopted by
+
+                <a href="https://docs.blender.org/manual/en/latest/render/shader_nodes/shader/principled.html">Blender</a>,
+                <a href="https://cdn2.unrealengine.com/Resources/files/2013SiggraphPresentationsNotes-26915738.pdf">Unreal Engine</a>,
+                <a href="https://seblagarde.files.wordpress.com/2015/07/course_notes_moving_frostbite_to_pbr_v32.pdf">Frostbite</a>,
+
+                and many other productions. The team at Disney analyzed the
+
+                <a href="https://www.merl.com/brdf/">MERL BRDF Database</a>
+
+                and fit their model based on MERL's empirical measurements.
+                Their goal was to create an artist-friendly model with as few
+                parameters as possible. These are the design principles from the
+                course notes:
+            </p>
+
+            <ol>
+                <li>Intuitive rather than physical parameters should be used.</li>
+                <li>There should be as few parameters as possible.</li>
+                <li>Parameters should be zero to one over their plausible range.</li>
+                <li>Parameters should be allowed to be pushed beyond their plausible range where it makes sense.</li>
+                <li>All combinations of parameters should be as robust and plausible as possible</li>
+            </ol>
+
+            <p>
+                The full Disney model is a combination of multiple scattering
+                models, some of which we are currently not very experienced
+                with. To avoid getting overwhelmed, we are going to study and
+                implement one model at the time, starting with the diffuse
+                model.
+            </p>
+
+            <p>
+                Disney's diffuse model is a novel empirical model which attempts
+                to solve the over darkening that comes from the Lambertian
+                diffuse model. This darkening happens at grazing angles, i.e.
+                the angle between incoming light and outgoing light is close to
+                0. Disney models this by adding a
+                <a href="https://en.wikipedia.org/wiki/Fresnel_equations">Fresnel factor</a>
+                , which is approximated with
+                <a href="https://en.wikipedia.org/wiki/Schlick%27s_approximation">Schlick's approximation</a>.
+                Basically, the grazing angle responses become brighter the
+                rougher the surface becomes.
+            </p>
+
+            <p>
+                The difference in the comparison above can be a bit subtle. The
+                main difference is that the edges on the cube are slightly
+                brighter compared to Lambert model, and the right side of the
+                cube, which also appears brighter.
+            </p>
+
+            <p>
+                Currently, our implementation intentionally ignores the "sheen"
+                term and the subsurface scattering approximation. We will come
+                back to them later. Also, any roughness value below 1.0 looks
+                incorrect, because our current implementation has no specular
+                terms.
+            </p>
+
+            <p>References:</p>
+            <ul>
+                <li><a href="https://blog.selfshadow.com/publications/s2012-shading-course/burley/s2012_pbs_disney_brdf_notes_v3.pdf">SIGGRAPH 2012 - Physically Based Shading at Disney - Course Notes</a></li>
+                <li><a href="https://schuttejoe.github.io/post/disneybsdf/">Joe Schutte - Rendering the Moana Island Scene Part 1: Implementing the Disney BSDF</a></li>
+                <li><a href="http://shihchinw.github.io/2015/07/implementing-disney-principled-brdf-in-arnold.html">Shih-Chin - Implementing Disney Principled BRDF in Arnold</a></li>
+                <li><a href="https://github.com/mmp/pbrt-v3/blob/master/src/materials/disney.cpp"><code>pbrt-v3 - disney.cpp</code></a></li>
+                <li><a href="https://github.com/wdas/brdf">Disney BRDF Explorer</a></li>
+            </ul>
+
+            <div class="commit">
+                Commit:
+                <a href="https://github.com/phoekz/raydiance/commit/c43f282e24a6eecb54fa3361a6e5e192453d0d8d">
+                    <code>c43f282e</code>
+                </a>
+            </div>
+        </article>
+
+        <article>
             <h2>Basic texture support</h2>
             <div class="article-date">2023-01-15</div>
 
