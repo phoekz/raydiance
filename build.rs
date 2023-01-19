@@ -1,3 +1,5 @@
+#![allow(dead_code, unused_imports)]
+
 use std::{
     path::{Path, PathBuf},
     process::Command,
@@ -11,6 +13,7 @@ macro_rules! build_print {
     }
 }
 
+#[cfg(target_os = "windows")]
 fn main() -> Result<()> {
     // Setup paths.
     let vulkan_sdk = env!("VULKAN_SDK");
@@ -74,3 +77,6 @@ fn glsl_to_spv(glslc: &Path, glsl_dir: &Path, spv_dir: &Path, shader: &str) -> R
     }
     Ok(())
 }
+
+#[cfg(not(target_os = "windows"))]
+fn main() {}
