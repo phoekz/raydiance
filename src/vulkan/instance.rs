@@ -73,7 +73,12 @@ impl Instance {
 
             let mut enabled_extensions = vec![];
             enabled_extensions.push(vk::KhrSurfaceFn::name());
-            enabled_extensions.push(vk::KhrWin32SurfaceFn::name());
+            let platform_surface = if cfg!(windows) {
+                vk::KhrWin32SurfaceFn::name()
+            } else {
+                vk::KhrXlibSurfaceFn::name()
+            };
+            enabled_extensions.push(platform_surface);
             if validation {
                 enabled_extensions.push(vk::ExtDebugUtilsFn::name());
             }
