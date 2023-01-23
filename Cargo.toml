@@ -6,23 +6,31 @@ version = "0.1.0"
 
 [dependencies]
 anyhow = "1.0.68"
+apng = "0.3.0"
 approx = "0.5.1"
 ash = "0.37.1"
 ash-window = "0.12.0"
+bitvec = "1.0.1"
 bytemuck = { version = "1.12.3", features = ["derive"] }
 clap = { version = "4.1.1", features = ["derive"] }
+easer = "0.3.0"
 env_logger = "0.10.0"
 gltf = "1.0.0"
 image = "0.24.5"
+imageproc = "0.23.0"
 imgui = "0.9.0"
 imgui-winit-support = "0.9.0"
 itertools = "0.10.5"
 log = "0.4.17"
 nalgebra = { version = "0.31.4", features = ["bytemuck"] }
+num = "0.4.0"
 palette = { version = "0.6.1", features = ["bytemuck"] }
+png = "0.17.7"
 rand = "0.8.5"
 rand_pcg = "0.3.1"
 raw-window-handle = "0.5.0"
+rayon = "1.6.1"
+rusttype = "0.9.3"
 sobol_burley = "0.4.0"
 time = { version = "0.3.17", features = ["local-offset", "formatting"] }
 winit = "0.27.5"

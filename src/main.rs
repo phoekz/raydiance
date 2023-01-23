@@ -13,6 +13,7 @@
     clippy::struct_excessive_bools,
     clippy::too_many_arguments,
     clippy::too_many_lines,
+    clippy::unreadable_literal,
     clippy::wildcard_imports
 )]
 
@@ -20,8 +21,11 @@ use std::{
     borrow::Cow,
     collections::VecDeque,
     ffi::{CStr, CString},
+    fs::File,
+    io::BufWriter,
     mem::{size_of, transmute},
     ops::Deref,
+    path::{Path, PathBuf},
     slice,
     sync::mpsc,
     thread,
@@ -30,11 +34,12 @@ use std::{
 
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use ash::vk;
+use bitvec::prelude::*;
 use bytemuck::{Pod, Zeroable};
 use clap::{Parser, Subcommand};
 use nalgebra as na;
-use palette::{LinSrgb, LinSrgba, Pixel, Srgba, WithAlpha};
 use rand::prelude::*;
+use rayon::prelude::*;
 use winit::{
     dpi::{PhysicalPosition, PhysicalSize},
     event::{Event, KeyboardInput, VirtualKeyCode, WindowEvent},
@@ -47,15 +52,16 @@ use winit::{
 extern crate log;
 
 mod cpupt;
+mod debug;
 mod glb;
 mod gui;
+mod math;
 mod vulkan;
 mod window;
 
-use cpupt::{
-    bsdf::DiffuseModel,
-    sampling::{HemisphereSampler, OrthonormalBasis, UniformSampler},
-};
+use cpupt::bxdfs;
+use cpupt::sampling::{HemisphereSampler, UniformSampler};
+use math::*;
 
 const PI: f32 = std::f32::consts::PI;
 const TAU: f32 = std::f32::consts::TAU;
@@ -136,7 +142,7 @@ struct Args {
 #[derive(Subcommand)]
 enum Commands {
     Editor,
-    DebugImportanceSampling,
+    Debug,
 }
 
 impl Default for Commands {
@@ -152,7 +158,7 @@ fn main() -> Result<()> {
     // Execute command.
     match Args::parse().command {
         Commands::Editor => editor(),
-        Commands::DebugImportanceSampling => debug_importance_sampling(),
+        Commands::Debug => debug::run(),
     }
 }
 
@@ -182,7 +188,7 @@ fn editor() -> Result<()> {
     let mut gui = gui::Gui::create(&window);
 
     // Init glb scene.
-    let glb_scene = glb::Scene::create(include_bytes!("assets/rounded_cube.glb"))?;
+    let (glb_scene, mut dyn_scene) = glb::Scene::create(include_bytes!("assets/rounded_cube.glb"))?;
 
     // Init cpupt.
     let raytracer = cpupt::Raytracer::create(
@@ -215,9 +221,10 @@ fn editor() -> Result<()> {
     let mut camera_transform = na::Matrix4::identity();
     let mut display_raytracing_image = true;
     let mut hemisphere_sampler = HemisphereSampler::default();
-    let mut diffuse_model = DiffuseModel::default();
     let mut latest_output: Option<cpupt::Output> = None;
     let mut sample_state = (0, 0);
+    let mut selected_material = 0;
+    let mut visualize_normals = false;
     let mut any_window_focused = false;
     event_loop.run_return(|event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -317,7 +324,8 @@ fn editor() -> Result<()> {
                     camera_transform,
                     image_size: (window_size.w, window_size.h),
                     hemisphere_sampler,
-                    diffuse_model,
+                    dyn_scene: dyn_scene.clone(),
+                    visualize_normals,
                 });
 
                 // Draw screen.
@@ -341,8 +349,12 @@ fn editor() -> Result<()> {
                         .build(|| {
                             let style = ui.clone_style();
 
-                            ui.text(delta_times.display_text());
+                            // Performance counters.
+                            {
+                                ui.text(delta_times.display_text());
+                            }
 
+                            // Rendering status.
                             {
                                 let progress = sample_state.0 as f32 / sample_state.1 as f32;
                                 imgui::ProgressBar::new(progress).size([0.0, 0.0]).build(ui);
@@ -351,36 +363,126 @@ fn editor() -> Result<()> {
                                 ui.text("Rendering");
                             }
 
+                            // Material editor.
+                            {
+                                // Selector.
+                                ui.combo(
+                                    "Material",
+                                    &mut selected_material,
+                                    &glb_scene.materials,
+                                    |material| Cow::Borrowed(&material.name),
+                                );
+
+                                let material = &mut dyn_scene.materials[selected_material];
+
+                                // Material model.
+                                {
+                                    let model = &mut material.model;
+                                    if let Some(token) = ui.begin_combo("Model", model.name()) {
+                                        if ui.selectable(glb::MaterialModel::Diffuse.name()) {
+                                            *model = glb::MaterialModel::Diffuse;
+                                        }
+                                        if ui.selectable(glb::MaterialModel::Disney.name()) {
+                                            *model = glb::MaterialModel::Disney;
+                                        }
+                                        token.end();
+                                    }
+                                }
+
+                                // Texture editor.
+                                {
+                                    let _id = ui.push_id("Base color");
+
+                                    let index = material.base_color as usize;
+                                    let mut texture = &mut dyn_scene.textures[index];
+                                    let mut bit = dyn_scene.replaced_textures[index];
+
+                                    ui.text("Base color");
+                                    if let glb::DynamicTexture::Vector4(ref mut v) = &mut texture {
+                                        if ui.color_edit4("Value", v) {
+                                            // Convenience: replace texture when an edit has been made without extra interaction.
+                                            dyn_scene.replaced_textures.set(index, true);
+                                        }
+                                    }
+                                    if ui.checkbox("Use", &mut bit) {
+                                        dyn_scene.replaced_textures.set(index, bit);
+                                    }
+                                    ui.same_line();
+                                    if ui.button("Reset") {
+                                        // Convenience: reset to default value and clear replacement with one click.
+                                        *texture = dyn_scene.default_textures[index];
+                                        dyn_scene.replaced_textures.set(index, false);
+                                    }
+                                }
+                                {
+                                    let _id = ui.push_id("Roughness");
+
+                                    let index = material.roughness as usize;
+                                    let mut texture = &mut dyn_scene.textures[index];
+                                    let mut bit = dyn_scene.replaced_textures[index];
+
+                                    ui.text("Roughness");
+                                    if let glb::DynamicTexture::Scalar(ref mut s) = &mut texture {
+                                        if ui.slider("Value", 0.0, 1.0, s) {
+                                            // Convenience: replace texture when an edit has been made without extra interaction.
+                                            dyn_scene.replaced_textures.set(index, true);
+                                        }
+                                    }
+                                    if ui.checkbox("Use", &mut bit) {
+                                        dyn_scene.replaced_textures.set(index, bit);
+                                    }
+                                    ui.same_line();
+                                    if ui.button("Reset") {
+                                        // Convenience: reset to default value and clear replacement with one click.
+                                        *texture = dyn_scene.default_textures[index];
+                                        dyn_scene.replaced_textures.set(index, false);
+                                    }
+                                }
+                                {
+                                    let _id = ui.push_id("Metallic");
+
+                                    let index = material.metallic as usize;
+                                    let mut texture = &mut dyn_scene.textures[index];
+                                    let mut bit = dyn_scene.replaced_textures[index];
+
+                                    ui.text("Metallic");
+                                    if let glb::DynamicTexture::Scalar(ref mut s) = &mut texture {
+                                        if ui.slider("Value", 0.0, 1.0, s) {
+                                            // Convenience: replace texture when an edit has been made without extra interaction.
+                                            dyn_scene.replaced_textures.set(index, true);
+                                        }
+                                    }
+                                    if ui.checkbox("Use", &mut bit) {
+                                        dyn_scene.replaced_textures.set(index, bit);
+                                    }
+                                    ui.same_line();
+                                    if ui.button("Reset") {
+                                        // Convenience: reset to default value and clear replacement with one click.
+                                        *texture = dyn_scene.default_textures[index];
+                                        dyn_scene.replaced_textures.set(index, false);
+                                    }
+                                }
+                            }
+
+                            ui.checkbox("Visualize normals", &mut visualize_normals);
+
+                            // Rendering config.
                             if let Some(token) =
                                 ui.begin_combo("Hemisphere sampler", hemisphere_sampler.name())
                             {
                                 if ui.selectable(HemisphereSampler::Uniform.name()) {
                                     hemisphere_sampler = HemisphereSampler::Uniform;
-                                };
+                                }
 
                                 if ui.selectable(HemisphereSampler::Cosine.name()) {
                                     hemisphere_sampler = HemisphereSampler::Cosine;
-                                };
+                                }
 
                                 token.end();
                             }
 
-                            if let Some(token) =
-                                ui.begin_combo("Diffuse model", diffuse_model.name())
-                            {
-                                if ui.selectable(DiffuseModel::Lambert.name()) {
-                                    diffuse_model = DiffuseModel::Lambert;
-                                };
-
-                                if ui.selectable(DiffuseModel::Disney.name()) {
-                                    diffuse_model = DiffuseModel::Disney;
-                                };
-
-                                token.end();
-                            }
-
+                            // Image utilities.
                             ui.checkbox("Show raytracing image", &mut display_raytracing_image);
-
                             if ui.button("Save image") {
                                 use time::format_description;
                                 use time::OffsetDateTime;
@@ -395,10 +497,11 @@ fn editor() -> Result<()> {
                                     let timestamp = local_time
                                         .format(&format)
                                         .expect("Failed to format local time");
-                                    info!("{timestamp}.png");
                                     let path = format!("{timestamp}.png");
                                     save_image(&output.image, output.image_size, &path)
-                                        .expect(&format!("Failed to save image to {path}"))
+                                        .unwrap_or_else(|_| {
+                                            panic!("Failed to save image to {path}")
+                                        });
                                 }
                             }
                         });
@@ -418,11 +521,13 @@ fn editor() -> Result<()> {
 
                     renderer
                         .redraw(
+                            &dyn_scene,
                             window_size,
                             resized_window_size,
                             frame_index,
                             camera_transform,
                             display_raytracing_image,
+                            visualize_normals,
                             gui_data,
                         )
                         .unwrap();
@@ -444,189 +549,22 @@ fn editor() -> Result<()> {
 }
 
 //
-// Debug: importance sampling
-//
-
-fn debug_importance_sampling() -> Result<()> {
-    enum SampleSequence {
-        Grid(u32),
-        Random(UniformSampler),
-        Sobol,
-    }
-
-    impl SampleSequence {
-        fn name(&self) -> &'static str {
-            match self {
-                SampleSequence::Grid(_) => "grid",
-                SampleSequence::Random(_) => "random",
-                SampleSequence::Sobol => "sobol",
-            }
-        }
-
-        fn sample(&mut self, sample_index: u32) -> (f32, f32) {
-            match self {
-                SampleSequence::Grid(size) => {
-                    let x = sample_index % *size;
-                    let y = sample_index / *size;
-                    (
-                        (x as f32 + 0.5) / (*size as f32),
-                        (y as f32 + 0.5) / (*size as f32),
-                    )
-                }
-                SampleSequence::Random(uniform) => (uniform.sample(), uniform.sample()),
-                SampleSequence::Sobol => (
-                    sobol_burley::sample(sample_index, 0, 0),
-                    sobol_burley::sample(sample_index, 1, 0),
-                ),
-            }
-        }
-    }
-
-    let sample_grid_size = 16;
-    let sample_count = sample_grid_size * sample_grid_size;
-
-    let mut image_side = image::RgbaImage::new(100, 25);
-    for py in 0..image_side.height() {
-        for px in 0..image_side.width() {
-            let nx = (px as f32 + 0.5) / image_side.width() as f32;
-            let ny = (py as f32 + 0.5) / image_side.height() as f32;
-            let ny = 1.0 - ny;
-            let theta = TAU * nx;
-            let phi = 0.5 * PI * ny;
-            let x = theta.cos() * phi.sin();
-            let y = phi.cos();
-            let z = theta.sin() * phi.sin();
-            let v = na::Vector3::new(x, y, z).normalize();
-            let n = na::Vector3::y_axis();
-            let cos_theta = v.dot(&n);
-            assert!(cos_theta >= 0.0 && cos_theta <= 1.0);
-            let c = (255.0 * cos_theta) as u8;
-            image_side.put_pixel(px, py, image::Rgba([c, c, c, 255]));
-        }
-    }
-
-    let mut image_top = image::RgbaImage::new(64, 64);
-    for py in 0..image_top.height() {
-        for px in 0..image_top.width() {
-            let x = (px as f32 + 0.5) / image_top.width() as f32;
-            let x = 2.0 * (x - 0.5);
-            let z = (py as f32 + 0.5) / image_top.height() as f32;
-            let z = 2.0 * (z - 0.5);
-            let y = na::vector![x, z].norm();
-            if y > 1.0 {
-                image_top.put_pixel(px, py, image::Rgba([0, 0, 0, 255]));
-                continue;
-            }
-            let y = 1.0 - y;
-            assert!(x >= -1.0 && x <= 1.0, "px={px}, py={py}, x={x}");
-            assert!(y >= -1.0 && y <= 1.0, "px={px}, py={py}, y={y}");
-            assert!(z >= -1.0 && z <= 1.0, "px={px}, py={py}, z={z}");
-            let v = na::vector![x, y, z];
-            let n = na::Vector3::y_axis();
-            let cos_theta = v.dot(&n);
-            assert!(
-                cos_theta >= 0.0 && cos_theta <= 1.0,
-                "px={px}, py={py}, x={x}, y={y}, z={z} cos_theta={cos_theta}"
-            );
-            let c = (255.0 * cos_theta) as u8;
-            image_top.put_pixel(px, py, image::Rgba([c, c, c, 255]));
-        }
-    }
-
-    let sample_into_image_side = |image: image::RgbaImage,
-                                  hemisphere: HemisphereSampler,
-                                  sample_count: u32,
-                                  sequence: &mut SampleSequence|
-     -> Result<()> {
-        let mut image = image;
-        let width = image.width();
-        let height = image.height();
-        let onb = OrthonormalBasis::new(&na::Vector3::y_axis());
-        for sample_index in 0..sample_count {
-            let (e1, e2) = sequence.sample(sample_index);
-            let sample = hemisphere.sample(&onb, e1, e2).into_inner();
-            let x = sample.x;
-            let y = sample.y;
-            let z = sample.z;
-            let theta = f32::atan2(z, x) + PI;
-            let phi = f32::atan2(f32::sqrt(x * x + z * z), y);
-            assert!(theta >= 0.0 && theta <= TAU);
-            assert!(phi >= 0.0 && phi <= 0.5 * PI);
-            let nx = theta / TAU;
-            let ny = 1.0 - phi / (0.5 * PI);
-            let px = ((nx * width as f32) as u32).min(width - 1);
-            let py = ((ny * height as f32) as u32).min(height - 1);
-            image.put_pixel(px, py, image::Rgba([255, 96, 0, 255]));
-        }
-        let image: image::DynamicImage = image.into();
-        let image = image.flipv();
-        let image = image.resize_exact(4 * width, 4 * height, image::imageops::Nearest);
-        let strategy = sequence.name();
-        let hemisphere = hemisphere.name().to_lowercase();
-        let path = format!("work/side-{hemisphere}-{strategy}-{sample_count}.png");
-        info!("Wrote {width}x{height} image to {path}");
-        Ok(image.save(path)?)
-    };
-
-    let sample_into_image_top = |image: image::RgbaImage,
-                                 hemisphere: HemisphereSampler,
-                                 sample_count: u32,
-                                 sequence: &mut SampleSequence|
-     -> Result<()> {
-        let mut image = image;
-        let width = image.width();
-        let height = image.height();
-        let onb = OrthonormalBasis::new(&na::Vector3::y_axis());
-        for sample_index in 0..sample_count {
-            let (e1, e2) = sequence.sample(sample_index);
-            let sample = hemisphere.sample(&onb, e1, e2).into_inner();
-            let x = sample.dot(&na::Vector3::x_axis());
-            let z = sample.dot(&na::Vector3::z_axis());
-            assert!(x >= -1.0 && x <= 1.0, "e1={e1}, e2={e2}, x={x}");
-            assert!(z >= -1.0 && z <= 1.0, "e1={e1}, e2={e2}, z={z}");
-            let px = (((0.5 * (x + 1.0)) * width as f32) as u32).min(width - 1);
-            let py = (((0.5 * (z + 1.0)) * height as f32) as u32).min(height - 1);
-            image.put_pixel(px, py, image::Rgba([255, 96, 0, 255]));
-        }
-        let image: image::DynamicImage = image.into();
-        let image = image.resize_exact(4 * width, 4 * height, image::imageops::Nearest);
-        let strategy = sequence.name();
-        let hemisphere = hemisphere.name().to_lowercase();
-        let path = format!("work/top-{hemisphere}-{strategy}-{sample_count}.png");
-        info!("Wrote {width}x{height} image to {path}");
-        Ok(image.save(path)?)
-    };
-
-    for sequence in &mut [
-        SampleSequence::Grid(sample_grid_size),
-        SampleSequence::Random(UniformSampler::new()),
-        SampleSequence::Sobol,
-    ] {
-        for &hemisphere in &[HemisphereSampler::Uniform, HemisphereSampler::Cosine] {
-            sample_into_image_side(image_side.clone(), hemisphere, sample_count, sequence)?;
-            sample_into_image_top(image_top.clone(), hemisphere, sample_count, sequence)?;
-        }
-    }
-
-    Ok(())
-}
-
-//
 // Misc
 //
 
 #[allow(dead_code)]
 fn save_image(
-    image: &[LinSrgb],
+    image: &[ColorRgb],
     (image_width, image_height): (u32, u32),
     path: &str,
 ) -> Result<()> {
+    use palette::{LinSrgba, Pixel, Srgba};
     let mut out_image = image::RgbaImage::new(image_width, image_height);
     image
         .iter()
         .zip(out_image.pixels_mut())
         .for_each(|(linear, dst)| {
-            let linear = linear.with_alpha(1.0);
+            let linear = LinSrgba::new(linear.red(), linear.green(), linear.blue(), 1.0);
             let srgb = Srgba::from_linear(linear);
             let bytes: [u8; 4] = srgb.into_format().into_raw();
             *dst = image::Rgba(bytes);
@@ -644,9 +582,9 @@ fn create_checkerboard_texture() {
     for y in 0..h {
         for x in 0..w {
             if (x + y) % 2 == 0 {
-                img.push(LinSrgb::new(b, b, b));
+                img.push(ColorRgb::new(b, b, b));
             } else {
-                img.push(LinSrgb::new(1.0, 1.0, 1.0));
+                img.push(ColorRgb::new(1.0, 1.0, 1.0));
             }
         }
     }

@@ -29,27 +29,57 @@ pub struct Mesh {
     pub material: u32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MaterialModel {
+    Diffuse,
+    Disney,
+}
+
 #[derive(Clone, Debug)]
 pub struct Material {
     pub name: String,
+    pub model: MaterialModel,
     pub base_color: u32,
     pub metallic: u32,
     pub roughness: u32,
 }
 
 #[derive(Clone, Debug)]
-pub enum TextureKind {
-    BaseColor,
-    Metallic,
-    Roughness,
+pub enum Texture {
+    Scalar(f32),
+    Vector2([f32; 2]),
+    Vector3([f32; 3]),
+    Vector4([f32; 4]),
+    Image {
+        width: u32,
+        height: u32,
+        components: u32,
+        pixels: Vec<f32>,
+    },
 }
 
-#[derive(Clone, Debug)]
-pub struct Texture {
-    pub kind: TextureKind,
-    pub width: u32,
-    pub height: u32,
-    pub pixels: Vec<f32>,
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct DynamicScene {
+    pub materials: Vec<DynamicMaterial>,
+    pub textures: Vec<DynamicTexture>,
+    pub default_textures: Vec<DynamicTexture>,
+    pub replaced_textures: BitVec,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DynamicMaterial {
+    pub model: MaterialModel,
+    pub base_color: u32,
+    pub metallic: u32,
+    pub roughness: u32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum DynamicTexture {
+    Scalar(f32),
+    Vector2([f32; 2]),
+    Vector3([f32; 3]),
+    Vector4([f32; 4]),
 }
 
 //
@@ -57,7 +87,7 @@ pub struct Texture {
 //
 
 impl Scene {
-    pub fn create(glb: &[u8]) -> Result<Self> {
+    pub fn create(glb: &[u8]) -> Result<(Self, DynamicScene)> {
         let mut scene = Scene {
             cameras: vec![],
             meshes: vec![],
@@ -93,13 +123,77 @@ impl Scene {
         {
             info!("Scene contains {} cameras", scene.cameras.len());
             info!("Scene contains {} meshes", scene.meshes.len());
+            for mesh in &scene.meshes {
+                info!(
+                    "  {}: vertices={}, triangles={}",
+                    &mesh.name,
+                    mesh.positions.len(),
+                    mesh.triangle_count()
+                );
+            }
             info!("Scene contains {} materials", scene.materials.len());
+            for material in &scene.materials {
+                let roughness = &scene.textures[material.roughness as usize];
+                let metallic = &scene.textures[material.metallic as usize];
+                let roughness = roughness.sample(na::Point2::new(0.5, 0.5)).red();
+                let metallic = metallic.sample(na::Point2::new(0.5, 0.5)).red();
+                info!(
+                    "  {}: {}=roughness={}, {}=metallic={}",
+                    &material.name, material.roughness, roughness, material.metallic, metallic
+                );
+            }
             info!("Scene contains {} textures", scene.textures.len());
         }
 
-        Ok(scene)
+        // Dynamic scene.
+        let dyn_scene = {
+            let materials = scene
+                .materials
+                .iter()
+                .map(|material| DynamicMaterial {
+                    model: material.model,
+                    base_color: material.base_color,
+                    metallic: material.metallic,
+                    roughness: material.roughness,
+                })
+                .collect();
+            let textures = scene
+                .textures
+                .iter()
+                .map(|texture| match texture {
+                    Texture::Scalar(s) => DynamicTexture::Scalar(*s),
+                    Texture::Vector2(v) => DynamicTexture::Vector2(*v),
+                    Texture::Vector3(v) => DynamicTexture::Vector3(*v),
+                    Texture::Vector4(v) => DynamicTexture::Vector4(*v),
+                    Texture::Image { .. } => DynamicTexture::Vector4([1.0, 1.0, 1.0, 1.0]),
+                })
+                .collect::<Vec<_>>();
+            let default_textures = textures.clone();
+            let mut replaced_textures = bitvec::bitvec!();
+            replaced_textures.resize(textures.len(), false);
+            DynamicScene {
+                materials,
+                textures,
+                default_textures,
+                replaced_textures,
+            }
+        };
+
+        assert!(!scene.cameras.is_empty());
+        assert!(!scene.meshes.is_empty());
+        assert!(!scene.materials.is_empty());
+        assert!(!scene.textures.is_empty());
+        assert_eq!(scene.materials.len(), dyn_scene.materials.len());
+        assert_eq!(scene.textures.len(), dyn_scene.textures.len());
+        assert_eq!(dyn_scene.textures.len(), dyn_scene.replaced_textures.len());
+
+        Ok((scene, dyn_scene))
     }
 }
+
+//
+// Importers
+//
 
 fn import_gltf_camera(
     gltf_camera: &gltf::Camera,
@@ -249,16 +343,17 @@ fn import_gltf_material(
             // Validate.
             let width = image.width;
             let height = image.height;
+            let components = 4;
             let format = image.format;
             let pixels = &image.pixels;
             ensure!(width > 0 && width.is_power_of_two());
             ensure!(height > 0 && height.is_power_of_two());
             ensure!(format == gltf::image::Format::R8G8B8A8);
-            ensure!((4 * width * height) as usize == pixels.len());
+            ensure!((components * width * height) as usize == pixels.len());
 
             // Convert R8G8B8A8_UNORM -> R32G32B32A32_SFLOAT.
             let pixels = pixels
-                .chunks_exact(4)
+                .chunks_exact(components as usize)
                 .flat_map(|chunk| {
                     // Todo: sRGB -> linear?
                     let r = f32::from(chunk[0]) / 255.0;
@@ -269,25 +364,14 @@ fn import_gltf_material(
                 })
                 .collect();
 
-            Texture {
-                kind: TextureKind::BaseColor,
+            Texture::Image {
                 width,
                 height,
+                components,
                 pixels,
             }
         } else {
-            let base_color_factor = pbr.base_color_factor();
-            Texture {
-                kind: TextureKind::BaseColor,
-                width: 1,
-                height: 1,
-                pixels: vec![
-                    base_color_factor[0],
-                    base_color_factor[1],
-                    base_color_factor[2],
-                    1.0,
-                ],
-            }
+            Texture::Vector4(pbr.base_color_factor())
         };
 
         // Append.
@@ -298,24 +382,12 @@ fn import_gltf_material(
 
     // Roughness & metallic.
     let (metallic, roughness) = {
-        let (metallic, roughness) = if let Some(_) = pbr.metallic_roughness_texture() {
+        let (metallic, roughness) = if pbr.metallic_roughness_texture().is_some() {
             todo!("Support metallic roughness textures");
         } else {
-            let metallic_factor = pbr.metallic_factor();
-            let roughness_factor = pbr.roughness_factor();
             (
-                Texture {
-                    kind: TextureKind::Metallic,
-                    width: 1,
-                    height: 1,
-                    pixels: vec![metallic_factor],
-                },
-                Texture {
-                    kind: TextureKind::Roughness,
-                    width: 1,
-                    height: 1,
-                    pixels: vec![roughness_factor],
-                },
+                Texture::Scalar(pbr.metallic_factor()),
+                Texture::Scalar(pbr.roughness_factor()),
             )
         };
 
@@ -331,6 +403,7 @@ fn import_gltf_material(
     let material_index = scene.materials.len() as u32;
     scene.materials.push(Material {
         name,
+        model: MaterialModel::Disney,
         base_color,
         metallic,
         roughness,
@@ -535,40 +608,103 @@ impl Mesh {
 }
 
 //
+// Material
+//
+
+impl MaterialModel {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Diffuse => "diffuse",
+            Self::Disney => "disney",
+        }
+    }
+}
+
+impl std::fmt::Display for MaterialModel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name())
+    }
+}
+
+//
 // Texture
 //
 
 impl Texture {
-    pub fn sample(&self, tex_coord: na::Point2<f32>) -> LinSrgba {
-        // Pixel location.
-        assert!(tex_coord.x >= 0.0);
-        assert!(tex_coord.y >= 0.0);
-        let x = f32::floor(tex_coord.x * self.width as f32) as usize;
-        let y = f32::floor(tex_coord.y * self.height as f32) as usize;
-        let x = usize::clamp(x, 0, (self.width - 1) as usize);
-        let y = usize::clamp(y, 0, (self.height - 1) as usize);
-        let offset = 4 * (y * self.width as usize + x);
-
-        // Fetch.
-        match self.kind {
-            TextureKind::BaseColor => LinSrgba::new(
-                self.pixels[offset],
-                self.pixels[offset + 1],
-                self.pixels[offset + 2],
-                self.pixels[offset + 3],
-            ),
-            TextureKind::Metallic => {
-                let metallic = self.pixels[offset];
-                LinSrgba::new(metallic, metallic, metallic, metallic)
-            }
-            TextureKind::Roughness => {
-                let roughness = self.pixels[offset];
-                LinSrgba::new(roughness, roughness, roughness, roughness)
+    pub fn sample(&self, tex_coord: na::Point2<f32>) -> ColorRgba {
+        match self {
+            Self::Scalar(s) => ColorRgba::new(*s, 0.0, 0.0, 0.0),
+            Self::Vector2(v) => ColorRgba::new(v[0], v[1], 0.0, 0.0),
+            Self::Vector3(v) => ColorRgba::new(v[0], v[1], v[2], 0.0),
+            Self::Vector4(v) => ColorRgba::new(v[0], v[1], v[2], v[3]),
+            Self::Image {
+                width,
+                height,
+                components,
+                pixels,
+            } => {
+                let width = *width as usize;
+                let height = *height as usize;
+                let components = *components as usize;
+                let x = tex_coord.x.clamp(0.0, 1.0);
+                let y = tex_coord.y.clamp(0.0, 1.0);
+                let x = f32::floor(x * width as f32) as usize;
+                let y = f32::floor(y * height as f32) as usize;
+                let x = usize::clamp(x, 0, width - 1);
+                let y = usize::clamp(y, 0, height - 1);
+                let offset = components * (y * width + x);
+                let mut sample = [0.0_f32; 4];
+                sample[..components].copy_from_slice(&pixels[offset..(components + offset)]);
+                ColorRgba::new(sample[0], sample[1], sample[2], sample[3])
             }
         }
     }
 
     pub fn byte_count(&self) -> usize {
-        self.pixels.len() * size_of::<f32>()
+        match self {
+            Self::Scalar(_) => size_of::<f32>(),
+            Self::Vector2(_) => 2 * size_of::<f32>(),
+            Self::Vector3(_) => 3 * size_of::<f32>(),
+            Self::Vector4(_) => 4 * size_of::<f32>(),
+            Self::Image { pixels, .. } => pixels.len() * size_of::<f32>(),
+        }
     }
+}
+
+impl DynamicTexture {
+    pub fn sample(&self) -> ColorRgba {
+        match self {
+            Self::Scalar(s) => ColorRgba::new(*s, 0.0, 0.0, 0.0),
+            Self::Vector2(v) => ColorRgba::new(v[0], v[1], 0.0, 0.0),
+            Self::Vector3(v) => ColorRgba::new(v[0], v[1], v[2], 0.0),
+            Self::Vector4(v) => ColorRgba::new(v[0], v[1], v[2], v[3]),
+        }
+    }
+}
+
+pub fn dynamic_sample(
+    scene: &Scene,
+    dyn_scene: &DynamicScene,
+    texture_index: u32,
+    tex_coord: na::Point2<f32>,
+) -> ColorRgba {
+    let index = texture_index as usize;
+    if dyn_scene.replaced_textures[index] {
+        dyn_scene.textures[index].sample()
+    } else {
+        scene.textures[index].sample(tex_coord)
+    }
+}
+
+pub fn dynamic_try_sample(dyn_scene: &DynamicScene, texture_index: u32) -> Option<ColorRgba> {
+    let index = texture_index as usize;
+    if dyn_scene.replaced_textures[index] {
+        return Some(dyn_scene.textures[index].sample());
+    }
+    None
+}
+
+pub fn dynamic_model(dyn_scene: &DynamicScene, material_index: u32) -> MaterialModel {
+    let index = material_index as usize;
+    dyn_scene.materials[index].model
 }

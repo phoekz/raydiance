@@ -188,7 +188,7 @@ impl RaytracingImageRenderer {
     pub unsafe fn update(
         &mut self,
         device: &Device,
-        raytracing_image: &[LinSrgb<f32>],
+        raytracing_image: &[ColorRgb],
         (raytracing_image_width, raytracing_image_height): (u32, u32),
     ) -> Result<()> {
         // Flush pipeline.

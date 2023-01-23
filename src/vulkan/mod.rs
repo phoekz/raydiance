@@ -166,11 +166,13 @@ impl Renderer {
 
     pub unsafe fn redraw(
         &mut self,
+        dyn_scene: &glb::DynamicScene,
         window_size: window::Size,
         resized_window_size: window::Size,
         frame_index: u64,
         camera_transform: na::Matrix4<f32>,
         display_raytracing_image: bool,
+        visualize_normals: bool,
         gui_data: &imgui::DrawData,
     ) -> Result<()> {
         // Aliases.
@@ -323,7 +325,13 @@ impl Renderer {
                 extent: window_size.into(),
             }),
         );
-        scene.draw(device, command_buffer, camera_transform);
+        scene.draw(
+            device,
+            command_buffer,
+            camera_transform,
+            dyn_scene,
+            visualize_normals,
+        );
         if display_raytracing_image {
             rt_image.draw(device, command_buffer);
         }
@@ -394,7 +402,7 @@ impl Renderer {
 
     pub unsafe fn update_raytracing_image(
         &mut self,
-        raytracing_image: &[LinSrgb<f32>],
+        raytracing_image: &[ColorRgb],
         raytracing_image_size: (u32, u32),
     ) -> Result<()> {
         self.rt_image

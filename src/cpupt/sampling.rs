@@ -1,5 +1,6 @@
 use super::*;
 
+#[derive(Clone)]
 pub struct UniformSampler {
     state: rand_pcg::Pcg64Mcg,
     distribution: rand::distributions::Uniform<f32>,
@@ -56,6 +57,7 @@ pub fn primary_ray(
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct OrthonormalBasis {
     world_from_local: na::Matrix3<f32>,
     local_from_world: na::Matrix3<f32>,
@@ -84,24 +86,40 @@ impl OrthonormalBasis {
         }
     }
 
+    pub fn world_from_local(&self) -> &na::Matrix3<f32> {
+        &self.world_from_local
+    }
+
     pub fn local_from_world(&self) -> &na::Matrix3<f32> {
         &self.local_from_world
     }
+
+    pub fn tangent(&self) -> na::UnitVector3<f32> {
+        na::Unit::new_unchecked(self.world_from_local.column(0).into())
+    }
+
+    pub fn normal(&self) -> na::UnitVector3<f32> {
+        na::Unit::new_unchecked(self.world_from_local.column(1).into())
+    }
+
+    pub fn bitangent(&self) -> na::UnitVector3<f32> {
+        na::Unit::new_unchecked(self.world_from_local.column(2).into())
+    }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum HemisphereSampler {
     Uniform,
     Cosine,
 }
 
 impl HemisphereSampler {
-    pub fn sample(self, onb: &OrthonormalBasis, s: f32, t: f32) -> na::UnitVector3<f32> {
+    pub fn sample(self, s: f32, t: f32) -> na::UnitVector3<f32> {
         let dir = match self {
             HemisphereSampler::Uniform => hemisphere_uniform(s, t),
             HemisphereSampler::Cosine => hemisphere_cosine(s, t),
         };
-        na::Unit::new_normalize(onb.world_from_local * dir)
+        na::Unit::new_normalize(dir)
     }
 
     pub fn pdf(self, cos_theta: f32) -> f32 {
@@ -110,7 +128,7 @@ impl HemisphereSampler {
             HemisphereSampler::Cosine => hemisphere_cosine_pdf(cos_theta),
         };
         assert!(
-            pdf >= 0.0 && pdf <= 1.0,
+            (0.0..=1.0).contains(&pdf),
             "pdf must be between 0..1, got {pdf} instead"
         );
         pdf

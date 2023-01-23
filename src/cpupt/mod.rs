@@ -1,6 +1,6 @@
 use super::*;
 
-pub mod bsdf;
+pub mod bxdfs;
 pub mod sampling;
 
 mod aabb;
@@ -71,18 +71,19 @@ impl Default for Params {
     fn default() -> Self {
         Self {
             samples_per_pixel: 64,
-            max_bounce_count: 4,
+            max_bounce_count: 5,
             seed: 0,
         }
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Input {
     pub camera_transform: na::Matrix4<f32>,
     pub image_size: (u32, u32),
     pub hemisphere_sampler: sampling::HemisphereSampler,
-    pub diffuse_model: bsdf::DiffuseModel,
+    pub dyn_scene: glb::DynamicScene,
+    pub visualize_normals: bool,
 }
 
 impl Default for Input {
@@ -91,7 +92,8 @@ impl Default for Input {
             camera_transform: na::Matrix4::identity(),
             image_size: (0, 0),
             hemisphere_sampler: sampling::HemisphereSampler::default(),
-            diffuse_model: bsdf::DiffuseModel::default(),
+            dyn_scene: glb::DynamicScene::default(),
+            visualize_normals: false,
         }
     }
 }
@@ -109,7 +111,7 @@ impl Input {
 }
 
 pub struct Output {
-    pub image: Vec<LinSrgb>,
+    pub image: Vec<ColorRgb>,
     pub image_size: (u32, u32),
     pub sample_index: u32,
     pub sample_count: u32,
@@ -132,7 +134,6 @@ impl Raytracer {
             let glb_scene = glb_scene;
             let scene = Scene::create(&glb_scene);
             let materials = glb_scene.materials.as_ref();
-            let textures = glb_scene.textures.as_ref();
             let input_recv: mpsc::Receiver<Input> = input_recv;
             let output_send = output_send;
             let terminate_recv = terminate_recv;
@@ -145,7 +146,7 @@ impl Raytracer {
             let mut camera_position = na::Point3::<f32>::origin();
             let mut timer = Instant::now();
             let mut ray_stats = intersection::RayBvhHitStats::default();
-            let mut pixel_sample_buffer = Vec::<LinSrgb>::new();
+            let mut pixel_sample_buffer = Vec::<ColorRgb>::new();
 
             loop {
                 // Check for termination command.
@@ -176,7 +177,7 @@ impl Raytracer {
                         pixel_sample_buffer.clear();
                         pixel_sample_buffer.resize(
                             (input.image_size.0 * input.image_size.1) as usize,
-                            LinSrgb::default(),
+                            ColorRgb::BLACK,
                         );
 
                         // Reset camera.
@@ -216,9 +217,10 @@ impl Raytracer {
                             &input,
                             &params,
                             &scene,
+                            &glb_scene,
+                            &input.dyn_scene,
                             &mut ray_stats,
                             materials,
-                            textures,
                         );
                         pixel_sample_buffer[pixel_index as usize] += radiance;
                     }
@@ -294,11 +296,14 @@ fn radiance(
     input: &Input,
     params: &Params,
     scene: &Scene,
+    glb_scene: &glb::Scene,
+    dyn_scene: &glb::DynamicScene,
     ray_stats: &mut intersection::RayBvhHitStats,
     materials: &[glb::Material],
-    textures: &[glb::Texture],
-) -> LinSrgb {
-    let hemisphere = &input.hemisphere_sampler;
+) -> ColorRgb {
+    use bxdfs::Bxdf;
+
+    let hemisphere = input.hemisphere_sampler;
     let mut ray = {
         sampling::primary_ray(
             pixel,
@@ -309,8 +314,8 @@ fn radiance(
             uniform.sample(),
         )
     };
-    let mut radiance = LinSrgb::new(0.0, 0.0, 0.0);
-    let mut throughput = LinSrgb::new(1.0, 1.0, 1.0);
+    let mut radiance = ColorRgb::BLACK;
+    let mut throughput = ColorRgb::WHITE;
     for _ in 0..params.max_bounce_count {
         // Hit scene.
         let mut closest_hit = 0.0;
@@ -342,39 +347,92 @@ fn radiance(
 
         // Sample textures.
         let material = &materials[triangle.material as usize];
-        let base_color_texture = &textures[material.base_color as usize];
-        let roughness_texture = &textures[material.roughness as usize];
-        let base_color = base_color_texture.sample(tex_coord).color;
-        let roughness = roughness_texture.sample(tex_coord).alpha;
+        let model = glb::dynamic_model(dyn_scene, triangle.material);
+        let base_color =
+            glb::dynamic_sample(glb_scene, dyn_scene, material.base_color, tex_coord).rgb();
+        let roughness =
+            glb::dynamic_sample(glb_scene, dyn_scene, material.roughness, tex_coord).red();
+        let metallic =
+            glb::dynamic_sample(glb_scene, dyn_scene, material.metallic, tex_coord).red();
+        let specular = 0.5;
+        let anisotropic = 0.0;
 
         // Orthonormal basis.
         let onb = sampling::OrthonormalBasis::new(&normal);
 
-        // View vector `v`. It points to where the ray came from, hence the
-        // negation.
-        let v_world = -ray.dir;
-        let v_local = onb.local_from_world() * v_world.into_inner();
+        // Outgoing vector `wo`. It points to where the ray came from.
+        let wo_world = -ray.dir;
+        let wo_local = bxdfs::LocalVector::local_from_world(onb.local_from_world(), &wo_world);
 
-        // Light vector `l`. This is where the ray will go next. Since we don't
-        // have light sampling yet and our only light source is the sky, we can
-        // shortcut by using the cosine-weighted hemisphere sample directly.
-        let l_world = hemisphere.sample(&onb, uniform.sample(), uniform.sample());
-        let l_local = onb.local_from_world() * l_world.into_inner();
-
-        // Evaluate BRDF.
-        let reflectance = match input.diffuse_model {
-            bsdf::DiffuseModel::Lambert => bsdf::lambert(base_color),
-            bsdf::DiffuseModel::Disney => bsdf::disney(base_color, roughness, &l_local, &v_local),
+        // Evaluate material.
+        let bxdf_sample = match model {
+            glb::MaterialModel::Diffuse => {
+                let bxdf = bxdfs::Lambertian::new(&bxdfs::LambertianParams {
+                    hemisphere,
+                    base_color,
+                });
+                match bxdf.sample(&wo_local, (uniform.sample(), uniform.sample())) {
+                    Some(s) => s,
+                    None => break,
+                }
+            }
+            glb::MaterialModel::Disney => {
+                let diffuse = bxdfs::DisneyDiffuse::new(&bxdfs::DisneyDiffuseParams {
+                    hemisphere,
+                    base_color,
+                    roughness,
+                });
+                let specular =
+                    bxdfs::MicrofacetReflection::new(&bxdfs::MicrofacetReflectionParams {
+                        base_color,
+                        metallic,
+                        specular,
+                        roughness,
+                        anisotropic,
+                    });
+                let maybe_sample = if uniform.sample() > metallic {
+                    diffuse.sample(&wo_local, (uniform.sample(), uniform.sample()))
+                } else {
+                    specular.sample(&wo_local, (uniform.sample(), uniform.sample()))
+                };
+                match maybe_sample {
+                    Some(s) => s,
+                    None => break,
+                }
+            }
         };
+        let wi_world = bxdf_sample.wi().world_from_local(onb.world_from_local());
 
-        // Sample next direction, adjust closest hit to avoid spawning the next ray inside the surface.
+        // Prepare next direction, adjust closest hit to avoid spawning the next
+        // ray inside the surface.
         ray.origin += 0.999 * closest_hit * ray.dir.into_inner();
-        ray.dir = l_world;
+        ray.dir = wi_world;
 
         // Update throughput.
-        let cos_theta = normal.dot(&v_world).abs();
-        let pdf = hemisphere.pdf(cos_theta);
-        throughput *= reflectance * cos_theta / pdf;
+        let cos_theta = wi_world.dot(&normal).abs();
+        if input.visualize_normals {
+            throughput *= ColorRgb::new(
+                0.5 * (normal.x + 1.0),
+                0.5 * (normal.y + 1.0),
+                0.5 * (normal.z + 1.0),
+            ) * cos_theta;
+        } else {
+            throughput *= bxdf_sample.r() * cos_theta / bxdf_sample.pdf();
+        }
+
+        // Report invalid values.
+        assert!(
+            throughput.is_finite(),
+            "material={}, radiance={}, throughput={}, \
+            cos_theta={}, origin={:?}, dir={:?}, bxdf_sample={}",
+            material.name,
+            radiance,
+            throughput,
+            cos_theta,
+            ray.origin,
+            ray.dir,
+            bxdf_sample
+        );
     }
     radiance
 }

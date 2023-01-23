@@ -4,6 +4,8 @@
 layout(push_constant) uniform PushBuffer
 {
     mat4 transform;
+    vec4 base_color;
+    uint flags;
 }
 push;
 

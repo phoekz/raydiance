@@ -39,6 +39,8 @@ impl RasterTexture {
 #[derive(Zeroable, Pod, Clone, Copy)]
 struct PushConstants {
     transform: na::Matrix4<f32>,
+    base_color: na::Vector4<f32>,
+    flags: u32,
 }
 
 pub struct RasterScene {
@@ -49,6 +51,7 @@ pub struct RasterScene {
     fragment_shader: Shader,
     graphics_pipeline: vk::Pipeline,
     pipeline_layout: vk::PipelineLayout,
+    push_constant_stage_flags: vk::ShaderStageFlags,
     clip_from_view: na::Matrix4<f32>,
     view_from_world: na::Matrix4<f32>,
 }
@@ -118,11 +121,27 @@ impl RasterScene {
             // Create textures.
             let mut textures = vec![];
             for glb_texture in &glb_scene.textures {
-                // Format.
-                let format = match glb_texture.kind {
-                    glb::TextureKind::BaseColor => vk::Format::R32G32B32A32_SFLOAT,
-                    glb::TextureKind::Metallic => vk::Format::R32_SFLOAT,
-                    glb::TextureKind::Roughness => vk::Format::R32_SFLOAT,
+                // Unpack.
+                let (width, height, format, pixels) = match &glb_texture {
+                    glb::Texture::Scalar(s) => (1, 1, vk::Format::R32_SFLOAT, slice::from_ref(s)),
+                    glb::Texture::Vector2(v) => (1, 1, vk::Format::R32G32_SFLOAT, v.as_ref()),
+                    glb::Texture::Vector3(v) => (1, 1, vk::Format::R32G32B32_SFLOAT, v.as_ref()),
+                    glb::Texture::Vector4(v) => (1, 1, vk::Format::R32G32B32A32_SFLOAT, v.as_ref()),
+                    glb::Texture::Image {
+                        width,
+                        height,
+                        components,
+                        pixels,
+                    } => {
+                        let format = match components {
+                            1 => vk::Format::R32_SFLOAT,
+                            2 => vk::Format::R32G32_SFLOAT,
+                            3 => vk::Format::R32G32B32_SFLOAT,
+                            4 => vk::Format::R32G32B32A32_SFLOAT,
+                            _ => bail!("Components must be 1..4, got {} instead", components),
+                        };
+                        (*width, *height, format, pixels.as_ref())
+                    }
                 };
 
                 // Image.
@@ -131,8 +150,8 @@ impl RasterScene {
                         .image_type(vk::ImageType::TYPE_2D)
                         .format(format)
                         .extent(vk::Extent3D {
-                            width: glb_texture.width,
-                            height: glb_texture.height,
+                            width,
+                            height,
                             depth: 1,
                         })
                         .mip_levels(1)
@@ -179,7 +198,7 @@ impl RasterScene {
                     vk::BufferUsageFlags::TRANSFER_SRC,
                     vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
                     glb_texture.byte_count(),
-                    bytemuck::cast_slice(&glb_texture.pixels),
+                    bytemuck::cast_slice(pixels),
                 )?;
 
                 // Begin command buffer.
@@ -215,8 +234,8 @@ impl RasterScene {
                     },
                     image_offset: vk::Offset3D { x: 0, y: 0, z: 0 },
                     image_extent: vk::Extent3D {
-                        width: glb_texture.width,
-                        height: glb_texture.height,
+                        width,
+                        height,
                         depth: 1,
                     },
                 };
@@ -304,7 +323,7 @@ impl RasterScene {
             Shader::create(device, include_bytes!("../shaders/spv/triangle.vert"))?,
             Shader::create(device, include_bytes!("../shaders/spv/triangle.frag"))?,
         );
-        let (graphics_pipeline, pipeline_layout) = {
+        let (graphics_pipeline, pipeline_layout, push_constant_stage_flags) = {
             // Stages.
             let entry_point = CStr::from_bytes_with_nul(b"main\0")?;
             let vertex_stage = vk::PipelineShaderStageCreateInfo::builder()
@@ -400,12 +419,14 @@ impl RasterScene {
                 .depth_attachment_format(DEFAULT_DEPTH_FORMAT);
 
             // Pipeline layout.
+            let push_constant_stage_flags =
+                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT;
             let pipeline_layout = device
                 .create_pipeline_layout(
                     &vk::PipelineLayoutCreateInfo::builder()
                         .set_layouts(slice::from_ref(&desc_set_layout))
                         .push_constant_ranges(&[vk::PushConstantRange {
-                            stage_flags: vk::ShaderStageFlags::VERTEX,
+                            stage_flags: push_constant_stage_flags,
                             offset: 0,
                             size: size_of::<PushConstants>() as u32,
                         }]),
@@ -435,7 +456,11 @@ impl RasterScene {
                 )
                 .unwrap();
 
-            (graphics_pipeline[0], pipeline_layout)
+            (
+                graphics_pipeline[0],
+                pipeline_layout,
+                push_constant_stage_flags,
+            )
         };
 
         // Camera.
@@ -455,6 +480,7 @@ impl RasterScene {
             fragment_shader,
             graphics_pipeline,
             pipeline_layout,
+            push_constant_stage_flags,
             clip_from_view,
             view_from_world,
         })
@@ -465,6 +491,8 @@ impl RasterScene {
         device: &Device,
         cmd: vk::CommandBuffer,
         camera_transform: na::Matrix4<f32>,
+        dyn_scene: &glb::DynamicScene,
+        visualize_normals: bool,
     ) {
         // Prepare matrices.
         let clip_from_view = self.clip_from_view;
@@ -474,11 +502,17 @@ impl RasterScene {
         device.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, self.graphics_pipeline);
         for mesh in &self.meshes {
             // Prepare push constants.
+            let base_color = match glb::dynamic_try_sample(dyn_scene, mesh.texture) {
+                Some(v) => transmute(v),
+                None => na::vector![0.0, 0.0, 0.0, 0.0],
+            };
             let push = PushConstants {
                 // Pre-multiply all matrices to save space.
                 // `max_push_constants_size` is typically in order of 128 to 256
                 // bytes.
                 transform: clip_from_view * view_from_world * camera_transform * mesh.transform,
+                base_color,
+                flags: u32::from(visualize_normals),
             };
             let constants = bytemuck::cast_slice(slice::from_ref(&push));
 
@@ -490,7 +524,7 @@ impl RasterScene {
             device.cmd_push_constants(
                 cmd,
                 self.pipeline_layout,
-                vk::ShaderStageFlags::VERTEX,
+                self.push_constant_stage_flags,
                 0,
                 constants,
             );
