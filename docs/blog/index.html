@@ -85,6 +85,229 @@
 
         <!-- Posts -->
         <article>
+            <h2>A new shiny specular BRDF</h2>
+            <div class="article-date">2023-01-31</div>
+
+            <img src="images/20230130-192913.png">
+
+            <h3>A very brief overview of microfacet models</h3>
+
+
+
+            <p>
+                A popular way to model physically based reflective surfaces is
+                to imagine that such surfaces are built of small perfect mirrors
+                called microfacets. Conceptually, each facet has a random height
+                and orientation. Randomness of these properties determine the
+                roughness of the surface. These microfacets are so tiny that
+                they can be modeled with functions, as opposed to being modeled
+                with geometry, or with normal maps for example. We implemented
+                the popular
+                <a href="https://inst.eecs.berkeley.edu//~cs283/sp13/lectures/cookpaper.pdf">Cook-Torrance model</a>,
+                which is defined by the following functions:
+            </p>
+
+            <ul>
+                <li>
+                    Normal distribution function <strong>D</strong>. It
+                    describes how much the microfacets varies wrt. the
+                    microsurface normal. Disney model uses the popular
+                    <a href="https://www.cs.cornell.edu/~srm/publications/EGSR07-btdf.pdf">GGX distribution</a>,
+                    so that is what we are going to use as well.
+                </li>
+                <li>
+                    Masking-shadowing function <strong>G</strong>. It describes
+                    the ratio of microfacets which are shadowed or masked when
+                    viewed from any pair of incoming and outgoing directions.
+                    There is a great deep dive by
+                    <a href="https://jcgt.org/published/0003/02/03/paper.pdf">Eric Heitz</a>
+                    which is all about understanding how this function works.
+                    Our implementation uses the Smith's height-correlated
+                    masking-shadowing function from this paper. Note that the
+                    Disney model uses the separable variant, but according to
+                    Heitz, the height-correlated version is more accurate.
+                </li>
+                <li>
+                    Fresnel reflectance <strong>F</strong>, which describes how
+                    much incoming light is reflected from a microfacet. Here we
+                    use the same Schlick's approximation as we did with Disney
+                    diffuse.
+                </li>
+            </ul>
+
+            Multiplying these together results in microfacet reflectance, which
+            we use for shading just like the diffuse version.
+
+            <h3>Microfacet models in practice</h3>
+
+            <div style="text-align: center; font-size: 0.8em;"><img src="images/20230129-140531-bug.png">What happens if we use a wrong coordinate system</div>
+
+            <p>
+                Translating math to source code has a couple of gotchas you need
+                to be aware of:
+            </p>
+
+            <ul>
+                <li>
+                    Different papers have different naming conventions (incoming
+                    vs light, outgoing vs view), different coordinate systems (z
+                    is up vs y is up) which can get confusing fast if we are not
+                    being really consistent.
+                </li>
+                <li>
+                    Floating point inaccuracies can make various terms go to
+                    infinity or become a <code>NaN</code>. For example, if
+                    either the incident or outgoing rays are really close to
+                    being perpendicular to the surface normal, the cosine of
+                    their angles wrt. surface normal approaches zero. Then, any
+                    expression which divides by this value results in infinity.
+                    The program won't crash, but the image will slowly become
+                    more and more corrupted with black or white pixels. Extra
+                    care must be taken to clamp such values to a small positive
+                    number to avoid dividing by zero.
+                </li>
+                <li>
+                    Sometimes the sampled vector appears below the hemisphere.
+                    In these cases we simply discard the whole sample, because
+                    those samples have zero reflectance.
+                </li>
+            </ul>
+
+            <p>
+                We also use the trick from <code>pbrt</code> where they perform
+                all BRDF calculations in a local space, where the surface normal
+                is always equal to <code>(0,1,0)</code>. In this local space
+                many computations simplify a lot, for example computing the dot
+                product between a vector against the surface normal is simply
+                the y-component of the vector. We can use the same orthonormal
+                basis from the previous posts to go from world to local space,
+                and once we are done with all BRDF math, we can transform the
+                results back to world space.
+            </p>
+
+            <h3>Integrating microfacets with Disney diffuse BRDF</h3>
+
+            <img src="images/20230131-010421-metallic.gif">
+
+            <p>
+                The new specular BRDF introduced three new parameters to our
+                materials:
+            </p>
+
+            <ul>
+                <li>Metallic: "metallic-ness". It is a linear blend between 0=dielectric and 1=metallic. The "specular color" is derived from the base color.</li>
+                <li>Specular: incident specular amount. This basically replaces the explicit index of refraction. It is currently fixed to 0.5, because we don't have a way to get it from GLB yet.</li>
+                <li>Anisotropic: degree of anisotropy. Controls the aspect ratio of the specular highlight. It's currently disabled, because our model does not have tangents.</li>
+            </ul>
+
+            <p>
+                The Disney paper states that their model allows their artist to
+                simply blend between any two combination of parameters and have
+                reasonable results. In the small example we interpolate metallic
+                from 0 to 1.
+            </p>
+
+            <p>
+                We now have an interesting problem where we need to choose which
+                BRDF to sample from. The Disney paper doesn't describe a method
+                for it, so in our implementation we simply draw a new random
+                variable which selects between diffuse and specular BRDF, based
+                on the metallic parameter. For example, if the metallic value is
+                0.5, both diffuse and specular BRDFs are equally likely to be
+                chosen.
+            </p>
+
+            <h3>Animated BRDF visualizations</h3>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
+                <img src="images/20230131-000000-microfacet-reflection-r-scalar-sobol-hemisphere.png">
+                <img src="images/20230131-000000-microfacet-reflection-r-incoming-sobol-hemisphere.png">
+                <img src="images/20230131-000000-microfacet-reflection-r-scalar-sobol-angle.png">
+                <img src="images/20230131-000000-microfacet-reflection-r-incoming-sobol-angle.png">
+            </div>
+
+            <p>
+                We dramatically improved the capabilities of sample placement
+                visualizer from the previous post. The visualizations are now
+                animated, can render different text for each frame, and
+                reflectance is now visualized separately from probability
+                density functions.
+            </p>
+
+            <p>
+                The animations on the left have a fixed incoming direction,
+                while the roughness is being interpolated between 0 and 1. The
+                animations on the right have a fixed 0.25 roughness while the
+                incoming direction (visualized as a purple square) is being
+                swung along the x-axis.
+            </p>
+
+            <p>
+                The animations are encoded in <a href="https://en.wikipedia.org/wiki/APNG">APNG</a> format.
+                We chose APNG because:
+            </p>
+
+            <ul>
+                <li>GIF is too low quality due to limited 256-color palette limitation.</li>
+                <li>WebP's crate takes very long to build, and has slightly worse support than APNG.</li>
+                <li>Traditional video formats are not as convenient for short looping animations.</li>
+            </ul>
+
+            <p>
+                These crates were used to create the animations:
+            </p>
+
+            <ul>
+                <li><a href="https://crates.io/crates/apng"><code>apng</code></a> for encoding APNG's from <a href="https://crates.io/crates/image"><code>image</code></a> buffers.</li>
+                <li><a href="https://crates.io/crates/png"><code>png</code></a> so we can properly call into <a href="https://crates.io/crates/apng"><code>apng</code></a>.</li>
+                <li><a href="https://crates.io/crates/easer"><code>easer</code></a> for <a href="https://easings.net/">easing functions</a>. We use <code>easeInOutCubic</code> for interesting movement.</li>
+                <li><a href="https://crates.io/crates/imageproc"><code>imageproc</code></a> for drawing text on <a href="https://crates.io/crates/image"><code>image</code></a> buffers.</li>
+                <li><a href="https://crates.io/crates/rusttype"><code>rusttype</code></a> for loading TTF fonts for <a href="https://crates.io/crates/imageproc"><code>imageproc</code></a>.</li>
+                <li><a href="https://crates.io/crates/rayon"><code>rayon</code></a> for simple data-parallelism to speed up animation renders.</li>
+            </ul>
+
+            <h3>A simple interactive material editor</h3>
+
+            <video width="800" height="450" autoplay loop muted playsinline>
+                <source src="images/20230131-014036.mp4" type="video/mp4">
+            </video>
+
+            <p>
+                Having to recompile the program or exporting a new scene from
+                Blender every time we needed to change the roughness or metallic
+                value quickly became a major bottleneck. Since our raytracing is
+                already progressive, we can easily implement simple material
+                edits and have the raytracer re-render the image at each change.
+            </p>
+
+            <p>
+                We will rewrite this utility in the future once we do a bigger
+                user interface overhaul.
+            </p>
+
+            <h3>Visualizing normals</h3>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
+                <div style="text-align: center; font-size: 0.8em;"><img src="images/20230131-012835.png" width="100%">Raytraced</div>
+                <div style="text-align: center; font-size: 0.8em;"><img src="images/20230131-012842.png" width="100%">Rasterized</div>
+            </div>
+
+            <p>
+                While we were hunting for bugs in our specular BRDFs, we added a
+                simple way to visualize shading normals both in raytraced and
+                rasterized scenes. We will add visualizations for texture
+                coordinates and tangents in the future.
+            </p>
+
+            <div class="commit">
+                Commit:
+                <a href="https://github.com/phoekz/raydiance/commit/bf578f68f0c0906a9cb50548eb3e830cd69222d6">
+                    <code>bf578f68</code>
+                </a>
+            </div>
+        </article>
+
+        <article>
             <h2>Visualizing sample placement</h2>
             <div class="article-date">2023-01-20</div>
 
