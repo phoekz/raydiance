@@ -11,7 +11,7 @@ pub struct Scene {
 #[derive(Clone, Debug)]
 pub struct Camera {
     pub name: String,
-    pub transform: na::Matrix4<f32>,
+    pub transform: Mat4,
     pub aspect_ratio: f32,
     pub yfov: f32,
     pub znear: f32,
@@ -21,11 +21,11 @@ pub struct Camera {
 #[derive(Clone, Debug)]
 pub struct Mesh {
     pub name: String,
-    pub transform: na::Matrix4<f32>,
-    pub positions: Vec<na::Point3<f32>>,
-    pub tex_coords: Vec<na::Point2<f32>>,
-    pub normals: Vec<na::UnitVector3<f32>>,
-    pub triangles: Vec<na::Vector3<u32>>,
+    pub transform: Mat4,
+    pub positions: Vec<Point3>,
+    pub tex_coords: Vec<Point2>,
+    pub normals: Vec<Normal>,
+    pub triangles: Vec<Vec3u>,
     pub material: u32,
 }
 
@@ -45,6 +45,7 @@ pub struct Material {
 }
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub enum Texture {
     Scalar(f32),
     Vector2([f32; 2]),
@@ -135,8 +136,8 @@ impl Scene {
             for material in &scene.materials {
                 let roughness = &scene.textures[material.roughness as usize];
                 let metallic = &scene.textures[material.metallic as usize];
-                let roughness = roughness.sample(na::Point2::new(0.5, 0.5)).red();
-                let metallic = metallic.sample(na::Point2::new(0.5, 0.5)).red();
+                let roughness = roughness.sample(Point2::new(0.5, 0.5)).red();
+                let metallic = metallic.sample(Point2::new(0.5, 0.5)).red();
                 info!(
                     "  {}: {}=roughness={}, {}=metallic={}",
                     &material.name, material.roughness, roughness, material.metallic, metallic
@@ -415,7 +416,7 @@ fn import_gltf_material(
 fn import_gltf_positions(
     gltf_primitive: &gltf::Primitive,
     gltf_buffer_data: &[gltf::buffer::Data],
-) -> Result<Vec<na::Point3<f32>>> {
+) -> Result<Vec<Point3>> {
     use gltf::accessor::DataType;
     use gltf::accessor::Dimensions;
     use gltf::mesh::Semantic;
@@ -434,7 +435,7 @@ fn import_gltf_positions(
     // Validate.
     ensure!(acc.data_type() == DataType::F32);
     ensure!(acc.dimensions() == Dimensions::Vec3);
-    ensure!(acc.size() == size_of::<na::Point3<f32>>());
+    ensure!(acc.size() == size_of::<Point3>());
     ensure!(acc.offset() == 0);
     ensure!(acc.normalized() == false);
     let view = acc.view().context("Accessor must have a buffer view")?;
@@ -442,7 +443,7 @@ fn import_gltf_positions(
     let length = view.length();
     ensure!(view.stride().is_none());
     ensure!(length > 0);
-    ensure!(length % size_of::<na::Point3<f32>>() == 0);
+    ensure!(length % size_of::<Point3>() == 0);
 
     // Reinterpret bytes.
     let buffer = &*gltf_buffer_data[view.buffer().index()];
@@ -452,7 +453,7 @@ fn import_gltf_positions(
 fn import_gltf_tex_coords(
     gltf_primitive: &gltf::Primitive,
     gltf_buffer_data: &[gltf::buffer::Data],
-) -> Result<Vec<na::Point2<f32>>> {
+) -> Result<Vec<Point2>> {
     use gltf::accessor::DataType;
     use gltf::accessor::Dimensions;
     use gltf::mesh::Semantic;
@@ -471,7 +472,7 @@ fn import_gltf_tex_coords(
     // Validate.
     ensure!(acc.data_type() == DataType::F32);
     ensure!(acc.dimensions() == Dimensions::Vec2);
-    ensure!(acc.size() == size_of::<na::Point2<f32>>());
+    ensure!(acc.size() == size_of::<Point2>());
     ensure!(acc.offset() == 0);
     ensure!(acc.normalized() == false);
     let view = acc.view().context("Accessor must have a buffer view")?;
@@ -479,7 +480,7 @@ fn import_gltf_tex_coords(
     let length = view.length();
     ensure!(view.stride().is_none());
     ensure!(length > 0);
-    ensure!(length % size_of::<na::Point2<f32>>() == 0);
+    ensure!(length % size_of::<Point2>() == 0);
 
     // Reinterpret bytes.
     let buffer = &*gltf_buffer_data[view.buffer().index()];
@@ -489,7 +490,7 @@ fn import_gltf_tex_coords(
 fn import_gltf_normals(
     gltf_primitive: &gltf::Primitive,
     gltf_buffer_data: &[gltf::buffer::Data],
-) -> Result<Vec<na::UnitVector3<f32>>> {
+) -> Result<Vec<Normal>> {
     use gltf::accessor::DataType;
     use gltf::accessor::Dimensions;
     use gltf::mesh::Semantic;
@@ -508,7 +509,7 @@ fn import_gltf_normals(
     // Validate.
     ensure!(acc.data_type() == DataType::F32);
     ensure!(acc.dimensions() == Dimensions::Vec3);
-    ensure!(acc.size() == size_of::<na::UnitVector3<f32>>());
+    ensure!(acc.size() == size_of::<Normal>());
     ensure!(acc.offset() == 0);
     ensure!(acc.normalized() == false);
     let view = acc.view().context("Accessor must have a buffer view")?;
@@ -516,7 +517,7 @@ fn import_gltf_normals(
     let length = view.length();
     ensure!(view.stride().is_none());
     ensure!(length > 0);
-    ensure!(length % size_of::<na::UnitVector3<f32>>() == 0);
+    ensure!(length % size_of::<Normal>() == 0);
 
     // Reinterpret bytes.
     let buffer = &*gltf_buffer_data[view.buffer().index()];
@@ -526,7 +527,7 @@ fn import_gltf_normals(
 fn import_gltf_triangles(
     gltf_primitive: &gltf::Primitive,
     gltf_buffer_data: &[gltf::buffer::Data],
-) -> Result<Vec<na::Vector3<u32>>> {
+) -> Result<Vec<Vec3u>> {
     use gltf::accessor::DataType;
     use gltf::accessor::Dimensions;
 
@@ -557,7 +558,7 @@ fn import_gltf_triangles(
             slice_u16
                 .chunks_exact(3)
                 .map(|chunk| {
-                    na::vector![
+                    vector![
                         u32::from(chunk[0]),
                         u32::from(chunk[1]),
                         u32::from(chunk[2])
@@ -579,17 +580,17 @@ fn import_gltf_triangles(
 //
 
 impl Camera {
-    pub fn clip_from_view(&self) -> na::Perspective3<f32> {
-        na::Perspective3::new(self.aspect_ratio, self.yfov, self.znear, self.zfar)
+    pub fn clip_from_view(&self) -> Perspective3 {
+        Perspective3::new(self.aspect_ratio, self.yfov, self.znear, self.zfar)
     }
 
-    pub fn world_from_view(&self) -> na::Matrix4<f32> {
+    pub fn world_from_view(&self) -> Mat4 {
         self.transform
     }
 
-    pub fn position(&self) -> na::Point3<f32> {
-        let coords: na::Vector3<f32> = self.transform.column(3).fixed_rows::<3>(0).into();
-        na::Point3::from(coords)
+    pub fn position(&self) -> Point3 {
+        let coords: Vec3 = self.transform.column(3).fixed_rows::<3>(0).into();
+        Point3::from(coords)
     }
 }
 
@@ -631,7 +632,7 @@ impl std::fmt::Display for MaterialModel {
 //
 
 impl Texture {
-    pub fn sample(&self, tex_coord: na::Point2<f32>) -> ColorRgba {
+    pub fn sample(&self, tex_coord: Point2) -> ColorRgba {
         match self {
             Self::Scalar(s) => ColorRgba::new(*s, 0.0, 0.0, 0.0),
             Self::Vector2(v) => ColorRgba::new(v[0], v[1], 0.0, 0.0),
@@ -686,7 +687,7 @@ pub fn dynamic_sample(
     scene: &Scene,
     dyn_scene: &DynamicScene,
     texture_index: u32,
-    tex_coord: na::Point2<f32>,
+    tex_coord: Point2,
 ) -> ColorRgba {
     let index = texture_index as usize;
     if dyn_scene.replaced_textures[index] {

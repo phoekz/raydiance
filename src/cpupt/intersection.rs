@@ -1,8 +1,8 @@
 use super::*;
 
 pub struct RayTriangleIntersector {
-    k: na::Vector3<u32>,
-    s: na::Vector3<f32>,
+    k: Vec3u,
+    s: Vec3,
 }
 
 impl RayTriangleIntersector {
@@ -11,7 +11,7 @@ impl RayTriangleIntersector {
 
     pub fn new(ray: &Ray) -> Self {
         // Calculate dimension where the ray direction is maximal.
-        let mut k = na::vector![0xffff_ffff, 0xffff_ffff, 0xffff_ffff];
+        let mut k = vector![0xffff_ffff, 0xffff_ffff, 0xffff_ffff];
         k.z = ray.dir.abs().argmax().0 as u32;
         k.x = k.z + 1;
         if k.x == 3 {
@@ -30,7 +30,7 @@ impl RayTriangleIntersector {
         }
 
         // Calculate shear constants.
-        let s = na::vector![
+        let s = vector![
             ray.dir[k.x as usize] / ray.dir[k.z as usize],
             ray.dir[k.y as usize] / ray.dir[k.z as usize],
             1.0 / ray.dir[k.z as usize]
@@ -39,13 +39,7 @@ impl RayTriangleIntersector {
         Self { k, s }
     }
 
-    pub fn hit(
-        &self,
-        ray: &Ray,
-        triangle: &Triangle,
-        out_t: &mut f32,
-        out_uvw: &mut na::Vector3<f32>,
-    ) -> bool {
+    pub fn hit(&self, ray: &Ray, triangle: &Triangle, out_t: &mut f32, out_uvw: &mut Vec3) -> bool {
         // Aliases.
         let k = self.k;
         let s = self.s;
@@ -103,7 +97,7 @@ impl RayTriangleIntersector {
 
         // Normalize.
         let rcpdet = 1.0 / det;
-        *out_uvw = na::vector![u * rcpdet, v * rcpdet, w * rcpdet];
+        *out_uvw = vector![u * rcpdet, v * rcpdet, w * rcpdet];
 
         // Update t-value.
         *out_t = t * rcpdet;
@@ -113,16 +107,16 @@ impl RayTriangleIntersector {
 }
 
 pub struct RayAabbIntersector {
-    ray_dir_inv: na::Vector3<f32>,
-    ray_dir_neg: na::Vector3<bool>,
+    ray_dir_inv: Vec3,
+    ray_dir_neg: Vec3b,
 }
 
 impl RayAabbIntersector {
     // Implementation based on PBRT.
 
     pub fn new(ray: &Ray) -> Self {
-        let ray_dir_inv = na::vector![1.0 / ray.dir[0], 1.0 / ray.dir[1], 1.0 / ray.dir[2]];
-        let ray_dir_neg = na::vector![
+        let ray_dir_inv = vector![1.0 / ray.dir[0], 1.0 / ray.dir[1], 1.0 / ray.dir[2]];
+        let ray_dir_neg = vector![
             ray_dir_inv.x < 0.0,
             ray_dir_inv.y < 0.0,
             ray_dir_inv.z < 0.0
@@ -227,7 +221,7 @@ pub fn ray_bvh_hit(
     nodes: &[bvh::Node],
     triangles: &[Triangle],
     out_closest_hit: &mut f32,
-    out_barycentrics: &mut na::Vector3<f32>,
+    out_barycentrics: &mut Vec3,
     out_triangle_index: &mut u32,
     stats: &mut RayBvhHitStats,
 ) -> bool {
@@ -263,7 +257,7 @@ pub fn ray_bvh_hit(
 
                     // Intersect triangle.
                     let mut closest_hit = f32::MAX;
-                    let mut barycentrics = na::vector![0.0, 0.0, 0.0];
+                    let mut barycentrics = vector![0.0, 0.0, 0.0];
                     stats.ray_triangle_tests += 1;
                     if ray_triangle.hit(ray, &triangle, &mut closest_hit, &mut barycentrics) {
                         stats.ray_triangle_hits += 1;

@@ -5,8 +5,8 @@ use super::*;
 #[repr(C)]
 #[derive(Pod, Zeroable, Clone, Copy, Default, Debug)]
 pub struct Node {
-    pub bounds_mn: na::Point3<f32>,
-    pub bounds_mx: na::Point3<f32>,
+    pub bounds_mn: Point3,
+    pub bounds_mx: Point3,
     pub offset: u32,
     pub primitive_count: u8,
     pub axis: u8,
@@ -219,7 +219,7 @@ fn flatten(build_nodes: &[BuildNode], parent: usize, nodes: &mut Vec<Node>) -> u
 #[derive(Debug)]
 struct Primitive {
     id: usize,
-    centroid: na::Point3<f32>,
+    centroid: Point3,
     bounds: Aabb,
 }
 

@@ -34,7 +34,7 @@ impl Draw for Angle {
     }
 
     fn draw_vector(&mut self, vector: bxdfs::LocalVector, color: image::Rgb<u8>) {
-        let spherical = Spherical::from_cartesian(na::Unit::new_normalize(vector.0)).normalized();
+        let spherical = Spherical::from_cartesian(normal!(vector.0)).normalized();
         assert!(
             (0.0..=0.5).contains(&spherical.angle_y()),
             "Vector must be in the hemisphere, angle_xz={}, angle_y={}",
@@ -120,7 +120,7 @@ impl Draw for Hemisphere {
         let x = 2.0 * (x - 0.5);
         let z = (pixel_y as f32 + 0.5) / height as f32;
         let z = 2.0 * (z - 0.5);
-        let r = na::vector![x, z].norm();
+        let r = vector![x, z].norm();
         if r > 1.0 {
             return None;
         }
@@ -128,7 +128,7 @@ impl Draw for Hemisphere {
         assert!((-1.0..=1.0).contains(&x));
         assert!((-1.0..=1.0).contains(&y));
         assert!((-1.0..=1.0).contains(&z));
-        Some(bxdfs::LocalVector(na::vector![x, y, z].normalize()))
+        Some(bxdfs::LocalVector(vector![x, y, z].normalize()))
     }
 }
 

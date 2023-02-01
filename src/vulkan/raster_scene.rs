@@ -6,7 +6,7 @@ struct RasterMesh {
     normals: Buffer,
     indices: Buffer,
     index_count: u32,
-    transform: na::Matrix4<f32>,
+    transform: Mat4,
     texture: u32,
 }
 
@@ -38,8 +38,8 @@ impl RasterTexture {
 #[repr(C)]
 #[derive(Zeroable, Pod, Clone, Copy)]
 struct PushConstants {
-    transform: na::Matrix4<f32>,
-    base_color: na::Vector4<f32>,
+    transform: Mat4,
+    base_color: Vec4,
     flags: u32,
 }
 
@@ -52,8 +52,8 @@ pub struct RasterScene {
     graphics_pipeline: vk::Pipeline,
     pipeline_layout: vk::PipelineLayout,
     push_constant_stage_flags: vk::ShaderStageFlags,
-    clip_from_view: na::Matrix4<f32>,
-    view_from_world: na::Matrix4<f32>,
+    clip_from_view: Mat4,
+    view_from_world: Mat4,
 }
 
 impl RasterScene {
@@ -490,7 +490,7 @@ impl RasterScene {
         &self,
         device: &Device,
         cmd: vk::CommandBuffer,
-        camera_transform: na::Matrix4<f32>,
+        camera_transform: Mat4,
         dyn_scene: &glb::DynamicScene,
         visualize_normals: bool,
     ) {
@@ -504,7 +504,7 @@ impl RasterScene {
             // Prepare push constants.
             let base_color = match glb::dynamic_try_sample(dyn_scene, mesh.texture) {
                 Some(v) => transmute(v),
-                None => na::vector![0.0, 0.0, 0.0, 0.0],
+                None => vector![0.0, 0.0, 0.0, 0.0],
             };
             let push = PushConstants {
                 // Pre-multiply all matrices to save space.

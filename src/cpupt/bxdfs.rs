@@ -18,8 +18,6 @@ use super::*;
 //
 
 const EPSILON: f32 = 0.001;
-const X_AXIS: na::Vector3<f32> = na::vector![1.0, 0.0, 0.0];
-const Y_AXIS: na::Vector3<f32> = na::vector![0.0, 1.0, 0.0];
 
 //
 // Macros
@@ -61,17 +59,17 @@ type Pdf = f32;
 // w.
 
 #[derive(Clone, Copy, Debug)]
-pub struct LocalVector(pub na::Vector3<f32>);
+pub struct LocalVector(pub Vec3);
 
 impl LocalVector {
     #[inline]
-    pub fn local_from_world(local_from_world: &na::Matrix3<f32>, world: &na::Vector3<f32>) -> Self {
+    pub fn local_from_world(local_from_world: &Mat3, world: &Vec3) -> Self {
         Self((*local_from_world * world).normalize())
     }
 
     #[inline]
-    pub fn world_from_local(&self, world_from_local: &na::Matrix3<f32>) -> na::UnitVector3<f32> {
-        na::Unit::new_normalize(*world_from_local * self.0)
+    pub fn world_from_local(&self, world_from_local: &Mat3) -> Normal {
+        normal!(*world_from_local * self.0)
     }
 
     #[inline]
@@ -95,6 +93,7 @@ impl LocalVector {
     }
 
     #[inline]
+    #[allow(dead_code)]
     fn tan_theta(&self) -> f32 {
         self.sin_theta() / self.cos_theta()
     }
@@ -115,6 +114,7 @@ impl LocalVector {
     }
 
     #[inline]
+    #[allow(dead_code)]
     fn cos2_phi(&self) -> f32 {
         self.cos_phi().powi(2)
     }
@@ -130,6 +130,7 @@ impl LocalVector {
     }
 
     #[inline]
+    #[allow(dead_code)]
     fn sin2_phi(&self) -> f32 {
         self.sin_phi().powi(2)
     }
@@ -440,7 +441,7 @@ impl MicrofacetReflection {
 
     fn ggx_sample_wm(&self, wo: &Outgoing, u: UniformSample2D) -> MicrosurfaceNormal {
         // Stretch.
-        let v = na::vector![self.alpha_x * wo.0.x, wo.0.y, self.alpha_y * wo.0.z].normalize();
+        let v = vector![self.alpha_x * wo.0.x, wo.0.y, self.alpha_y * wo.0.z].normalize();
         let v = if v.y < 0.0 { -v } else { v };
 
         // Orthonormal basis.
@@ -467,7 +468,7 @@ impl MicrofacetReflection {
         let n = p1 * t1 + p2 * t2 + p3 * v;
 
         // Unstretch.
-        LocalVector(na::vector![self.alpha_x * n.x, n.y, self.alpha_y * n.z].normalize())
+        LocalVector(vector![self.alpha_x * n.x, n.y, self.alpha_y * n.z].normalize())
     }
 
     fn fresnel(&self, wo: &Outgoing, wm: &MicrosurfaceNormal) -> ColorRgb {

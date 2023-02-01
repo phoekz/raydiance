@@ -221,7 +221,7 @@ fn editor() -> Result<()> {
     let mut frame_count = 0_u64;
     let mut input_state = InputState::default();
     let mut camera_angle = 0.0;
-    let mut camera_transform = na::Matrix4::identity();
+    let mut camera_transform = Mat4::identity();
     let mut display_raytracing_image = true;
     let mut hemisphere_sampler = HemisphereSampler::default();
     let mut latest_output: Option<cpupt::Output> = None;
@@ -319,8 +319,7 @@ fn editor() -> Result<()> {
                 if input_state.d {
                     camera_angle += speed * delta_time;
                 }
-                camera_transform =
-                    na::Matrix4::from_axis_angle(&na::Vector3::y_axis(), camera_angle);
+                camera_transform = Mat4::from_axis_angle(&Vec3::y_axis(), camera_angle);
 
                 // Update raytracer.
                 raytracer.send_input(cpupt::Input {

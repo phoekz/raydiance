@@ -1,6 +1,44 @@
 use super::*;
 
 //
+// Linear algebra
+//
+
+pub use na::vector;
+
+pub type Vec2 = na::Vector2<f32>;
+pub type Vec3 = na::Vector3<f32>;
+pub type Vec4 = na::Vector4<f32>;
+
+pub type Vec3b = na::Vector3<bool>;
+pub type Vec3u = na::Vector3<u32>;
+
+pub type Mat3 = na::Matrix3<f32>;
+pub type Mat4 = na::Matrix4<f32>;
+
+pub type Point2 = na::Point2<f32>;
+pub type Point3 = na::Point3<f32>;
+
+pub type Normal = na::UnitVector3<f32>;
+
+pub type Perspective3 = na::Perspective3<f32>;
+
+pub const X_AXIS: Vec3 = vector![1.0, 0.0, 0.0];
+pub const Y_AXIS: Vec3 = vector![0.0, 1.0, 0.0];
+pub const Z_AXIS: Vec3 = vector![0.0, 0.0, 1.0];
+
+#[macro_export]
+macro_rules! normal {
+    ($v:expr) => {
+        na::Unit::new_normalize($v)
+    };
+
+    ($x:expr, $y:expr, $z:expr) => {
+        na::Unit::new_normalize(na::Vector3::<f32>::new($x, $y, $z))
+    };
+}
+
+//
 // Color
 //
 
@@ -110,6 +148,7 @@ impl ColorRgba {
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub const fn alpha(&self) -> f32 {
         self.0[3]
     }
@@ -140,7 +179,7 @@ pub fn lerp_color(a: &ColorRgb, b: &ColorRgb, t: f32) -> ColorRgb {
 // Geometric
 //
 
-pub fn reflect_vector(v: &na::Vector3<f32>, n: &na::Vector3<f32>) -> na::Vector3<f32> {
+pub fn reflect_vector(v: &Vec3, n: &Vec3) -> Vec3 {
     (2.0 * v.dot(n) * n - v).normalize()
 }
 
@@ -152,6 +191,20 @@ pub fn reflect_vector(v: &na::Vector3<f32>, n: &na::Vector3<f32>) -> na::Vector3
 mod tests {
     use super::*;
     use approx::assert_ulps_eq;
+
+    #[test]
+    fn test_normal_macro() {
+        let result = 0.57735026;
+        let normal = normal![1.0, 1.0, 1.0];
+        assert_ulps_eq!(normal.x, result, max_ulps = 1);
+        assert_ulps_eq!(normal.y, result, max_ulps = 1);
+        assert_ulps_eq!(normal.z, result, max_ulps = 1);
+
+        let normal = normal![vector![1.0, 1.0, 1.0]];
+        assert_ulps_eq!(normal.x, result, max_ulps = 1);
+        assert_ulps_eq!(normal.y, result, max_ulps = 1);
+        assert_ulps_eq!(normal.z, result, max_ulps = 1);
+    }
 
     #[test]
     fn test_lerp_scalar() {
@@ -172,8 +225,8 @@ mod tests {
 
     #[test]
     fn test_reflect_vector() {
-        let v = na::vector![1.0, 1.0, 0.0].normalize();
-        let n = na::vector![0.0, 1.0, 0.0];
+        let v = vector![1.0, 1.0, 0.0].normalize();
+        let n = vector![0.0, 1.0, 0.0];
         let r = reflect_vector(&v, &n);
         assert_ulps_eq!(v.x, -r.x, max_ulps = 1);
         assert_ulps_eq!(v.y, r.y, max_ulps = 1);

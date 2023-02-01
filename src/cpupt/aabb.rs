@@ -3,7 +3,7 @@ use super::*;
 #[repr(C)]
 #[derive(Pod, Zeroable, Clone, Copy, Debug, PartialEq)]
 pub struct Aabb {
-    extents: [na::Point3<f32>; 2],
+    extents: [Point3; 2],
 }
 
 impl Aabb {
@@ -11,14 +11,14 @@ impl Aabb {
     pub fn new() -> Self {
         Self {
             extents: [
-                na::Vector3::repeat(f32::MAX).into(),
-                na::Vector3::repeat(-f32::MAX).into(),
+                Vec3::repeat(f32::MAX).into(),
+                Vec3::repeat(-f32::MAX).into(),
             ],
         }
     }
 
     #[inline]
-    pub fn from_min_max(min: &na::Point3<f32>, max: &na::Point3<f32>) -> Self {
+    pub fn from_min_max(min: &Point3, max: &Point3) -> Self {
         Self {
             extents: [*min, *max],
         }
@@ -26,7 +26,7 @@ impl Aabb {
 
     pub fn from_points<'a, Iter>(points: Iter) -> Self
     where
-        Iter: IntoIterator<Item = &'a na::Point3<f32>>,
+        Iter: IntoIterator<Item = &'a Point3>,
     {
         let mut aabb = Self::new();
         for point in points {
@@ -36,26 +36,26 @@ impl Aabb {
     }
 
     #[inline]
-    pub fn min(&self) -> na::Point3<f32> {
+    pub fn min(&self) -> Point3 {
         self.extents[0]
     }
 
     #[inline]
-    pub fn max(&self) -> na::Point3<f32> {
+    pub fn max(&self) -> Point3 {
         self.extents[1]
     }
 
     #[inline]
-    pub fn center(&self) -> na::Point3<f32> {
+    pub fn center(&self) -> Point3 {
         na::center(&self.min(), &self.max())
     }
 
     #[inline]
-    pub fn extents(&self) -> na::Vector3<f32> {
+    pub fn extents(&self) -> Vec3 {
         self.max() - self.min()
     }
 
-    pub fn extend(&mut self, point: &na::Point3<f32>) {
+    pub fn extend(&mut self, point: &Point3) {
         self.extents[0] = self.min().coords.inf(&point.coords).into();
         self.extents[1] = self.max().coords.sup(&point.coords).into();
     }

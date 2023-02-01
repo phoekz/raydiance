@@ -25,8 +25,8 @@ struct FontAtlas {
 #[repr(C)]
 #[derive(Zeroable, Pod, Clone, Copy)]
 struct PushConstants {
-    scale: na::Vector2<f32>,
-    translation: na::Vector2<f32>,
+    scale: Vec2,
+    translation: Vec2,
 }
 
 impl Gui {
@@ -429,11 +429,11 @@ impl Gui {
 
         // Update push constants.
         {
-            let scale = na::vector![
+            let scale = vector![
                 2.0 / draw_data.display_size[0],
                 2.0 / draw_data.display_size[1]
             ];
-            let translation = na::vector![
+            let translation = vector![
                 -1.0 - draw_data.display_pos[0] * scale[0],
                 -1.0 - draw_data.display_pos[1] * scale[1]
             ];

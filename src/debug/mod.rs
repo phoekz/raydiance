@@ -10,14 +10,10 @@ mod text;
 use img::Draw;
 use spherical::{NormalizedSpherical, Spherical};
 
-const X_AXIS: na::Vector3<f32> = na::vector![1.0, 0.0, 0.0];
-const Y_AXIS: na::Vector3<f32> = na::vector![0.0, 1.0, 0.0];
-const Z_AXIS: na::Vector3<f32> = na::vector![0.0, 0.0, 1.0];
-
 const DEFAULT_SAMPLE_COUNT: u32 = 256;
 const DEFAULT_SAMPLE_GRID_WIDTH: u32 = 16; // Must be sqrt(DEFAULT_SAMPLE_COUNT).
 const DEFAULT_INCOMING: bxdfs::LocalVector =
-    bxdfs::LocalVector(na::vector![-0.70710677, 0.70710677, 0.0]);
+    bxdfs::LocalVector(vector![-0.70710677, 0.70710677, 0.0]);
 const DEFAULT_SCALAR: f32 = 1.0 / 4.0;
 const DEFAULT_ANISOTROPIC: f32 = 0.0;
 const DEFAULT_BASE_COLOR: ColorRgb = ColorRgb::WHITE;
@@ -179,12 +175,8 @@ impl BrdfInputBuilder {
                     BrdfInputParameter::Interpolated => {
                         let angle_incoming = x * PI;
                         let incoming = bxdfs::LocalVector(
-                            na::vector![
-                                f32::cos(angle_incoming - PI),
-                                f32::sin(angle_incoming),
-                                0.0
-                            ]
-                            .normalize(),
+                            vector![f32::cos(angle_incoming - PI), f32::sin(angle_incoming), 0.0]
+                                .normalize(),
                         );
                         (incoming, angle_incoming)
                     }

@@ -41,9 +41,9 @@ impl Scene {
                 let position_0 = mesh.transform.transform_point(&position_0);
                 let position_1 = mesh.transform.transform_point(&position_1);
                 let position_2 = mesh.transform.transform_point(&position_2);
-                let normal_0 = na::Unit::new_normalize(mesh.transform.transform_vector(&normal_0));
-                let normal_1 = na::Unit::new_normalize(mesh.transform.transform_vector(&normal_1));
-                let normal_2 = na::Unit::new_normalize(mesh.transform.transform_vector(&normal_2));
+                let normal_0 = normal!(mesh.transform.transform_vector(&normal_0));
+                let normal_1 = normal!(mesh.transform.transform_vector(&normal_1));
+                let normal_2 = normal!(mesh.transform.transform_vector(&normal_2));
 
                 triangles.push(Triangle {
                     positions: [position_0, position_1, position_2],
@@ -79,7 +79,7 @@ impl Default for Params {
 
 #[derive(Clone, PartialEq)]
 pub struct Input {
-    pub camera_transform: na::Matrix4<f32>,
+    pub camera_transform: Mat4,
     pub image_size: (u32, u32),
     pub hemisphere_sampler: sampling::HemisphereSampler,
     pub dyn_scene: glb::DynamicScene,
@@ -89,7 +89,7 @@ pub struct Input {
 impl Default for Input {
     fn default() -> Self {
         Self {
-            camera_transform: na::Matrix4::identity(),
+            camera_transform: Mat4::identity(),
             image_size: (0, 0),
             hemisphere_sampler: sampling::HemisphereSampler::default(),
             dyn_scene: glb::DynamicScene::default(),
@@ -142,8 +142,8 @@ impl Raytracer {
 
             let mut input = Input::default();
             let mut sample_index = 0;
-            let mut world_from_clip = na::Matrix4::<f32>::identity();
-            let mut camera_position = na::Point3::<f32>::origin();
+            let mut world_from_clip = Mat4::identity();
+            let mut camera_position = Point3::origin();
             let mut timer = Instant::now();
             let mut ray_stats = intersection::RayBvhHitStats::default();
             let mut pixel_sample_buffer = Vec::<ColorRgb>::new();
@@ -290,8 +290,8 @@ impl Raytracer {
 fn radiance(
     pixel: (u32, u32),
     image_size: (u32, u32),
-    camera_position: na::Point3<f32>,
-    world_from_clip: na::Matrix4<f32>,
+    camera_position: Point3,
+    world_from_clip: Mat4,
     uniform: &mut sampling::UniformSampler,
     input: &Input,
     params: &Params,
@@ -319,7 +319,7 @@ fn radiance(
     for _ in 0..params.max_bounce_count {
         // Hit scene.
         let mut closest_hit = 0.0;
-        let mut barycentrics = na::Vector3::zeros();
+        let mut barycentrics = Vec3::zeros();
         let mut triangle_index = 0;
         let found_hit = intersection::ray_bvh_hit(
             &ray,
@@ -334,7 +334,7 @@ fn radiance(
         // Special case: ray hit the sky.
         if !found_hit {
             // Todo: Replace with a proper sky model.
-            let sun_direction = na::Vector3::new(1.0, 3.0, 1.0).normalize();
+            let sun_direction = Vec3::new(1.0, 3.0, 1.0).normalize();
             let sky_factor = 0.5 + 0.5 * sun_direction.dot(&ray.dir);
             radiance += throughput * sky_factor;
             break;

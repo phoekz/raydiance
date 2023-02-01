@@ -170,7 +170,7 @@ impl Renderer {
         window_size: window::Size,
         resized_window_size: window::Size,
         frame_index: u64,
-        camera_transform: na::Matrix4<f32>,
+        camera_transform: Mat4,
         display_raytracing_image: bool,
         visualize_normals: bool,
         gui_data: &imgui::DrawData,
