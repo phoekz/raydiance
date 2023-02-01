@@ -51,6 +51,7 @@ use winit::{
 #[macro_use]
 extern crate log;
 
+mod blog;
 mod cpupt;
 mod debug;
 mod glb;
@@ -143,6 +144,7 @@ struct Args {
 enum Commands {
     Editor,
     Debug,
+    Blog,
 }
 
 impl Default for Commands {
@@ -159,6 +161,7 @@ fn main() -> Result<()> {
     match Args::parse().command {
         Commands::Editor => editor(),
         Commands::Debug => debug::run(),
+        Commands::Blog => blog::build(),
     }
 }
 

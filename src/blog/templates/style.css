@@ -1,0 +1,129 @@
+/*
+ * Constants
+ */
+
+:root {
+    --theme-color: darkorange;
+    --light-color: #666;
+    --max-page-width: 800px;
+    --font-regular: "Source Sans Pro - Regular";
+    --font-title: "Source Sans Pro - SemiBold";
+    --font-code: "Source Code Pro";
+}
+
+/*
+ * Fonts
+ */
+
+@font-face {
+    font-family: "Source Sans Pro - Regular";
+    src: url("fonts/SourceSansPro-Regular.ttf") format("truetype");
+}
+
+@font-face {
+    font-family: "Source Sans Pro - SemiBold";
+    src: url("fonts/SourceSansPro-SemiBold.ttf") format("truetype");
+}
+
+@font-face {
+    font-family: "Source Code Pro";
+    src: url("fonts/SourceCodePro-Regular.ttf") format("truetype");
+}
+
+h1,
+h2,
+h3 {
+    font-family: var(--font-title);
+
+    /* iOS renders headings extra bolded for some reason. This font-weight is
+    used to make it look the same as desktop browser. */
+    font-weight: 400;
+}
+
+p,
+li,
+article-date,
+article-caption-image,
+footer-github,
+footer-copyright {
+    font-family: var(--font-regular);
+}
+
+code {
+    font-family: var(--font-code);
+}
+
+/*
+ * Main elements
+ */
+
+a {
+    /* Remove underlines */
+    text-decoration: none;
+
+    /* Coloring */
+    color: var(--theme-color);
+}
+
+img {
+    /* Prevent images from overflowing from the body */
+    max-width: var(--max-page-width);
+}
+
+body {
+    /* Prevents the page to spread out too wide */
+    max-width: var(--max-page-width);
+
+    /* Center page */
+    margin: 0 auto;
+
+    /* Improve text readability */
+    line-height: 1.5;
+    font-size: 18px;
+}
+
+footer {
+    /* Give footer some breathing room */
+    margin: 10px;
+    padding-bottom: 30px;
+}
+
+footer-github {
+    /* Force GitHub link to the left */
+    float: left;
+}
+
+footer-copyright {
+    /* Force copyright to the right */
+    text-align: right;
+    float: right;
+}
+
+/*
+ * Article
+ */
+
+article-date {
+    color: var(--light-color);
+}
+
+article-image {
+    display: grid;
+    grid-template-columns: 1fr;
+}
+
+article-image-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+}
+
+article-caption-image {
+    text-align: center;
+    font-size: 0.8em;
+}
+
+article-commit {
+    font-size: 14px;
+    color: var(--light-color);
+}
