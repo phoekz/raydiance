@@ -2,12 +2,6 @@ use super::*;
 
 use tinytemplate::TinyTemplate;
 
-fn manifest_dir() -> PathBuf {
-    std::env::var("CARGO_MANIFEST_DIR")
-        .expect("CARGO_MANIFEST_DIR is not set")
-        .into()
-}
-
 fn posts_dir() -> PathBuf {
     manifest_dir().join("src/blog/posts")
 }

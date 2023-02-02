@@ -592,3 +592,14 @@ fn create_checkerboard_texture() {
     }
     save_image(&img, (w, h), "checkerboard.png").unwrap();
 }
+
+//
+// Utils
+//
+
+#[must_use]
+pub fn manifest_dir() -> PathBuf {
+    std::env::var("CARGO_MANIFEST_DIR")
+        .expect("CARGO_MANIFEST_DIR is not set")
+        .into()
+}
