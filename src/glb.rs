@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use super::*;
 
 #[derive(Clone, Debug)]
@@ -117,6 +119,23 @@ impl Scene {
                         &mut scene,
                     )?;
                 }
+            }
+        }
+
+        // Validate.
+        {
+            let mut unique_mesh_names = HashSet::new();
+            for mesh in &scene.meshes {
+                let name = mesh.name.as_str();
+                let was_unique = unique_mesh_names.insert(name);
+                ensure!(was_unique, "Mesh name {name} is not unique!",);
+            }
+
+            let mut unique_material_names = HashSet::new();
+            for material in &scene.materials {
+                let name = material.name.as_str();
+                let was_unique = unique_material_names.insert(name);
+                ensure!(was_unique, "Material name {name} is not unique!",);
             }
         }
 
