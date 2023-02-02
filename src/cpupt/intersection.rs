@@ -133,7 +133,7 @@ impl RayAabbIntersector {
         (n * MACHINE_EPSILON) / (1.0 - n * MACHINE_EPSILON)
     }
 
-    pub fn hit(&self, ray: &Ray, aabb: &Aabb) -> bool {
+    pub fn hit(&self, ray: &Ray, aabb: &Aabb, best_closest_hit: f32) -> bool {
         // Compute slab intervals.
         let mut mn_tx: f32;
         let mut mn_ty: f32;
@@ -194,7 +194,7 @@ impl RayAabbIntersector {
             mx_tx = mx_tz;
         }
 
-        (mn_tx < f32::INFINITY) && (mx_tx > 0.0)
+        (mn_tx < best_closest_hit) && (mx_tx > 0.0)
     }
 }
 
@@ -265,7 +265,7 @@ pub fn ray_bvh_hit(
         let bounds = Aabb::from_min_max(&bvh_node.bounds_mn, &bvh_node.bounds_mx);
 
         stats.ray_aabb_tests += 1;
-        if ray_aabb.hit(ray, &bounds) {
+        if ray_aabb.hit(ray, &bounds, best_closest_hit) {
             stats.ray_aabb_hits += 1;
             let offset = bvh_node.offset;
             let primitive_count = bvh_node.primitive_count;
@@ -278,7 +278,7 @@ pub fn ray_bvh_hit(
                     let triangle = triangles[triangle_index as usize];
 
                     // Intersect triangle.
-                    let mut closest_hit = f32::MAX;
+                    let mut closest_hit = best_closest_hit;
                     let mut barycentrics = vector![0.0, 0.0, 0.0];
                     stats.ray_triangle_tests += 1;
                     if ray_triangle.hit(ray, &triangle, &mut closest_hit, &mut barycentrics) {
