@@ -509,8 +509,16 @@ fn editor() -> Result<()> {
                         });
                 });
 
+                // Fast forward to the latest input, in case the raytracer sends
+                // frames faster than the main loop.
+                let mut output = None;
+                while let Some(current_output) = raytracer.try_recv_output() {
+                    output = Some(current_output);
+                }
+
                 unsafe {
-                    if let Some(output) = raytracer.try_recv_output() {
+                    // If we got a new output, submit it to the rasterizer.
+                    if let Some(output) = output {
                         renderer
                             .update_raytracing_image(&output.image, output.image_size)
                             .unwrap();
@@ -518,9 +526,11 @@ fn editor() -> Result<()> {
                         latest_output = Some(output);
                     }
 
+                    // Update gui.
                     let gui_data = gui.render();
                     renderer.update_gui(frame_index, gui_data).unwrap();
 
+                    // Rasterize.
                     renderer
                         .redraw(
                             &dyn_scene,
@@ -534,6 +544,7 @@ fn editor() -> Result<()> {
                         )
                         .unwrap();
                 }
+
                 frame_count += 1;
                 frame_index = frame_count % u64::from(vulkan::MAX_CONCURRENT_FRAMES);
                 window_size = resized_window_size;
