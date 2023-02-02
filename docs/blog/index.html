@@ -142,7 +142,58 @@ article-commit {
 </head>
 <body>
     <header><h1>Raydiance - Blog</h1></header><hr>
-    <section><h1 id="a-new-shiny-specular-brdf"><a href="#a-new-shiny-specular-brdf">A new shiny specular BRDF</a></h1>
+    <section><h1 id="offline-rendering-mode"><a href="#offline-rendering-mode">Offline rendering mode</a></h1>
+<article>
+    <article-date>2023-02-02</article-date>
+    <article-content><p><info
+title="Offline rendering mode"
+link="offline-rendering-mode"
+date="2023-02-02"
+commit="17e72dada89f79bdc220726be7089aedc419dc3f"
+/></p>
+<video width="800" height="450" autoplay loop muted playsinline>
+    <source src="images/20230202-235500.mp4" type="video/mp4" />
+</video>
+<p>The raytracer can now run &quot;offline&quot;, which means that we never start up the
+Vulkan rasterizer, and the program exits after rendering is done. This mode can
+be used to generate offline rendered animations at high sample counts. The title
+animation is built from 60 frames, each rendered at 256 samples per pixel.</p>
+</article-content>
+    <article-commit><p>Commit: <a href="https://github.com/phoekz/raydiance/commit/17e72dada89f79bdc220726be7089aedc419dc3f"><code>17e72dad</code></a></p></article-commit>
+</article>
+<hr><h1 id="multithreaded-raytracer"><a href="#multithreaded-raytracer">Multithreaded raytracer</a></h1>
+<article>
+    <article-date>2023-02-02</article-date>
+    <article-content><p><info
+title="Multithreaded raytracer"
+link="multithreaded-raytracer"
+date="2023-02-02"
+commit="d129b2601d8d95112cbd14a0f5e0a7c35a9953da"
+/></p>
+<video width="800" height="450" autoplay loop muted playsinline>
+    <source src="images/20230202-235429.mp4" type="video/mp4" />
+</video>
+<p>Raytracer is now multithreaded with <a href="https://crates.io/crates/rayon"><code>rayon</code></a>.
+We split the image into 16x16 pixel tiles, and use <code>into_par_iter()</code> to render
+tiles in parallel. On AMD Ryzen 5950X processor, we can render the cube scene at
+66 MRays/s, up from 4.6 MRays/s we had previously with our single threaded
+raytracer. If we only used one sample per pixel, it would run slightly over 60
+fps. Of course the image would be very noisy, but at least it would be
+interactive.</p>
+<p>To retain our previous single threaded debugging capabilities, we can set
+<code>RAYON_NUM_THREADS=1</code> to force <code>rayon</code> only use one thread.</p>
+<p>With multithreading, there is a subtle issue with our current random number
+generator, because we can no longer share the same RNG across all threads
+without locking. We can sidestep the whole problem, because we can initialize
+the RNG with an unique seed at each pixel, like so:</p>
+<p><span class="katex-display"><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal">see</span><span class="mord mathnormal">d</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">(</span><span class="mord mathnormal">p</span><span class="mord mathnormal">i</span><span class="mord mathnormal">x</span><span class="mord mathnormal">e</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.01968em;">l</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0197em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">x</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.9805em;vertical-align:-0.2861em;"></span><span class="mord mathnormal">p</span><span class="mord mathnormal">i</span><span class="mord mathnormal">x</span><span class="mord mathnormal">e</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.01968em;">l</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0197em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.03588em;">y</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">∗</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal">ima</span><span class="mord mathnormal" style="margin-right:0.03588em;">g</span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.02691em;">w</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">d</span><span class="mord mathnormal mtight">t</span><span class="mord mathnormal mtight">h</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">∗</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">s</span><span class="mord mathnormal">am</span><span class="mord mathnormal" style="margin-right:0.01968em;">pl</span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">in</span><span class="mord mathnormal mtight">d</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">x</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span></span></p>
+<p>Multiplying by <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">s</span><span class="mord mathnormal">am</span><span class="mord mathnormal" style="margin-right:0.01968em;">pl</span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">in</span><span class="mord mathnormal mtight">d</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">x</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span> makes sure the <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal">see</span><span class="mord mathnormal">d</span></span></span></span> is different at each
+sample. With this strategy we assume that the cost of creating an RNG is
+negligible compared to the rest of the raytracer, which is true with <code>rand_pcg</code>.</p>
+</article-content>
+    <article-commit><p>Commit: <a href="https://github.com/phoekz/raydiance/commit/d129b2601d8d95112cbd14a0f5e0a7c35a9953da"><code>d129b260</code></a></p></article-commit>
+</article>
+<hr><h1 id="a-new-shiny-specular-brdf"><a href="#a-new-shiny-specular-brdf">A new shiny specular BRDF</a></h1>
 <article>
     <article-date>2023-01-31</article-date>
     <article-content><p><info
