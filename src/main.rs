@@ -40,6 +40,7 @@ use clap::{Parser, Subcommand};
 use nalgebra as na;
 use rand::prelude::*;
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 use winit::{
     dpi::{PhysicalPosition, PhysicalSize},
     event::{Event, KeyboardInput, VirtualKeyCode, WindowEvent},

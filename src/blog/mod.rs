@@ -184,7 +184,7 @@ fn katex_render_math(html: &str) -> Result<String> {
 pub fn build() -> Result<()> {
     use std::io::Write;
 
-    #[derive(serde::Serialize)]
+    #[derive(Serialize)]
     struct BodyContext<'a> {
         blog_title: &'a str,
         style: &'a str,
@@ -194,7 +194,7 @@ pub fn build() -> Result<()> {
         copyright: &'a str,
     }
 
-    #[derive(serde::Serialize)]
+    #[derive(Serialize)]
     struct PostContext<'a> {
         github: &'a str,
         title: &'a str,
