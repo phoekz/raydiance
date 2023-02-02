@@ -1,13 +1,11 @@
 use super::*;
 
-mod animation;
-mod img;
+mod frame;
 mod plot;
 mod scalar;
 mod spherical;
-mod text;
 
-use img::Draw;
+use frame::Draw;
 use spherical::{NormalizedSpherical, Spherical};
 
 const DEFAULT_SAMPLE_COUNT: u32 = 256;
@@ -22,15 +20,15 @@ const ANIMATION_DELAY_DEN: u16 = 20;
 const ANIMATION_DELAY_NUM: u16 = 1;
 const ANIMATION_FRAME_COUNT: u32 = 60;
 
-const PLOT_COLOR_BACKGROUND: image::Rgb<u8> = image::Rgb([0, 0, 0]);
-const PLOT_COLOR_INCOMING: image::Rgb<u8> = image::Rgb([255, 0, 255]);
-const PLOT_COLOR_SAMPLE: image::Rgb<u8> = image::Rgb([255, 96, 0]);
-const PLOT_COLOR_TEXT: image::Rgb<u8> = image::Rgb([255, 255, 255]);
-const PLOT_COLOR_POS_X: image::Rgb<u8> = image::Rgb([255, 0, 0]);
-const PLOT_COLOR_POS_Y: image::Rgb<u8> = image::Rgb([0, 255, 0]);
-const PLOT_COLOR_POS_Z: image::Rgb<u8> = image::Rgb([0, 0, 255]);
-const PLOT_COLOR_MID_XY: image::Rgb<u8> = image::Rgb([192, 192, 0]);
-const PLOT_COLOR_MID_ZY: image::Rgb<u8> = image::Rgb([0, 192, 192]);
+const PLOT_COLOR_BACKGROUND: ColorRgb = ColorRgb::new(0.0, 0.0, 0.0);
+const PLOT_COLOR_INCOMING: ColorRgb = ColorRgb::new(1.0, 0.0, 1.0);
+const PLOT_COLOR_SAMPLE: ColorRgb = ColorRgb::new(1.0, 0.12, 0.0);
+const PLOT_COLOR_TEXT: ColorRgb = ColorRgb::new(1.0, 1.0, 1.0);
+const PLOT_COLOR_POS_X: ColorRgb = ColorRgb::new(1.0, 0.0, 0.0);
+const PLOT_COLOR_POS_Y: ColorRgb = ColorRgb::new(0.0, 1.0, 0.0);
+const PLOT_COLOR_POS_Z: ColorRgb = ColorRgb::new(0.0, 0.0, 1.0);
+const PLOT_COLOR_MID_XY: ColorRgb = ColorRgb::new(0.75, 0.75, 0.0);
+const PLOT_COLOR_MID_ZY: ColorRgb = ColorRgb::new(0.0, 0.75, 0.75);
 const PLOT_IMAGE_BORDER: u32 = 60;
 const PLOT_IMAGE_SCALE: u32 = 4;
 const PLOT_TEXT_MARGIN: i32 = 8;
@@ -285,8 +283,8 @@ pub fn run() -> Result<()> {
     // Default work directory.
     let work_dir = PathBuf::from("work");
 
-    // Default text renderer.
-    let text_renderer = text::Renderer::new()?;
+    // Default font.
+    let font = img::Font::new()?;
 
     // Sequences.
     let seq_grid = SampleSequence::Grid(DEFAULT_SAMPLE_GRID_WIDTH);
@@ -430,21 +428,39 @@ pub fn run() -> Result<()> {
             };
             let text = annotation.to_string();
             let (mut angle_image, mut hemisphere_image) = plot.into_images();
-            text_renderer.draw(&mut angle_image, &text);
-            text_renderer.draw(&mut hemisphere_image, &text);
+            hemisphere_image.draw_text(
+                PLOT_COLOR_TEXT,
+                PLOT_TEXT_SCALE,
+                PLOT_TEXT_MARGIN,
+                &font,
+                &text,
+            );
+            angle_image.draw_text(
+                PLOT_COLOR_TEXT,
+                PLOT_TEXT_SCALE,
+                PLOT_TEXT_MARGIN,
+                &font,
+                &text,
+            );
             frames_angle.push(angle_image);
             frames_hemisphere.push(hemisphere_image);
         }
 
         // Boomerang.
-        let frames_angle = animation::create_boomerang(frames_angle);
-        let frames_hemisphere = animation::create_boomerang(frames_hemisphere);
+        let frames_angle = img::create_boomerang(frames_angle);
+        let frames_hemisphere = img::create_boomerang(frames_hemisphere);
 
         // Render animation.
         let path_angle = work_dir.join(header.to_filename(PlotType::Angle));
         let path_hemisphere = work_dir.join(header.to_filename(PlotType::Hemisphere));
-        animation::render(path_angle, frames_angle).expect("Failed to render animation");
-        animation::render(path_hemisphere, frames_hemisphere).expect("Failed to render animation");
+        let anim_params = img::AnimationParams {
+            delay_num: ANIMATION_DELAY_NUM,
+            delay_den: ANIMATION_DELAY_DEN,
+        };
+        img::animation_render(&anim_params, path_angle, frames_angle)
+            .expect("Failed to render animation");
+        img::animation_render(&anim_params, path_hemisphere, frames_hemisphere)
+            .expect("Failed to render animation");
     });
 
     // Debug website.

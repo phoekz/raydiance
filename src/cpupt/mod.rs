@@ -289,6 +289,13 @@ impl Raytracer {
         self.input_send.send(input).unwrap();
     }
 
+    pub fn recv_output(&self) -> Option<Output> {
+        match self.output_recv.recv() {
+            Ok(output) => Some(output),
+            Err(err) => panic!("Failed to receive output: {err}"),
+        }
+    }
+
     pub fn try_recv_output(&self) -> Option<Output> {
         match self.output_recv.try_recv() {
             Ok(output) => Some(output),

@@ -17,8 +17,8 @@ impl SurfaceInteraction {
 
 #[derive(Clone)]
 pub struct Plot {
-    angle: img::Angle,
-    hemisphere: img::Hemisphere,
+    angle: frame::Angle,
+    hemisphere: frame::Hemisphere,
     intensity: scalar::Range,
     incoming: bxdfs::LocalVector,
 }
@@ -28,10 +28,11 @@ where
     EvalFn: Fn(SurfaceInteraction) -> ColorRgb,
 {
     let (angle, intensity) = {
-        let mut image: img::Angle = img::Frame::new(ANGLE_PLOT_WIDTH, ANGLE_PLOT_HEIGHT).into();
+        let size = (ANGLE_PLOT_WIDTH, ANGLE_PLOT_HEIGHT);
+        let mut image: frame::Angle = frame::Frame::new(size).into();
         let mut intensity_range = scalar::Range::default();
-        for pixel_y in 0..ANGLE_PLOT_HEIGHT {
-            for pixel_x in 0..ANGLE_PLOT_WIDTH {
+        for pixel_y in 0..size.1 {
+            for pixel_x in 0..size.0 {
                 let outgoing = image
                     .vector_from_pixel(pixel_x, pixel_y)
                     .expect("This should never fail");
@@ -47,10 +48,10 @@ where
     };
 
     let hemisphere = {
-        let mut image: img::Hemisphere =
-            img::Frame::new(HEMISPHERE_PLOT_WIDTH, HEMISPHERE_PLOT_HEIGHT).into();
-        for pixel_y in 0..HEMISPHERE_PLOT_HEIGHT {
-            for pixel_x in 0..HEMISPHERE_PLOT_WIDTH {
+        let size = (HEMISPHERE_PLOT_WIDTH, HEMISPHERE_PLOT_HEIGHT);
+        let mut image: frame::Hemisphere = frame::Frame::new(size).into();
+        for pixel_y in 0..size.1 {
+            for pixel_x in 0..size.0 {
                 if let Some(outgoing) = image.vector_from_pixel(pixel_x, pixel_y) {
                     let reflectance = eval_fn(SurfaceInteraction { incoming, outgoing });
                     let intensity =
@@ -84,7 +85,7 @@ impl Plot {
         }
     }
 
-    pub fn into_images(self) -> (img::Frame, img::Frame) {
+    pub fn into_images(self) -> (frame::Frame, frame::Frame) {
         let mut angle = self.angle;
         let mut hemisphere = self.hemisphere;
         angle.draw_debug_vectors(self.incoming);
@@ -99,23 +100,33 @@ impl Plot {
         self.intensity
     }
 
-    fn write_image(image: img::Frame) -> img::Frame {
+    fn write_image(image: frame::Frame) -> frame::Frame {
         use image::GenericImage;
 
-        let image: image::DynamicImage = image.into();
-        let image = image.flipv().resize_exact(
+        // The plots are generated upside down, flip vertically.
+        let image = image.into_dynamic();
+        let image = image.flipv();
+
+        // Resize to make sample points larger.
+        // Todo: we should just draw larger points in the first place.
+        let image = image.resize_exact(
             PLOT_IMAGE_SCALE * image.width(),
             PLOT_IMAGE_SCALE * image.height(),
             image::imageops::Nearest,
         );
-        let image = image.into_rgb8();
-        let mut expanded = img::Frame::new(image.width(), image.height() + PLOT_IMAGE_BORDER);
+
+        // Create expanded canvas for text.
+        let mut expanded = image::RgbImage::new(image.width(), image.height() + PLOT_IMAGE_BORDER);
+        let bg_color = image::Rgb(PLOT_COLOR_BACKGROUND.to_srgb_bytes());
         expanded.pixels_mut().for_each(|pixel| {
-            *pixel = PLOT_COLOR_BACKGROUND;
+            *pixel = bg_color;
         });
+
+        // Copy original image onto expanded canvas.
+        let image = image.into_rgb8();
         expanded
             .copy_from(&image, 0, 0)
             .expect("Failed to copy image into expanded frame");
-        expanded
+        expanded.into()
     }
 }

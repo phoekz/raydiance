@@ -74,6 +74,15 @@ impl ColorRgb {
     pub fn is_finite(&self) -> bool {
         self.0[0].is_finite() && self.0[1].is_finite() && self.0[2].is_finite()
     }
+
+    #[inline]
+    pub fn to_srgb_bytes(self) -> [u8; 3] {
+        use palette::{LinSrgb, Pixel, Srgb};
+        let linear = LinSrgb::new(self.red(), self.green(), self.blue());
+        let srgb = Srgb::from_linear(linear);
+        let bytes: [u8; 3] = srgb.into_format().into_raw();
+        bytes
+    }
 }
 
 impl std::ops::AddAssign for ColorRgb {

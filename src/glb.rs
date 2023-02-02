@@ -37,6 +37,13 @@ pub enum MaterialModel {
     Disney,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MaterialField {
+    BaseColor,
+    Metallic,
+    Roughness,
+}
+
 #[derive(Clone, Debug)]
 pub struct Material {
     pub name: String,
@@ -77,7 +84,7 @@ pub struct DynamicMaterial {
     pub roughness: u32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum DynamicTexture {
     Scalar(f32),
     Vector2([f32; 2]),

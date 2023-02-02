@@ -24,6 +24,7 @@ use std::{
     fs::File,
     io::BufWriter,
     mem::{size_of, transmute},
+    num::{NonZeroU16, NonZeroU32},
     ops::Deref,
     path::{Path, PathBuf},
     slice,
@@ -57,6 +58,7 @@ mod cpupt;
 mod debug;
 mod glb;
 mod gui;
+mod img;
 mod math;
 mod vulkan;
 mod window;
@@ -144,6 +146,7 @@ struct Args {
 #[derive(Subcommand)]
 enum Commands {
     Editor,
+    Offline,
     Debug,
     Blog,
 }
@@ -161,6 +164,7 @@ fn main() -> Result<()> {
     // Execute command.
     match Args::parse().command {
         Commands::Editor => editor(),
+        Commands::Offline => offline(),
         Commands::Debug => debug::run(),
         Commands::Blog => blog::build(),
     }
@@ -343,7 +347,7 @@ fn editor() -> Result<()> {
 
                     // Main window.
                     ui.window("Raydiance")
-                        .size([360.0, 200.0], imgui::Condition::FirstUseEver)
+                        .size([360.0, 240.0], imgui::Condition::FirstUseEver)
                         .position_pivot([0.0, 0.0])
                         .position([0.0, 0.0], imgui::Condition::FirstUseEver)
                         .collapsible(true)
@@ -500,11 +504,14 @@ fn editor() -> Result<()> {
                                     let timestamp = local_time
                                         .format(&format)
                                         .expect("Failed to format local time");
-                                    let path = format!("{timestamp}.png");
-                                    save_image(&output.image, output.image_size, &path)
-                                        .unwrap_or_else(|_| {
-                                            panic!("Failed to save image to {path}")
-                                        });
+                                    let path = PathBuf::from(format!("{timestamp}.png"));
+                                    let image = img::RgbImage::from_colors(
+                                        &output.image,
+                                        output.image_size,
+                                    );
+                                    image.save(&path).unwrap_or_else(|_| {
+                                        panic!("Failed to save image to {}", path.display())
+                                    });
                                 }
                             }
                         });
@@ -563,46 +570,135 @@ fn editor() -> Result<()> {
 }
 
 //
-// Misc
+// Offline
 //
 
-#[allow(dead_code)]
-fn save_image(
-    image: &[ColorRgb],
-    (image_width, image_height): (u32, u32),
-    path: &str,
-) -> Result<()> {
-    use palette::{LinSrgba, Pixel, Srgba};
-    let mut out_image = image::RgbaImage::new(image_width, image_height);
-    image
-        .iter()
-        .zip(out_image.pixels_mut())
-        .for_each(|(linear, dst)| {
-            let linear = LinSrgba::new(linear.red(), linear.green(), linear.blue(), 1.0);
-            let srgb = Srgba::from_linear(linear);
-            let bytes: [u8; 4] = srgb.into_format().into_raw();
-            *dst = image::Rgba(bytes);
-        });
-    info!("Saving image to {path}");
-    Ok(out_image.save(path)?)
+// Todo: control camera movement.
+// Todo: control material value interpolation.
+// Todo: a single photo mode.
+// Todo: annotations, just like brdf visualizations.
+// Todo: allow arbitrary aspect ratios by modifying the original perspective matrix.
+#[derive(Serialize, Deserialize, Debug)]
+struct OfflineConfig {
+    samples_per_pixel: NonZeroU32,
+    image_scale: NonZeroU32,
+    frame_count: NonZeroU32,
+    frame_delay_num: NonZeroU16,
+    frame_delay_den: NonZeroU16,
+    material_mappings: Vec<MaterialMapping>,
 }
 
-#[allow(dead_code)]
-fn create_checkerboard_texture() {
-    let w = 32;
-    let h = 32;
-    let mut img = vec![];
-    let b = 0.5;
-    for y in 0..h {
-        for x in 0..w {
-            if (x + y) % 2 == 0 {
-                img.push(ColorRgb::new(b, b, b));
-            } else {
-                img.push(ColorRgb::new(1.0, 1.0, 1.0));
-            }
+#[derive(Serialize, Deserialize, Debug)]
+struct MaterialMapping {
+    name: String,
+    field: glb::MaterialField,
+    value: glb::DynamicTexture,
+}
+
+fn offline() -> Result<()> {
+    // Load config.
+    let config = {
+        let config_path = manifest_dir().join("src/assets/rounded_cube.ron");
+        let contents = std::fs::read_to_string(config_path)?;
+        let config: OfflineConfig = ron::from_str(&contents)?;
+        info!("Config: {config:?}");
+        config
+    };
+    let samples_per_pixel = config.samples_per_pixel.get();
+    let frame_count = config.frame_count.get();
+    let image_scale = config.image_scale.get();
+
+    let image_aspect = (16, 9);
+    let image_size = (image_aspect.0 * image_scale, image_aspect.1 * image_scale);
+    let frame_delay_num = config.frame_delay_num.get();
+    let frame_delay_den = config.frame_delay_den.get();
+    let material_mappings = config.material_mappings;
+
+    // Init glb scene.
+    let (glb_scene, mut dyn_scene) = glb::Scene::create(include_bytes!("assets/rounded_cube.glb"))?;
+
+    // Apply material mappings.
+    for mapping in material_mappings {
+        use itertools::Itertools;
+        if let Some((material_index, _)) = glb_scene
+            .materials
+            .iter()
+            .find_position(|m| m.name == mapping.name)
+        {
+            let material = &dyn_scene.materials[material_index];
+            let texture_index = match mapping.field {
+                glb::MaterialField::BaseColor => material.base_color,
+                glb::MaterialField::Metallic => material.metallic,
+                glb::MaterialField::Roughness => material.roughness,
+            } as usize;
+            dyn_scene.textures[texture_index] = mapping.value;
+            dyn_scene.replaced_textures.set(texture_index, true);
         }
     }
-    save_image(&img, (w, h), "checkerboard.png").unwrap();
+
+    // Init cpupt.
+    let raytracer = cpupt::Raytracer::create(
+        cpupt::Params {
+            samples_per_pixel,
+            ..cpupt::Params::default()
+        },
+        glb_scene,
+    );
+
+    // Render frames.
+    let frames = {
+        use easer::functions::*;
+        use indicatif::{ProgressBar, ProgressStyle};
+
+        let timer = Instant::now();
+        let hemisphere_sampler = HemisphereSampler::Cosine;
+        let visualize_normals = false;
+        let pb = ProgressBar::new(u64::from(frame_count)).with_style(ProgressStyle::with_template(
+            "{wide_bar} elapsed={elapsed_precise} eta={eta_precise}",
+        )?);
+        let mut frames = vec![];
+        for frame_index in 0..frame_count {
+            let time = (frame_index as f32 + 0.5) / frame_count as f32;
+            let time = Cubic::ease_in_out(time, 0.0, 1.0, 1.0);
+            let camera_angle = time * PI / 4.0;
+            let camera_transform = Mat4::from_axis_angle(&Vec3::y_axis(), camera_angle);
+            raytracer.send_input(cpupt::Input {
+                camera_transform,
+                image_size,
+                hemisphere_sampler,
+                dyn_scene: dyn_scene.clone(),
+                visualize_normals,
+            });
+            let mut latest_frame: Option<img::RgbImage> = None;
+            for _ in 0..samples_per_pixel {
+                let output = raytracer.recv_output().expect("Something went wrong");
+                latest_frame = Some(img::RgbImage::from_colors(&output.image, output.image_size));
+            }
+            frames.push(latest_frame.unwrap());
+            pb.inc(1);
+        }
+        pb.finish();
+        info!("Rendering took {} seconds", timer.elapsed().as_secs_f64());
+        frames
+    };
+
+    // Make boomerang.
+    let frames = img::create_boomerang(frames);
+
+    // Render animation.
+    img::animation_render(
+        &img::AnimationParams {
+            delay_num: frame_delay_num,
+            delay_den: frame_delay_den,
+        },
+        "work/test.png",
+        frames,
+    )?;
+
+    // Cleanup.
+    raytracer.terminate();
+
+    Ok(())
 }
 
 //

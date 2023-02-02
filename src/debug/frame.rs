@@ -1,11 +1,11 @@
 use super::*;
 
-pub type Frame = image::RgbImage;
+pub type Frame = img::RgbImage;
 
 pub trait Draw {
     fn into_inner(self) -> Frame;
 
-    fn draw_vector(&mut self, vector: bxdfs::LocalVector, color: image::Rgb<u8>);
+    fn draw_vector(&mut self, vector: bxdfs::LocalVector, color: ColorRgb);
     fn draw_intensity(&mut self, pixel_x: u32, pixel_y: u32, intensity: f32);
     fn vector_from_pixel(&mut self, pixel_x: u32, pixel_y: u32) -> Option<bxdfs::LocalVector>;
 
@@ -33,7 +33,7 @@ impl Draw for Angle {
         self.0
     }
 
-    fn draw_vector(&mut self, vector: bxdfs::LocalVector, color: image::Rgb<u8>) {
+    fn draw_vector(&mut self, vector: bxdfs::LocalVector, color: ColorRgb) {
         let spherical = Spherical::from_cartesian(normal!(vector.0)).normalized();
         assert!(
             (0.0..=0.5).contains(&spherical.angle_y()),
@@ -55,9 +55,11 @@ impl Draw for Angle {
             (0.0..=1.0).contains(&intensity),
             "Intensity must be between 0..1, got {intensity} instead"
         );
-        let gray = (255.0 * intensity) as u8;
-        self.0
-            .put_pixel(pixel_x, pixel_y, image::Rgb([gray, gray, gray]));
+        self.0.put_pixel(
+            pixel_x,
+            pixel_y,
+            ColorRgb::new(intensity, intensity, intensity),
+        );
     }
 
     fn vector_from_pixel(&mut self, pixel_x: u32, pixel_y: u32) -> Option<bxdfs::LocalVector> {
@@ -89,7 +91,7 @@ impl Draw for Hemisphere {
         self.0
     }
 
-    fn draw_vector(&mut self, vector: bxdfs::LocalVector, color: image::Rgb<u8>) {
+    fn draw_vector(&mut self, vector: bxdfs::LocalVector, color: ColorRgb) {
         let width = self.0.width();
         let height = self.0.height();
         let vector = vector.0;
@@ -108,9 +110,11 @@ impl Draw for Hemisphere {
             (0.0..=1.0).contains(&intensity),
             "Intensity must be between 0..1, got {intensity} instead"
         );
-        let gray = (255.0 * intensity) as u8;
-        self.0
-            .put_pixel(pixel_x, pixel_y, image::Rgb([gray, gray, gray]));
+        self.0.put_pixel(
+            pixel_x,
+            pixel_y,
+            ColorRgb::new(intensity, intensity, intensity),
+        );
     }
 
     fn vector_from_pixel(&mut self, pixel_x: u32, pixel_y: u32) -> Option<bxdfs::LocalVector> {
