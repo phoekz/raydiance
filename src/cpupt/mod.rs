@@ -138,15 +138,13 @@ impl Raytracer {
             let output_send = output_send;
             let terminate_recv = terminate_recv;
 
-            let mut uniform_sampler = sampling::UniformSampler::new();
-
             let mut input = Input::default();
             let mut sample_index = 0;
             let mut world_from_clip = Mat4::identity();
             let mut camera_position = Point3::origin();
             let mut timer = Instant::now();
             let mut ray_stats = intersection::RayBvhHitStats::default();
-            let mut pixel_sample_buffer = Vec::<ColorRgb>::new();
+            let mut pixel_buffer = Vec::<ColorRgb>::new();
 
             loop {
                 // Check for termination command.
@@ -167,15 +165,15 @@ impl Raytracer {
                 // If the inputs have changed, reset state.
                 if let Some(latest_input) = latest_input {
                     if latest_input != input {
-                        info!("Reset raytracer with new input");
+                        debug!("Reset raytracer with new input");
 
                         // Update input.
                         input = latest_input;
 
                         // Reset sampling state.
                         sample_index = 0;
-                        pixel_sample_buffer.clear();
-                        pixel_sample_buffer.resize(
+                        pixel_buffer.clear();
+                        pixel_buffer.resize(
                             (input.image_size.0 * input.image_size.1) as usize,
                             ColorRgb::BLACK,
                         );
@@ -201,39 +199,58 @@ impl Raytracer {
                     continue;
                 }
 
-                // Render.
+                // Rendering.
                 if sample_index < params.samples_per_pixel {
+                    // Unpack.
                     let image_size = input.image_size;
-                    let pixel_count = image_size.0 * image_size.1;
-                    for pixel_index in 0..pixel_count {
-                        let pixel_x = pixel_index % image_size.0;
-                        let pixel_y = pixel_index / image_size.0;
-                        let radiance = radiance(
-                            (pixel_x, pixel_y),
-                            image_size,
-                            camera_position,
-                            world_from_clip,
-                            &mut uniform_sampler,
-                            &input,
-                            &params,
-                            &scene,
-                            &glb_scene,
-                            &input.dyn_scene,
-                            &mut ray_stats,
-                            materials,
-                        );
-                        pixel_sample_buffer[pixel_index as usize] += radiance;
+
+                    // Render tiles.
+                    let tiles = PixelTiles::new(image_size.0, image_size.1)
+                        .into_iter()
+                        .collect::<Vec<_>>();
+                    let tile_results = tiles
+                        .into_par_iter()
+                        .map(|tile| {
+                            let (tile_radiance, tile_ray_stats) = tile_radiance(
+                                &tile,
+                                image_size,
+                                sample_index,
+                                camera_position,
+                                world_from_clip,
+                                &input,
+                                &params,
+                                &scene,
+                                &glb_scene,
+                                &input.dyn_scene,
+                                materials,
+                            );
+                            (tile, tile_radiance, tile_ray_stats)
+                        })
+                        .collect::<Vec<_>>();
+
+                    // Accumulate results.
+                    for (tile, tile_radiance, tile_ray_stats) in tile_results {
+                        let mut src_pixel_index = 0;
+                        for pixel_y in tile.start_y..tile.end_y {
+                            for pixel_x in tile.start_x..tile.end_x {
+                                let dst_pixel_index = (pixel_x + pixel_y * image_size.0) as usize;
+                                let src_pixel = tile_radiance[src_pixel_index];
+                                let dst_pixel = &mut pixel_buffer[dst_pixel_index];
+                                *dst_pixel += src_pixel;
+                                src_pixel_index += 1;
+                            }
+                        }
+                        ray_stats += tile_ray_stats;
                     }
 
                     // Normalize the current image, send it.
                     let normalization_factor = 1.0 / (sample_index + 1) as f32;
-                    let image = pixel_sample_buffer
+                    let image = pixel_buffer
                         .clone()
                         .into_iter()
                         .map(|sample| sample * normalization_factor)
                         .collect();
                     sample_index += 1;
-
                     output_send.send(Output {
                         image,
                         image_size,
@@ -244,12 +261,13 @@ impl Raytracer {
                     // Rendering has completed.
                     if sample_index == params.samples_per_pixel {
                         let elapsed = timer.elapsed().as_secs_f64();
-                        info!(
-                            "Rendering took {:.03} s, {:.03} rays/s",
+                        debug!(
+                            "Rendering took {:.03} s, {:.03} rays/s, {:.03} samples/s",
                             elapsed,
-                            ray_stats.rays as f64 / elapsed
+                            ray_stats.rays as f64 / elapsed,
+                            f64::from(params.samples_per_pixel) / elapsed
                         );
-                        debug!("Stats: {ray_stats:#?}");
+                        debug!("Stats:\n{ray_stats}");
                     }
                 } else {
                     // Avoid busy looping.
@@ -287,23 +305,77 @@ impl Raytracer {
     }
 }
 
-fn radiance(
-    pixel: (u32, u32),
+const PIXEL_TILE_SIZE: usize = 16;
+
+const fn pixel_tile_count() -> usize {
+    PIXEL_TILE_SIZE * PIXEL_TILE_SIZE
+}
+
+fn tile_radiance(
+    tile: &PixelTile,
     image_size: (u32, u32),
+    sample_index: u32,
     camera_position: Point3,
     world_from_clip: Mat4,
-    uniform: &mut sampling::UniformSampler,
     input: &Input,
     params: &Params,
     scene: &Scene,
     glb_scene: &glb::Scene,
     dyn_scene: &glb::DynamicScene,
-    ray_stats: &mut intersection::RayBvhHitStats,
     materials: &[glb::Material],
-) -> ColorRgb {
+) -> ([ColorRgb; pixel_tile_count()], intersection::RayBvhHitStats) {
+    let mut tile_radiance: [ColorRgb; pixel_tile_count()] = [ColorRgb::BLACK; pixel_tile_count()];
+    let mut tile_pixel_index = 0;
+    let mut tile_ray_stats = intersection::RayBvhHitStats::default();
+    for pixel_y in tile.start_y..tile.end_y {
+        for pixel_x in tile.start_x..tile.end_x {
+            let (radiance, ray_stats) = radiance(
+                (pixel_x, pixel_y),
+                image_size,
+                sample_index,
+                camera_position,
+                world_from_clip,
+                input,
+                params,
+                scene,
+                glb_scene,
+                dyn_scene,
+                materials,
+            );
+            tile_radiance[tile_pixel_index] = radiance;
+            tile_pixel_index += 1;
+            tile_ray_stats += ray_stats;
+        }
+    }
+    (tile_radiance, tile_ray_stats)
+}
+
+fn radiance(
+    pixel: (u32, u32),
+    image_size: (u32, u32),
+    sample_index: u32,
+    camera_position: Point3,
+    world_from_clip: Mat4,
+    input: &Input,
+    params: &Params,
+    scene: &Scene,
+    glb_scene: &glb::Scene,
+    dyn_scene: &glb::DynamicScene,
+    materials: &[glb::Material],
+) -> (ColorRgb, intersection::RayBvhHitStats) {
     use bxdfs::Bxdf;
 
+    // Unpack.
     let hemisphere = input.hemisphere_sampler;
+
+    // Init stats.
+    let mut ray_stats = intersection::RayBvhHitStats::default();
+
+    // Computes unique seed for every pixel over all samples.
+    let seed = u64::from(sample_index + 1) * u64::from(pixel.0 + pixel.1 * image_size.0);
+    let mut uniform = sampling::UniformSampler::new_with_seed(seed);
+
+    // Create primary ray.
     let mut ray = {
         sampling::primary_ray(
             pixel,
@@ -314,6 +386,8 @@ fn radiance(
             uniform.sample(),
         )
     };
+
+    // Main tracing loop.
     let mut radiance = ColorRgb::BLACK;
     let mut throughput = ColorRgb::WHITE;
     for _ in 0..params.max_bounce_count {
@@ -328,7 +402,7 @@ fn radiance(
             &mut closest_hit,
             &mut barycentrics,
             &mut triangle_index,
-            ray_stats,
+            &mut ray_stats,
         );
 
         // Special case: ray hit the sky.
@@ -434,5 +508,83 @@ fn radiance(
             bxdf_sample
         );
     }
-    radiance
+    (radiance, ray_stats)
+}
+
+struct PixelTile {
+    start_x: u32,
+    end_x: u32,
+    start_y: u32,
+    end_y: u32,
+}
+
+struct PixelTiles {
+    image_w: u32,
+    image_h: u32,
+    tile_w: u32,
+    tile_index: u32,
+    tile_count: u32,
+}
+
+impl PixelTiles {
+    pub fn new(image_w: u32, image_h: u32) -> Self {
+        assert!(image_w > 0, "image_w={image_w}");
+        assert!(image_h > 0, "image_h={image_h}");
+        let tile = PIXEL_TILE_SIZE as u32;
+        let tile_w = (image_w + tile - 1) / tile;
+        let tile_h = (image_h + tile - 1) / tile;
+        let tile_count = tile_w * tile_h;
+        Self {
+            image_w,
+            image_h,
+            tile_w,
+            tile_index: 0,
+            tile_count,
+        }
+    }
+}
+
+impl Iterator for PixelTiles {
+    type Item = PixelTile;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.tile_index == self.tile_count {
+            return None;
+        }
+        let tile = PIXEL_TILE_SIZE as u32;
+        let tile_x = self.tile_index % self.tile_w;
+        let tile_y = self.tile_index / self.tile_w;
+        let start_x = tile_x * tile;
+        let start_y = tile_y * tile;
+        let end_x = (start_x + tile).min(self.image_w);
+        let end_y = (start_y + tile).min(self.image_h);
+        self.tile_index += 1;
+        Some(PixelTile {
+            start_x,
+            end_x,
+            start_y,
+            end_y,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tile_iterator() {
+        let image_w = 800_u32;
+        let image_h = 450_u32;
+        let mut hit_pixels = bitvec::bitvec!();
+        hit_pixels.resize((image_w * image_h) as usize, false);
+        for tile in PixelTiles::new(image_w, image_h) {
+            for y in tile.start_y..tile.end_y {
+                for x in tile.start_x..tile.end_x {
+                    hit_pixels.set((x + y * image_w) as usize, true);
+                }
+            }
+        }
+        assert!(hit_pixels.all());
+    }
 }
