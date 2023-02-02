@@ -209,10 +209,32 @@ pub struct RayBvhHitStats {
 
 impl std::ops::AddAssign for RayBvhHitStats {
     fn add_assign(&mut self, rhs: Self) {
-        self.ray_triangle_tests = rhs.ray_triangle_tests;
-        self.ray_triangle_hits = rhs.ray_triangle_hits;
-        self.ray_aabb_tests = rhs.ray_aabb_tests;
-        self.ray_aabb_hits = rhs.ray_aabb_hits;
+        self.rays += rhs.rays;
+        self.ray_triangle_tests += rhs.ray_triangle_tests;
+        self.ray_triangle_hits += rhs.ray_triangle_hits;
+        self.ray_aabb_tests += rhs.ray_aabb_tests;
+        self.ray_aabb_hits += rhs.ray_aabb_hits;
+    }
+}
+
+impl std::fmt::Display for RayBvhHitStats {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use num_format::{Locale, ToFormattedString};
+        macro_rules! stat {
+            ($stat:ident) => {
+                writeln!(
+                    f,
+                    concat!(stringify!($stat), ": {}"),
+                    self.$stat.to_formatted_string(&Locale::en)
+                )
+            };
+        }
+        stat!(rays)?;
+        stat!(ray_triangle_tests)?;
+        stat!(ray_triangle_hits)?;
+        stat!(ray_aabb_tests)?;
+        stat!(ray_aabb_hits)?;
+        Ok(())
     }
 }
 

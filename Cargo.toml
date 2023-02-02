@@ -26,6 +26,7 @@ log = "0.4.17"
 markdown = "1.0.0-alpha.6"
 nalgebra = { version = "0.32.1", features = ["bytemuck"] }
 num = "0.4.0"
+num-format = "0.4.4"
 palette = { version = "0.6.1", features = ["bytemuck"] }
 png = "0.17.7"
 rand = "0.8.5"
