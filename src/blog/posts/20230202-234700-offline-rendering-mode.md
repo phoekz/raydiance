@@ -6,7 +6,8 @@
 />
 
 <video width="800" height="450" autoplay loop muted playsinline>
-    <source src="images/20230202-235500.mp4" type="video/mp4" />
+    <source src="images/20230202-235500-h265.mp4" type="video/mp4" />
+    <source src="images/20230202-235500-vp9.webm" type="video/webm" />
 </video>
 
 The raytracer can now run "offline", which means that we never start up the
