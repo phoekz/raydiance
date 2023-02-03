@@ -152,8 +152,8 @@ date="2023-02-02"
 commit="17e72dada89f79bdc220726be7089aedc419dc3f"
 /></p>
 <video width="800" height="450" autoplay loop muted playsinline>
-    <source src="images/20230202-235500-h265.mp4" type="video/mp4" />
-    <source src="images/20230202-235500-vp9.webm" type="video/webm" />
+    <source src="media/offline-rendering-mode/title-h265.mp4" type="video/mp4" />
+    <source src="media/offline-rendering-mode/title-vp9.webm" type="video/webm" />
 </video>
 <p>The raytracer can now run &quot;offline&quot;, which means that we never start up the
 Vulkan rasterizer, and the program exits after rendering is done. This mode can
@@ -172,7 +172,8 @@ date="2023-02-02"
 commit="d129b2601d8d95112cbd14a0f5e0a7c35a9953da"
 /></p>
 <video width="800" height="450" autoplay loop muted playsinline>
-    <source src="images/20230202-235429.mp4" type="video/mp4" />
+    <source src="media/multithreaded-raytracer/title-h265.mp4" type="video/mp4" />
+    <source src="media/multithreaded-raytracer/title-vp9.webm" type="video/webm" />
 </video>
 <p>Raytracer is now multithreaded with <a href="https://crates.io/crates/rayon"><code>rayon</code></a>.
 We split the image into 16x16 pixel tiles, and use <code>into_par_iter()</code> to render
@@ -203,7 +204,7 @@ link="a-new-shiny-specular-brdf"
 date="2023-01-31"
 commit="bf578f68f0c0906a9cb50548eb3e830cd69222d6"
 /></p>
-<p><img src="images/20230130-192913.png" alt="" /></p>
+<p><img src="media/a-new-shiny-specular-brdf/title.png" alt="" /></p>
 <h1>A very brief overview of microfacet models</h1>
 <p>A popular way to model physically based reflective surfaces is to imagine that
 such surfaces are built of small perfect mirrors called microfacets.
@@ -233,7 +234,7 @@ BRDFs</a>.</p>
 <h1>Microfacet models in practice</h1>
 <article-image>
     <article-caption-image>
-        <img src="images/20230129-140531-bug.png"></img>
+        <img src="media/a-new-shiny-specular-brdf/bug.png"></img>
         What happens if we use a wrong coordinate system
     </article-caption-image>
 </article-image>
@@ -262,7 +263,7 @@ can use the same orthonormal basis from the previous posts to go from world to
 local space, and once we are done with all BRDF math, we can transform the
 results back to world space.</p>
 <h1>Integrating microfacets with Disney diffuse BRDF</h1>
-<p><img src="images/20230131-010421-metallic.gif" alt="" /></p>
+<p><img src="media/a-new-shiny-specular-brdf/metallic-lerp.apng" alt="" /></p>
 <p>The new specular BRDF introduced three new parameters to our material:</p>
 <ul>
 <li><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal">m</span><span class="mord mathnormal">e</span><span class="mord mathnormal">t</span><span class="mord mathnormal">a</span><span class="mord mathnormal" style="margin-right:0.01968em;">ll</span><span class="mord mathnormal">i</span><span class="mord mathnormal">c</span></span></span></span> is a linear blend between <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal">d</span><span class="mord mathnormal">i</span><span class="mord mathnormal">e</span><span class="mord mathnormal" style="margin-right:0.01968em;">l</span><span class="mord mathnormal">ec</span><span class="mord mathnormal">t</span><span class="mord mathnormal" style="margin-right:0.02778em;">r</span><span class="mord mathnormal">i</span><span class="mord mathnormal">c</span></span></span></span> and <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">1</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal">m</span><span class="mord mathnormal">e</span><span class="mord mathnormal">t</span><span class="mord mathnormal">a</span><span class="mord mathnormal" style="margin-right:0.01968em;">ll</span><span class="mord mathnormal">i</span><span class="mord mathnormal">c</span></span></span></span>. The
@@ -285,18 +286,18 @@ be chosen.</p>
 <h1>Animated BRDF visualizations</h1>
 <article-image-pair>
     <article-caption-image>
-        <img src="images/20230131-000000-microfacet-reflection-r-scalar-sobol-hemisphere.png"/>
+        <img src="media/a-new-shiny-specular-brdf/microfacet-reflection-r-scalar-sobol-hemisphere.png"/>
     </article-caption-image>
     <article-caption-image>
-        <img src="images/20230131-000000-microfacet-reflection-r-incoming-sobol-hemisphere.png"/>
+        <img src="media/a-new-shiny-specular-brdf/microfacet-reflection-r-incoming-sobol-hemisphere.png"/>
     </article-caption-image>
     <article-caption-image>
-        <img src="images/20230131-000000-microfacet-reflection-r-scalar-sobol-angle.png"/>
+        <img src="media/a-new-shiny-specular-brdf/microfacet-reflection-r-scalar-sobol-angle.png"/>
         Fixed incoming direction<br/>
         Roughness interpolates between <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0</span></span></span></span> and <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">1</span></span></span></span>
     </article-caption-image>
     <article-caption-image>
-        <img src="images/20230131-000000-microfacet-reflection-r-incoming-sobol-angle.png"/>
+        <img src="media/a-new-shiny-specular-brdf/microfacet-reflection-r-incoming-sobol-angle.png"/>
         Incoming direction interpolates along x-axis<br/>
         Fixed roughness to <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0.25</span></span></span></span>
     </article-caption-image>
@@ -323,7 +324,8 @@ We chose APNG because:</p>
 </ul>
 <h1>A simple interactive material editor</h1>
 <video width="800" height="450" autoplay loop muted playsinline>
-    <source src="images/20230131-014036.mp4" type="video/mp4" />
+    <source src="media/a-new-shiny-specular-brdf/material-editor-h265.mp4" type="video/mp4" />
+    <source src="media/a-new-shiny-specular-brdf/material-editor-vp9.webm" type="video/webm" />
 </video>
 <p>Having to recompile the program or exporting a new scene from Blender every time
 we needed to change the roughness or metallic value quickly became a major
@@ -334,11 +336,11 @@ overhaul.</p>
 <h1>Visualizing normals</h1>
 <article-image-pair>
     <article-caption-image>
-        <img src="images/20230131-012835.png" width="100%"/>
+        <img src="media/a-new-shiny-specular-brdf/normal-raytraced.png" width="100%"/>
         Raytraced
     </article-caption-image>
     <article-caption-image>
-        <img src="images/20230131-012842.png" width="100%"/>
+        <img src="media/a-new-shiny-specular-brdf/normal-rasterized.png" width="100%"/>
         Rasterized
     </article-caption-image>
 </article-image-pair>
@@ -357,8 +359,8 @@ link="visualizing-sample-placement"
 date="2023-01-19"
 commit="f5b806749234a4086d84388d7264c0f2fd43122a"
 /></p>
-<p><img src="images/20230120-011300-top.png" alt="" />
-<img src="images/20230120-011300-side.png" alt="" /></p>
+<p><img src="media/visualizing-sample-placement/title-top.png" alt="" />
+<img src="media/visualizing-sample-placement/title-side.png" alt="" /></p>
 <p>Importance sampling Disney specular models is more challenging than our current
 diffuse models. To improve our chances, we created a small tool which visualizes
 where the sample are placed around the hemisphere.</p>
@@ -391,7 +393,7 @@ link="implementing-disney-brdf-diffuse-model"
 date="2023-01-19"
 commit="c43f282e24a6eecb54fa3361a6e5e192453d0d8d"
 /></p>
-<p><img src="images/20230119-035800.gif" alt="" /></p>
+<p><img src="media/implementing-disney-brdf-diffuse-model/title.apng" alt="" /></p>
 <p><a href="https://blog.selfshadow.com/publications/s2012-shading-course/burley/s2012_pbs_disney_brdf_notes_v3.pdf">Disney principled
 BRDF</a>
 is a popular physically based reflectance model developed by Brent Burley et al.
@@ -440,7 +442,8 @@ has no specular terms.</p>
 <li><a href="http://shihchinw.github.io/2015/07/implementing-disney-principled-brdf-in-arnold.html">Shih-Chin - Implementing Disney Principled BRDF in Arnold</a></li>
 <li><a href="https://github.com/mmp/pbrt-v3/blob/master/src/materials/disney.cpp"><code>pbrt-v3 - disney.cpp</code></a></li>
 <li><a href="https://github.com/wdas/brdf">Disney BRDF Explorer</a></li>
-</ul></article-content>
+</ul>
+</article-content>
     <article-commit><p>Commit: <a href="https://github.com/phoekz/raydiance/commit/c43f282e24a6eecb54fa3361a6e5e192453d0d8d"><code>c43f282e</code></a></p></article-commit>
 </article>
 <hr><h1 id="texture-support"><a href="#texture-support">Texture support</a></h1>
@@ -452,7 +455,7 @@ link="texture-support"
 date="2023-01-15"
 commit="41a05a78d6fbba82436faece9815c4e8b3da9951"
 /></p>
-<p><img src="images/20230115-204600.webp" alt="" /></p>
+<p><img src="media/texture-support/title.apng" alt="" /></p>
 <p>Raydiance now supports texture mapped surfaces. We used multiple shortcuts to
 get a basic implementation going:</p>
 <ul>
@@ -474,7 +477,7 @@ link="new-user-interface"
 date="2023-01-15"
 commit="9fb5a3800a337b5d663e1c83932e03fe96abfe0f"
 /></p>
-<p><img src="images/20230115-140255.webp" alt="" /></p>
+<p><img src="media/new-user-interface/title.apng" alt="" /></p>
 <p>It was time to replace the window title hacks and random keybindings with a real
 graphical user interface. We use the the excellent <a href="https://github.com/ocornut/imgui">Dear
 ImGui</a> library. Since our project is written
@@ -482,7 +485,8 @@ in Rust, we use <a href="https://crates.io/crates/imgui"><code>imgui</code></a> 
 <a href="https://crates.io/crates/imgui-winit-support"><code>imgui-winit-support</code></a> crates to
 wrap the original C++ library and interface with
 <a href="https://crates.io/crates/winit"><code>winit</code></a>.</p>
-<p><span class="katex-display"><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">Λ</span><span class="mopen">(</span><span class="mord mathnormal">x</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.0074em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">π</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span></p></article-content>
+<p><span class="katex-display"><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">Λ</span><span class="mopen">(</span><span class="mord mathnormal">x</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.0074em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">π</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span></p>
+</article-content>
     <article-commit><p>Commit: <a href="https://github.com/phoekz/raydiance/commit/9fb5a3800a337b5d663e1c83932e03fe96abfe0f"><code>9fb5a380</code></a></p></article-commit>
 </article>
 <hr><h1 id="cosine-weighted-hemisphere-sampling"><a href="#cosine-weighted-hemisphere-sampling">Cosine-weighted hemisphere sampling</a></h1>
@@ -494,7 +498,7 @@ link="cosine-weighted-hemisphere-sampling"
 date="2023-01-13"
 commit="2e0e31997c20714ccc6a3735cf3a5c0a899f9ab9"
 /></p>
-<p><img src="images/20230113-134900.webp" alt="" /></p>
+<p><img src="media/cosine-weighted-hemisphere-sampling/title.apng" alt="" /></p>
 <p>To get a cleaner picture, we could increase the number of samples, but that
 would increase render times, which forces us to find ways to make the renderer
 run faster. Alternatively, we could be smarter at using our limited number of
@@ -507,11 +511,11 @@ implementation is based on
 <a href="https://www.pbr-book.org/3ed-2018/Monte_Carlo_Integration/2D_Sampling_with_Multidimensional_Transformations#Cosine-WeightedHemisphereSampling"><code>pbrt</code></a>.</p>
 <article-image-pair>
     <article-caption-image>
-        <img src="images/20230113-134400-uniform.gif"></img>
+        <img src="media/cosine-weighted-hemisphere-sampling/uniform.apng"/>
         Uniform sampling
     </article-caption-image>
     <article-caption-image>
-        <img src="images/20230113-134400-cosine.gif"></img>
+        <img src="media/cosine-weighted-hemisphere-sampling/cosine.apng"/>
         Cosine-weighted sampling
     </article-caption-image>
 </article-image-pair>
@@ -530,7 +534,7 @@ link="progressive-rendering"
 date="2023-01-12"
 commit="f50c3b6f92eedd52e43406ee4960d3b50b5025ac"
 /></p>
-<p><img src="images/20230112-215200.webp" alt="" /></p>
+<p><img src="media/progressive-rendering/title.apng" alt="" /></p>
 <p>Previously we waited until the entire image was completed before displaying to
 the screen. In this commit we redesigned the path tracing loop to render
 progressively and submit intermediate frames as soon as they are finished. This
@@ -547,7 +551,7 @@ link="interactive-cpu-path-tracer"
 date="2023-01-12"
 commit="956e4bf6a4fdb2db5ea790acac1227c0297e58ac"
 /></p>
-<p><img src="images/20230112-152800.webp" alt="" /></p>
+<p><img src="media/interactive-cpu-path-tracer/title.apng" alt="" /></p>
 <p>This commit merges the CPU path tracer with the Vulkan renderer, and makes the
 camera interactive. As soon as the path tracer finishes rendering, the image is
 uploaded to the GPU and rendered on the window. We can also toggle between
@@ -598,7 +602,7 @@ link="path-tracing-on-cpu"
 date="2023-01-11"
 commit="4ade2d5b2acc3da8fabb5d275b9152171ed01ea9"
 /></p>
-<p><img src="images/20230111-231544.png" alt="" /></p>
+<p><img src="media/path-tracing-on-cpu/title.png" alt="" /></p>
 <p>Finally, we are getting into the main feature of <code>raydiance</code>: rendering pretty
 images using ray tracing. We start with a pure CPU implementation. The plan is
 to develop and maintain the CPU version as the reference implementation for the
@@ -649,7 +653,7 @@ link="adding-multisampled-antialiasing-msaa"
 date="2023-01-09"
 commit="ca2a23caaa5e9d9b321a50389af492fbc708b560"
 /></p>
-<p><img src="images/20230110-001539.png" alt="" /></p>
+<p><img src="media/adding-multisampled-antialiasing-msaa/title.png" alt="" /></p>
 <p>This was pretty easy. Similarly to depth buffer, we create a new color buffer
 which will be multisampled. The depth buffer is also updated to support
 multisampling. Then we update all the <code>resolve*</code> fields in
@@ -667,12 +671,12 @@ link="more-triangles-cameras-light-and-depth"
 date="2023-01-09"
 commit="cb1bcc1975e3860b7208cffb4286fec3e91cc5d2"
 /></p>
-<p><img src="images/20230109-181800.webp" alt="spinning cube" /></p>
+<p><img src="media/more-triangles-cameras-light-and-depth/title.apng" alt="spinning cube" /></p>
 <p>A lot has happened since our single hardcoded triangle. We can now render
 shaded, depth tested, transformed, indexed triangle lists, with perspective
 projection.</p>
 <h1>Loading and rendering GLTF scenes</h1>
-<p><img src="images/20230109-182433.png" alt="" /></p>
+<p><img src="media/more-triangles-cameras-light-and-depth/blender-view.png" alt="" /></p>
 <p>We created a simple &quot;cube on a plane&quot; scene in Blender. Each object has a
 &quot;Principled BSDF&quot; material attached to it. This material is <a href="https://docs.blender.org/manual/en/latest/addons/import_export/scene_gltf2.html#extensions">well
 supported</a>
@@ -715,7 +719,7 @@ This extension sounds like it could further simplify working with Vulkan, which
 is really exciting. We will come back to it in the future once we get into
 texture mapping.</p>
 <h1>Depth testing with <code>VK_KHR_dynamic_rendering</code></h1>
-<p><img src="images/20230109-190941.png" alt="" /></p>
+<p><img src="media/more-triangles-cameras-light-and-depth/depth-attachment.png" alt="" /></p>
 <p>Depth testing requires a depth texture, which we create at startup, and
 re-create when the window changes size. To enable depth testing with
 <code>VK_KHR_dynamic_rendering</code>, we had to extend our graphics pipeline with a new
@@ -735,7 +739,7 @@ link="first-triangle"
 date="2023-01-08"
 commit="c8f9ef2c0f3b51ddfd71f33ec086fca1531051ab"
 /></p>
-<p><img src="images/20230108-193100.webp" alt="first triangle" /></p>
+<p><img src="media/first-triangle/title.apng" alt="first triangle" /></p>
 <p>This is the simplest triangle example rendered without any device memory
 allocations. The triangle is hard coded in the vertex shader and we index into
 its attributes with vertex index.</p>
@@ -743,7 +747,8 @@ its attributes with vertex index.</p>
 <a href="https://doc.rust-lang.org/cargo/reference/build-scripts.html"><code>build.rs</code></a> which
 builds <code>.glsl</code> source code into <code>.spv</code> binary format using Google's
 <a href="https://github.com/google/shaderc/tree/main/glslc"><code>glslc</code></a>, which is included
-in <a href="https://vulkan.lunarg.com/sdk/home">LunarG's Vulkan SDK</a></p></article-content>
+in <a href="https://vulkan.lunarg.com/sdk/home">LunarG's Vulkan SDK</a></p>
+</article-content>
     <article-commit><p>Commit: <a href="https://github.com/phoekz/raydiance/commit/c8f9ef2c0f3b51ddfd71f33ec086fca1531051ab"><code>c8f9ef2c</code></a></p></article-commit>
 </article>
 <hr><h1 id="clearing-window"><a href="#clearing-window">Clearing window with <code>VK_KHR_dynamic_rendering</code></a></h1>
@@ -755,7 +760,7 @@ link="clearing-window"
 date="2023-01-08"
 commit="0f6d7f1bf1b22d1fff43e87080c854eadb3e459d"
 /></p>
-<p><img src="images/20230108-170100.webp" alt="resizable color window" /></p>
+<p><img src="media/clearing-window/title.apng" alt="resizable color window" /></p>
 <p>After around 1000 LOC, we have a barebones Vulkan application which:</p>
 <ol>
 <li>Load Vulkan with <a href="https://crates.io/crates/ash"><code>ash</code></a> crate.</li>
@@ -783,19 +788,20 @@ by Sascha Willems as a reference.</p>
 use of <code>unsafe</code>. We will do a <a href="https://caseymuratori.com/blog_0015">semantic
 compression</a> pass later once we have
 learned more about how the program should be laid out.</p>
-<p>Next we will continue with more Vulkan code to get a triangle on the screen.</p></article-content>
+<p>Next we will continue with more Vulkan code to get a triangle on the screen.</p>
+</article-content>
     <article-commit><p>Commit: <a href="https://github.com/phoekz/raydiance/commit/0f6d7f1bf1b22d1fff43e87080c854eadb3e459d"><code>0f6d7f1b</code></a></p></article-commit>
 </article>
-<hr><h1 id="hello-init"><a href="#hello-init">Hello, <code>winit</code>!</a></h1>
+<hr><h1 id="hello-winit"><a href="#hello-winit">Hello, <code>winit</code>!</a></h1>
 <article>
     <article-date>2023-01-07</article-date>
     <article-content><p><info
 title="Hello, <code>winit</code>!"
-link="hello-init"
+link="hello-winit"
 date="2023-01-07"
 commit="ff4c31c2c6c2039d33bfd07865448da963febfd6"
 /></p>
-<p><img src="images/20230107-161828.png" alt="empty window" /></p>
+<p><img src="media/hello-winit/title.png" alt="empty window" /></p>
 <p>Before anything interesting can happen, we are going to need a window to draw
 on. We use <a href="https://crates.io/crates/winit"><code>winit</code></a> crate for windowing and
 handling inputs. For convenience, we bound the Escape key to close the window

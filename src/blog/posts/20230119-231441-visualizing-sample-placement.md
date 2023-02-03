@@ -5,8 +5,8 @@
     commit="f5b806749234a4086d84388d7264c0f2fd43122a"
 />
 
-![](images/20230120-011300-top.png)
-![](images/20230120-011300-side.png)
+![](media/visualizing-sample-placement/title-top.png)
+![](media/visualizing-sample-placement/title-side.png)
 
 Importance sampling Disney specular models is more challenging than our current
 diffuse models. To improve our chances, we created a small tool which visualizes

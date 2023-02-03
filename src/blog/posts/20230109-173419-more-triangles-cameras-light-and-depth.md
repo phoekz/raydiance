@@ -5,7 +5,7 @@
     commit="cb1bcc1975e3860b7208cffb4286fec3e91cc5d2"
 />
 
-![spinning cube](images/20230109-181800.webp)
+![spinning cube](media/more-triangles-cameras-light-and-depth/title.apng)
 
 A lot has happened since our single hardcoded triangle. We can now render
 shaded, depth tested, transformed, indexed triangle lists, with perspective
@@ -13,7 +13,7 @@ projection.
 
 # Loading and rendering GLTF scenes
 
-![](images/20230109-182433.png)
+![](media/more-triangles-cameras-light-and-depth/blender-view.png)
 
 We created a simple "cube on a plane" scene in Blender. Each object has a
 "Principled BSDF" material attached to it. This material is [well
@@ -62,7 +62,7 @@ texture mapping.
 
 # Depth testing with `VK_KHR_dynamic_rendering`
 
-![](images/20230109-190941.png)
+![](media/more-triangles-cameras-light-and-depth/depth-attachment.png)
 
 Depth testing requires a depth texture, which we create at startup, and
 re-create when the window changes size. To enable depth testing with

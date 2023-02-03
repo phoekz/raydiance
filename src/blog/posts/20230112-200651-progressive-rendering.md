@@ -5,7 +5,7 @@
     commit="f50c3b6f92eedd52e43406ee4960d3b50b5025ac"
 />
 
-![](images/20230112-215200.webp)
+![](media/progressive-rendering/title.apng)
 
 Previously we waited until the entire image was completed before displaying to
 the screen. In this commit we redesigned the path tracing loop to render

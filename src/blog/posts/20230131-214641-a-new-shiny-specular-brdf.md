@@ -5,7 +5,7 @@
     commit="bf578f68f0c0906a9cb50548eb3e830cd69222d6"
 />
 
-![](images/20230130-192913.png)
+![](media/a-new-shiny-specular-brdf/title.png)
 
 # A very brief overview of microfacet models
 
@@ -31,8 +31,10 @@ The popular [Cook-Torrance
 model](https://inst.eecs.berkeley.edu//~cs283/sp13/lectures/cookpaper.pdf) is
 defined as:
 
-$$f(\omega_i, \omega_o) = \frac{D(\omega_m) F(\omega_i, \omega_m) G(\omega_i,
-\omega_o, \omega_m)}{4 |\omega_i \cdot \omega_g| |\omega_o \cdot \omega_g|}$$
+$$
+f(\omega_i, \omega_o) = \frac{D(\omega_m) F(\omega_i, \omega_m) G(\omega_i,
+\omega_o, \omega_m)}{4 |\omega_i \cdot \omega_g| |\omega_o \cdot \omega_g|}
+$$
 
 $D(\omega_m)$ is the _normal distribution function_, or NDF. It describes how
 microfacet varies with related to the microsurface normal $\omega_m$. Disney
@@ -54,7 +56,7 @@ BRDFs](https://jcgt.org/published/0003/02/03/paper.pdf).
 
 <article-image>
     <article-caption-image>
-        <img src="images/20230129-140531-bug.png"></img>
+        <img src="media/a-new-shiny-specular-brdf/bug.png"></img>
         What happens if we use a wrong coordinate system
     </article-caption-image>
 </article-image>
@@ -63,18 +65,18 @@ Translating math into source code has a couple of gotchas we need to be aware
 of:
 
 - Different papers have different naming conventions (incoming vs light,
-outgoing vs view), different coordinate systems (z is up vs y is up) which can
-get confusing fast if we are not being really consistent.
+  outgoing vs view), different coordinate systems (z is up vs y is up) which can
+  get confusing fast if we are not being really consistent.
 - Floating point inaccuracies can make various terms go to $\infty$ or become a
-$\text{Not a Number}$. For example, if either the incident or outgoing rays are
-really close to being perpendicular to the surface normal, the cosine of their
-angles wrt. surface normal approaches zero. Then, any expression which divides
-by this value results in $\infty$. The program won't crash, but the image will
-slowly become more and more corrupted with black or white pixels. Extra care
-must be taken to clamp such values to a small positive number to avoid dividing
-by zero.
+  $\text{Not a Number}$. For example, if either the incident or outgoing rays are
+  really close to being perpendicular to the surface normal, the cosine of their
+  angles wrt. surface normal approaches zero. Then, any expression which divides
+  by this value results in $\infty$. The program won't crash, but the image will
+  slowly become more and more corrupted with black or white pixels. Extra care
+  must be taken to clamp such values to a small positive number to avoid dividing
+  by zero.
 - Sometimes the sampled vector appears below the hemisphere. In these cases we
-simply discard the whole sample, because those samples have zero reflectance.
+  simply discard the whole sample, because those samples have zero reflectance.
 
 We also use the trick from `pbrt` where they perform all BRDF calculations in a
 local space, where the surface normal $\omega_g=(0,1,0)$. In this local space
@@ -86,7 +88,7 @@ results back to world space.
 
 # Integrating microfacets with Disney diffuse BRDF
 
-![](images/20230131-010421-metallic.gif)
+![](media/a-new-shiny-specular-brdf/metallic-lerp.apng)
 
 The new specular BRDF introduced three new parameters to our material:
 
@@ -113,18 +115,18 @@ be chosen.
 
 <article-image-pair>
     <article-caption-image>
-        <img src="images/20230131-000000-microfacet-reflection-r-scalar-sobol-hemisphere.png"/>
+        <img src="media/a-new-shiny-specular-brdf/microfacet-reflection-r-scalar-sobol-hemisphere.png"/>
     </article-caption-image>
     <article-caption-image>
-        <img src="images/20230131-000000-microfacet-reflection-r-incoming-sobol-hemisphere.png"/>
+        <img src="media/a-new-shiny-specular-brdf/microfacet-reflection-r-incoming-sobol-hemisphere.png"/>
     </article-caption-image>
     <article-caption-image>
-        <img src="images/20230131-000000-microfacet-reflection-r-scalar-sobol-angle.png"/>
+        <img src="media/a-new-shiny-specular-brdf/microfacet-reflection-r-scalar-sobol-angle.png"/>
         Fixed incoming direction<br/>
         Roughness interpolates between $0$ and $1$
     </article-caption-image>
     <article-caption-image>
-        <img src="images/20230131-000000-microfacet-reflection-r-incoming-sobol-angle.png"/>
+        <img src="media/a-new-shiny-specular-brdf/microfacet-reflection-r-incoming-sobol-angle.png"/>
         Incoming direction interpolates along x-axis<br/>
         Fixed roughness to $0.25$
     </article-caption-image>
@@ -154,7 +156,8 @@ These crates were used to create the animations:
 # A simple interactive material editor
 
 <video width="800" height="450" autoplay loop muted playsinline>
-    <source src="images/20230131-014036.mp4" type="video/mp4" />
+    <source src="media/a-new-shiny-specular-brdf/material-editor-h265.mp4" type="video/mp4" />
+    <source src="media/a-new-shiny-specular-brdf/material-editor-vp9.webm" type="video/webm" />
 </video>
 
 Having to recompile the program or exporting a new scene from Blender every time
@@ -169,11 +172,11 @@ overhaul.
 
 <article-image-pair>
     <article-caption-image>
-        <img src="images/20230131-012835.png" width="100%"/>
+        <img src="media/a-new-shiny-specular-brdf/normal-raytraced.png" width="100%"/>
         Raytraced
     </article-caption-image>
     <article-caption-image>
-        <img src="images/20230131-012842.png" width="100%"/>
+        <img src="media/a-new-shiny-specular-brdf/normal-rasterized.png" width="100%"/>
         Rasterized
     </article-caption-image>
 </article-image-pair>

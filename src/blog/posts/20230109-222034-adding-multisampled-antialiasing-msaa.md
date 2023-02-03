@@ -5,7 +5,7 @@
     commit="ca2a23caaa5e9d9b321a50389af492fbc708b560"
 />
 
-![](images/20230110-001539.png)
+![](media/adding-multisampled-antialiasing-msaa/title.png)
 
 This was pretty easy. Similarly to depth buffer, we create a new color buffer
 which will be multisampled. The depth buffer is also updated to support

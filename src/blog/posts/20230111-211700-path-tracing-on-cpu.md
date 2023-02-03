@@ -5,7 +5,7 @@
     commit="4ade2d5b2acc3da8fabb5d275b9152171ed01ea9"
 />
 
-![](images/20230111-231544.png)
+![](media/path-tracing-on-cpu/title.png)
 
 Finally, we are getting into the main feature of `raydiance`: rendering pretty
 images using ray tracing. We start with a pure CPU implementation. The plan is

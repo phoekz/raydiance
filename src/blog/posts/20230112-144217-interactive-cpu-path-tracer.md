@@ -5,7 +5,7 @@
     commit="956e4bf6a4fdb2db5ea790acac1227c0297e58ac"
 />
 
-![](images/20230112-152800.webp)
+![](media/interactive-cpu-path-tracer/title.apng)
 
 This commit merges the CPU path tracer with the Vulkan renderer, and makes the
 camera interactive. As soon as the path tracer finishes rendering, the image is
@@ -28,19 +28,19 @@ Tutorial](https://vulkan-tutorial.com/Texture_mapping/Images).
 However, for rendering we used two tricks:
 
 - To render a fullscreen textured quad, you don't actually need to create vertex
-buffers, set up vertex inputs, and so on. With this
-[trick](https://www.saschawillems.de/blog/2016/08/13/vulkan-tutorial-on-rendering-a-fullscreen-quad-without-buffers/),
-you can use `gl_VertexIndex` intrinsic in the vertex shader to build a huge
-triangle and then calculate the UVs within it. This saves a lot of boilerplate.
+  buffers, set up vertex inputs, and so on. With this
+  [trick](https://www.saschawillems.de/blog/2016/08/13/vulkan-tutorial-on-rendering-a-fullscreen-quad-without-buffers/),
+  you can use `gl_VertexIndex` intrinsic in the vertex shader to build a huge
+  triangle and then calculate the UVs within it. This saves a lot of boilerplate.
 - In Vulkan if you want to sample a texture in your fragment shader, you need to
-create descriptor pools, descriptor set layouts, allocate descriptor sets, make
-sure pipeline layouts are correct, bind the descriptor sets, and so on. With
-[`VK_KHR_push_descriptor`](https://registry.khronos.org/vulkan/specs/1.3-extensions/html/vkspec.html#VK_KHR_push_descriptor)
-extension, it is possible to simplify this process significantly. Enabling it
-allows you to push the descriptor right before issuing the draw call, saving a
-lot of boilerplate. We still have to create one descriptor set layout for the
-pipeline layout object, but that is not too bad compared to what we had to do
-before, just to bind one texture to a shader.
+  create descriptor pools, descriptor set layouts, allocate descriptor sets, make
+  sure pipeline layouts are correct, bind the descriptor sets, and so on. With
+  [`VK_KHR_push_descriptor`](https://registry.khronos.org/vulkan/specs/1.3-extensions/html/vkspec.html#VK_KHR_push_descriptor)
+  extension, it is possible to simplify this process significantly. Enabling it
+  allows you to push the descriptor right before issuing the draw call, saving a
+  lot of boilerplate. We still have to create one descriptor set layout for the
+  pipeline layout object, but that is not too bad compared to what we had to do
+  before, just to bind one texture to a shader.
 
 As a side, `vulkan.rs` is reaching 2000 LOC, which is getting pretty challenging
 to work with. We will have to break it down soon.

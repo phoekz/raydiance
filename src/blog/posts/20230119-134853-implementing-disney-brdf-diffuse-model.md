@@ -5,7 +5,7 @@
     commit="c43f282e24a6eecb54fa3361a6e5e192453d0d8d"
 />
 
-![](images/20230119-035800.gif)
+![](media/implementing-disney-brdf-diffuse-model/title.apng)
 
 [Disney principled
 BRDF](https://blog.selfshadow.com/publications/s2012-shading-course/burley/s2012_pbs_disney_brdf_notes_v3.pdf)

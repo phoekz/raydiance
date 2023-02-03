@@ -6,7 +6,8 @@
 />
 
 <video width="800" height="450" autoplay loop muted playsinline>
-    <source src="images/20230202-235429.mp4" type="video/mp4" />
+    <source src="media/multithreaded-raytracer/title-h265.mp4" type="video/mp4" />
+    <source src="media/multithreaded-raytracer/title-vp9.webm" type="video/webm" />
 </video>
 
 Raytracer is now multithreaded with [`rayon`](https://crates.io/crates/rayon).

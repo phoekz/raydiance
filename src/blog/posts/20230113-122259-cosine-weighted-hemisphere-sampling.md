@@ -5,7 +5,7 @@
     commit="2e0e31997c20714ccc6a3735cf3a5c0a899f9ab9"
 />
 
-![](images/20230113-134900.webp)
+![](media/cosine-weighted-hemisphere-sampling/title.apng)
 
 To get a cleaner picture, we could increase the number of samples, but that
 would increase render times, which forces us to find ways to make the renderer
@@ -20,11 +20,11 @@ implementation is based on
 
 <article-image-pair>
     <article-caption-image>
-        <img src="images/20230113-134400-uniform.gif"></img>
+        <img src="media/cosine-weighted-hemisphere-sampling/uniform.apng"/>
         Uniform sampling
     </article-caption-image>
     <article-caption-image>
-        <img src="images/20230113-134400-cosine.gif"></img>
+        <img src="media/cosine-weighted-hemisphere-sampling/cosine.apng"/>
         Cosine-weighted sampling
     </article-caption-image>
 </article-image-pair>

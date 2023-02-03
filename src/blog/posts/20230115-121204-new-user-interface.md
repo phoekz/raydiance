@@ -5,7 +5,7 @@
     commit="9fb5a3800a337b5d663e1c83932e03fe96abfe0f"
 />
 
-![](images/20230115-140255.webp)
+![](media/new-user-interface/title.apng)
 
 It was time to replace the window title hacks and random keybindings with a real
 graphical user interface. We use the the excellent [Dear

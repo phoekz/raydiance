@@ -1,15 +1,16 @@
-name="20230202-235500"
+name=$1
+post=$2
 input="${name}.mp4"
 output_h265="${name}-h265.mp4"
 output_vp9="${name}-vp9.webm"
-crf_h265=20
+crf_h265=23
 crf_vp9=$(($crf_h265 * 63 / 51))
 
 ffmpeg \
     -i $input \
     -c:v libx265 \
     -crf $crf_h265 \
-    -preset veryslow \
+    -preset slow \
     -tag:v hvc1 \
     -movflags faststart \
     -an \
@@ -19,13 +20,15 @@ ffmpeg \
     -i $input \
     -c:v libvpx-vp9 \
     -crf $crf_vp9 \
-    -deadline best \
+    -row-mt 1 \
+    -deadline good \
+    -cpu-used 0 \
     -an \
     $output_vp9
 
 echo "
 <video width=\"800\" height=\"450\" autoplay loop muted playsinline>
-    <source src=\"images/${output_h265}\" type=\"video/mp4\" />
-    <source src=\"images/${output_vp9}\" type=\"video/webm\" />
+    <source src=\"media/${post}/${output_h265}\" type=\"video/mp4\" />
+    <source src=\"media/${post}/${output_vp9}\" type=\"video/webm\" />
 </video>
 "
