@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use super::*;
 
 #[derive(Clone, Debug)]
@@ -8,6 +6,8 @@ pub struct Scene {
     pub meshes: Vec<Mesh>,
     pub materials: Vec<Material>,
     pub textures: Vec<Texture>,
+    pub bounding_box: Aabb,
+    pub bounding_sphere: BoundingSphere,
 }
 
 #[derive(Clone, Debug)]
@@ -98,12 +98,11 @@ pub enum DynamicTexture {
 
 impl Scene {
     pub fn create(glb: &[u8]) -> Result<(Self, DynamicScene)> {
-        let mut scene = Scene {
-            cameras: vec![],
-            meshes: vec![],
-            materials: vec![],
-            textures: vec![],
-        };
+        // Assets.
+        let mut cameras = vec![];
+        let mut meshes = vec![];
+        let mut materials = vec![];
+        let mut textures = vec![];
 
         // Import.
         let (gltf_document, gltf_buffer_data, gltf_image_data) =
@@ -114,7 +113,7 @@ impl Scene {
             for gltf_node in gltf_scene.nodes() {
                 // Cameras.
                 if let Some(gltf_camera) = gltf_node.camera() {
-                    import_gltf_camera(&gltf_camera, &gltf_node, &mut scene)?;
+                    import_gltf_camera(&gltf_camera, &gltf_node, &mut cameras)?;
                 }
                 // Meshes, materials, textures.
                 else if let Some(gltf_mesh) = gltf_node.mesh() {
@@ -123,7 +122,9 @@ impl Scene {
                         &gltf_node,
                         &gltf_buffer_data,
                         &gltf_image_data,
-                        &mut scene,
+                        &mut meshes,
+                        &mut materials,
+                        &mut textures,
                     )?;
                 }
             }
@@ -132,14 +133,14 @@ impl Scene {
         // Validate.
         {
             let mut unique_mesh_names = HashSet::new();
-            for mesh in &scene.meshes {
+            for mesh in &meshes {
                 let name = mesh.name.as_str();
                 let was_unique = unique_mesh_names.insert(name);
                 ensure!(was_unique, "Mesh name {name} is not unique!",);
             }
 
             let mut unique_material_names = HashSet::new();
-            for material in &scene.materials {
+            for material in &materials {
                 let name = material.name.as_str();
                 let was_unique = unique_material_names.insert(name);
                 ensure!(was_unique, "Material name {name} is not unique!",);
@@ -148,9 +149,9 @@ impl Scene {
 
         // Stats.
         {
-            info!("Scene contains {} cameras", scene.cameras.len());
-            info!("Scene contains {} meshes", scene.meshes.len());
-            for mesh in &scene.meshes {
+            info!("Scene contains {} cameras", cameras.len());
+            info!("Scene contains {} meshes", meshes.len());
+            for mesh in &meshes {
                 info!(
                     "  {}: vertices={}, triangles={}",
                     &mesh.name,
@@ -158,10 +159,10 @@ impl Scene {
                     mesh.triangle_count()
                 );
             }
-            info!("Scene contains {} materials", scene.materials.len());
-            for material in &scene.materials {
-                let roughness = &scene.textures[material.roughness as usize];
-                let metallic = &scene.textures[material.metallic as usize];
+            info!("Scene contains {} materials", materials.len());
+            for material in &materials {
+                let roughness = &textures[material.roughness as usize];
+                let metallic = &textures[material.metallic as usize];
                 let roughness = roughness.sample(Point2::new(0.5, 0.5)).red();
                 let metallic = metallic.sample(Point2::new(0.5, 0.5)).red();
                 info!(
@@ -169,13 +170,26 @@ impl Scene {
                     &material.name, material.roughness, roughness, material.metallic, metallic
                 );
             }
-            info!("Scene contains {} textures", scene.textures.len());
+            info!("Scene contains {} textures", textures.len());
         }
+
+        // Bounds.
+        let (bounding_box, bounding_sphere) = {
+            let mut bounding_box = Aabb::new();
+            for mesh in &meshes {
+                let transform = mesh.transform;
+                for position in &mesh.positions {
+                    let world_position = transform.transform_point(&position);
+                    bounding_box.extend(&world_position);
+                }
+            }
+            let bounding_sphere = bounding_box.bounding_sphere();
+            (bounding_box, bounding_sphere)
+        };
 
         // Dynamic scene.
         let dyn_scene = {
-            let materials = scene
-                .materials
+            let materials = materials
                 .iter()
                 .map(|material| DynamicMaterial {
                     model: material.model,
@@ -184,8 +198,7 @@ impl Scene {
                     roughness: material.roughness,
                 })
                 .collect();
-            let textures = scene
-                .textures
+            let textures = textures
                 .iter()
                 .map(|texture| match texture {
                     Texture::Scalar(s) => DynamicTexture::Scalar(*s),
@@ -206,13 +219,22 @@ impl Scene {
             }
         };
 
-        assert!(!scene.cameras.is_empty());
-        assert!(!scene.meshes.is_empty());
-        assert!(!scene.materials.is_empty());
-        assert!(!scene.textures.is_empty());
-        assert_eq!(scene.materials.len(), dyn_scene.materials.len());
-        assert_eq!(scene.textures.len(), dyn_scene.textures.len());
+        assert!(!cameras.is_empty());
+        assert!(!meshes.is_empty());
+        assert!(!materials.is_empty());
+        assert!(!textures.is_empty());
+        assert_eq!(materials.len(), dyn_scene.materials.len());
+        assert_eq!(textures.len(), dyn_scene.textures.len());
         assert_eq!(dyn_scene.textures.len(), dyn_scene.replaced_textures.len());
+
+        let scene = Scene {
+            cameras,
+            meshes,
+            materials,
+            textures,
+            bounding_box,
+            bounding_sphere,
+        };
 
         Ok((scene, dyn_scene))
     }
@@ -225,7 +247,7 @@ impl Scene {
 fn import_gltf_camera(
     gltf_camera: &gltf::Camera,
     gltf_node: &gltf::Node,
-    scene: &mut Scene,
+    cameras: &mut Vec<Camera>,
 ) -> Result<()> {
     use gltf::camera::Projection;
 
@@ -259,7 +281,7 @@ fn import_gltf_camera(
     };
 
     // Append.
-    scene.cameras.push(Camera {
+    cameras.push(Camera {
         name,
         transform,
         aspect_ratio,
@@ -276,7 +298,9 @@ fn import_gltf_mesh(
     gltf_node: &gltf::Node,
     gltf_buffer_data: &[gltf::buffer::Data],
     gltf_image_data: &[gltf::image::Data],
-    scene: &mut Scene,
+    meshes: &mut Vec<Mesh>,
+    materials: &mut Vec<Material>,
+    textures: &mut Vec<Texture>,
 ) -> Result<()> {
     use gltf::mesh::Mode;
 
@@ -307,10 +331,10 @@ fn import_gltf_mesh(
     let tex_coords = import_gltf_tex_coords(&gltf_primitive, gltf_buffer_data)?;
     let normals = import_gltf_normals(&gltf_primitive, gltf_buffer_data)?;
     let triangles = import_gltf_triangles(&gltf_primitive, gltf_buffer_data)?;
-    let material = import_gltf_material(&gltf_primitive, gltf_image_data, scene)?;
+    let material = import_gltf_material(&gltf_primitive, gltf_image_data, materials, textures)?;
 
     // Append.
-    scene.meshes.push(Mesh {
+    meshes.push(Mesh {
         name,
         transform,
         positions,
@@ -326,7 +350,8 @@ fn import_gltf_mesh(
 fn import_gltf_material(
     gltf_primitive: &gltf::Primitive,
     gltf_image_data: &[gltf::image::Data],
-    scene: &mut Scene,
+    materials: &mut Vec<Material>,
+    textures: &mut Vec<Texture>,
 ) -> Result<u32> {
     use gltf::material::AlphaMode;
 
@@ -402,8 +427,8 @@ fn import_gltf_material(
         };
 
         // Append.
-        let texture_index = scene.textures.len() as u32;
-        scene.textures.push(base_color);
+        let texture_index = textures.len() as u32;
+        textures.push(base_color);
         texture_index
     };
 
@@ -419,16 +444,16 @@ fn import_gltf_material(
         };
 
         // Append.
-        let metallic_index = scene.textures.len() as u32;
-        let roughness_index = scene.textures.len() as u32 + 1;
-        scene.textures.push(metallic);
-        scene.textures.push(roughness);
+        let metallic_index = textures.len() as u32;
+        let roughness_index = textures.len() as u32 + 1;
+        textures.push(metallic);
+        textures.push(roughness);
         (metallic_index, roughness_index)
     };
 
     // Append.
-    let material_index = scene.materials.len() as u32;
-    scene.materials.push(Material {
+    let material_index = materials.len() as u32;
+    materials.push(Material {
         name,
         model: MaterialModel::Disney,
         base_color,

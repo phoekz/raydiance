@@ -19,7 +19,7 @@
 
 use std::{
     borrow::Cow,
-    collections::VecDeque,
+    collections::{HashSet, VecDeque},
     ffi::{CStr, CString},
     fs::File,
     io::BufWriter,

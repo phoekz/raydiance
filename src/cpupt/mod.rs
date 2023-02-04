@@ -3,13 +3,11 @@ use super::*;
 pub mod bxdfs;
 pub mod sampling;
 
-mod aabb;
 mod bvh;
 mod intersection;
 mod ray;
 mod triangle;
 
-use aabb::*;
 use ray::*;
 use triangle::*;
 
