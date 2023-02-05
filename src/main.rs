@@ -8,7 +8,9 @@
     clippy::cast_sign_loss,
     clippy::collapsible_if,
     clippy::many_single_char_names,
+    clippy::missing_errors_doc,
     clippy::module_name_repetitions,
+    clippy::needless_pass_by_value,
     clippy::similar_names,
     clippy::struct_excessive_bools,
     clippy::too_many_arguments,
@@ -22,7 +24,7 @@ use std::{
     collections::{HashSet, VecDeque},
     ffi::{CStr, CString},
     fs::File,
-    io::BufWriter,
+    io::{BufReader, BufWriter},
     mem::{size_of, transmute},
     num::{NonZeroU16, NonZeroU32},
     ops::Deref,
@@ -33,15 +35,15 @@ use std::{
     time::{Duration, Instant},
 };
 
+use ::image as imagelib;
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use ash::vk;
 use bitvec::prelude::*;
 use bytemuck::{Pod, Zeroable};
-use clap::{Parser, Subcommand};
 use nalgebra as na;
 use rand::prelude::*;
 use rayon::prelude::*;
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use winit::{
     dpi::{PhysicalPosition, PhysicalSize},
     event::{Event, KeyboardInput, VirtualKeyCode, WindowEvent},
@@ -49,6 +51,9 @@ use winit::{
     platform::run_return::EventLoopExtRunReturn,
     window::{Window, WindowBuilder},
 };
+
+#[cfg(test)]
+use approx::{assert_abs_diff_eq, assert_ulps_eq};
 
 #[macro_use]
 extern crate log;
@@ -58,9 +63,10 @@ mod cpupt;
 mod debug;
 mod glb;
 mod gui;
-mod img;
 mod math;
+mod offline;
 mod vulkan;
+mod vz;
 mod window;
 
 use cpupt::bxdfs;
@@ -70,6 +76,7 @@ use math::*;
 const PI: f32 = std::f32::consts::PI;
 const TAU: f32 = std::f32::consts::TAU;
 const INV_PI: f32 = std::f32::consts::FRAC_1_PI;
+const FRAC_PI_2: f32 = std::f32::consts::FRAC_PI_2;
 
 //
 // Input state
@@ -136,17 +143,17 @@ impl DeltaTimes {
 // Main
 //
 
-#[derive(Parser)]
+#[derive(clap::Parser)]
 #[clap(author, version)]
-struct Args {
+struct CliArgs {
     #[clap(subcommand)]
     command: Commands,
 }
 
-#[derive(Subcommand)]
+#[derive(clap::Subcommand)]
 enum Commands {
     Editor,
-    Offline,
+    Offline(offline::Args),
     Debug,
     Blog,
 }
@@ -158,13 +165,15 @@ impl Default for Commands {
 }
 
 fn main() -> Result<()> {
+    use clap::Parser;
+
     // Init logging.
     env_logger::init();
 
     // Execute command.
-    match Args::parse().command {
+    match CliArgs::parse().command {
         Commands::Editor => editor(),
-        Commands::Offline => offline(),
+        Commands::Offline(args) => offline::run(args),
         Commands::Debug => debug::run(),
         Commands::Blog => blog::build(),
     }
@@ -225,15 +234,20 @@ fn editor() -> Result<()> {
     let mut frame_index = 0_u64;
     let mut frame_count = 0_u64;
     let mut input_state = InputState::default();
+    let mut any_window_focused = false;
+    let mut latest_output: Option<cpupt::Output> = None;
+    let mut sample_state = (0, 0);
+    let mut image_name = String::from("image");
+
     let mut camera_angle = 0.0;
     let mut camera_transform = Mat4::identity();
     let mut display_raytracing_image = true;
     let mut hemisphere_sampler = HemisphereSampler::default();
-    let mut latest_output: Option<cpupt::Output> = None;
-    let mut sample_state = (0, 0);
     let mut selected_material = 0;
     let mut visualize_normals = false;
-    let mut any_window_focused = false;
+    let mut tonemapping = true;
+    let mut exposure = Exposure::default();
+    let mut sky_params = cpupt::sky::ext::StateExtParams::default();
     event_loop.run_return(|event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
 
@@ -333,6 +347,9 @@ fn editor() -> Result<()> {
                     hemisphere_sampler,
                     dyn_scene: dyn_scene.clone(),
                     visualize_normals,
+                    tonemapping,
+                    exposure,
+                    sky_params,
                 });
 
                 // Draw screen.
@@ -347,7 +364,10 @@ fn editor() -> Result<()> {
 
                     // Main window.
                     ui.window("Raydiance")
-                        .size([360.0, 240.0], imgui::Condition::FirstUseEver)
+                        .size(
+                            [220.0, window_size.h as f32],
+                            imgui::Condition::FirstUseEver,
+                        )
                         .position_pivot([0.0, 0.0])
                         .position([0.0, 0.0], imgui::Condition::FirstUseEver)
                         .collapsible(true)
@@ -369,6 +389,8 @@ fn editor() -> Result<()> {
                                 ui.same_line_with_spacing(0.0, style.item_inner_spacing[0]);
                                 ui.text("Rendering");
                             }
+
+                            ui.separator();
 
                             // Material editor.
                             {
@@ -397,85 +419,146 @@ fn editor() -> Result<()> {
                                 }
 
                                 // Texture editor.
-                                {
-                                    let _id = ui.push_id("Base color");
+                                if let Some(_token) = ui.begin_table("", 3) {
+                                    ui.table_next_row();
+                                    ui.table_set_column_index(0);
+                                    {
+                                        let _id = ui.push_id("Base color");
+                                        let index = material.base_color as usize;
+                                        let mut texture = &mut dyn_scene.textures[index];
+                                        let mut bit = dyn_scene.replaced_textures[index];
 
-                                    let index = material.base_color as usize;
-                                    let mut texture = &mut dyn_scene.textures[index];
-                                    let mut bit = dyn_scene.replaced_textures[index];
+                                        ui.text("Base Color");
+                                        ui.table_next_column();
 
-                                    ui.text("Base color");
-                                    if let glb::DynamicTexture::Vector4(ref mut v) = &mut texture {
-                                        if ui.color_edit4("Value", v) {
-                                            // Convenience: replace texture when an edit has been made without extra interaction.
-                                            dyn_scene.replaced_textures.set(index, true);
+                                        if let glb::DynamicTexture::Vector4(ref mut value) =
+                                            &mut texture
+                                        {
+                                            if ui
+                                                .color_edit4_config("Value", value)
+                                                .alpha(false)
+                                                .inputs(false)
+                                                .build()
+                                            {
+                                                // Convenience: replace texture when an edit has been made without extra interaction.
+                                                dyn_scene.replaced_textures.set(index, true);
+                                            }
                                         }
-                                    }
-                                    if ui.checkbox("Use", &mut bit) {
-                                        dyn_scene.replaced_textures.set(index, bit);
-                                    }
-                                    ui.same_line();
-                                    if ui.button("Reset") {
-                                        // Convenience: reset to default value and clear replacement with one click.
-                                        *texture = dyn_scene.default_textures[index];
-                                        dyn_scene.replaced_textures.set(index, false);
-                                    }
-                                }
-                                {
-                                    let _id = ui.push_id("Roughness");
+                                        ui.table_next_column();
 
-                                    let index = material.roughness as usize;
-                                    let mut texture = &mut dyn_scene.textures[index];
-                                    let mut bit = dyn_scene.replaced_textures[index];
-
-                                    ui.text("Roughness");
-                                    if let glb::DynamicTexture::Scalar(ref mut s) = &mut texture {
-                                        if ui.slider("Value", 0.0, 1.0, s) {
-                                            // Convenience: replace texture when an edit has been made without extra interaction.
-                                            dyn_scene.replaced_textures.set(index, true);
+                                        {
+                                            if ui.checkbox("##use", &mut bit) {
+                                                dyn_scene.replaced_textures.set(index, bit);
+                                            }
+                                            ui.same_line();
+                                            if ui.button("X") {
+                                                // Convenience: reset to default value and clear replacement with one click.
+                                                *texture = dyn_scene.default_textures[index];
+                                                dyn_scene.replaced_textures.set(index, false);
+                                            }
                                         }
+                                        ui.table_next_column();
                                     }
-                                    if ui.checkbox("Use", &mut bit) {
-                                        dyn_scene.replaced_textures.set(index, bit);
-                                    }
-                                    ui.same_line();
-                                    if ui.button("Reset") {
-                                        // Convenience: reset to default value and clear replacement with one click.
-                                        *texture = dyn_scene.default_textures[index];
-                                        dyn_scene.replaced_textures.set(index, false);
-                                    }
-                                }
-                                {
-                                    let _id = ui.push_id("Metallic");
+                                    {
+                                        let _id = ui.push_id("Roughness");
+                                        let index = material.roughness as usize;
+                                        let mut texture = &mut dyn_scene.textures[index];
+                                        let mut bit = dyn_scene.replaced_textures[index];
 
-                                    let index = material.metallic as usize;
-                                    let mut texture = &mut dyn_scene.textures[index];
-                                    let mut bit = dyn_scene.replaced_textures[index];
+                                        ui.text("Roughness");
+                                        ui.table_next_column();
 
-                                    ui.text("Metallic");
-                                    if let glb::DynamicTexture::Scalar(ref mut s) = &mut texture {
-                                        if ui.slider("Value", 0.0, 1.0, s) {
-                                            // Convenience: replace texture when an edit has been made without extra interaction.
-                                            dyn_scene.replaced_textures.set(index, true);
+                                        if let glb::DynamicTexture::Scalar(ref mut value) =
+                                            &mut texture
+                                        {
+                                            if imgui::Drag::new("##slider")
+                                                .range(0.0, 1.0)
+                                                .speed(0.01)
+                                                .build(ui, value)
+                                            {
+                                                // Convenience: replace texture when an edit has been made without extra interaction.
+                                                dyn_scene.replaced_textures.set(index, true);
+                                            }
                                         }
+                                        ui.table_next_column();
+
+                                        {
+                                            if ui.checkbox("##use", &mut bit) {
+                                                dyn_scene.replaced_textures.set(index, bit);
+                                            }
+                                            ui.same_line();
+                                            if ui.button("X") {
+                                                // Convenience: reset to default value and clear replacement with one click.
+                                                *texture = dyn_scene.default_textures[index];
+                                                dyn_scene.replaced_textures.set(index, false);
+                                            }
+                                        }
+                                        ui.table_next_column();
                                     }
-                                    if ui.checkbox("Use", &mut bit) {
-                                        dyn_scene.replaced_textures.set(index, bit);
-                                    }
-                                    ui.same_line();
-                                    if ui.button("Reset") {
-                                        // Convenience: reset to default value and clear replacement with one click.
-                                        *texture = dyn_scene.default_textures[index];
-                                        dyn_scene.replaced_textures.set(index, false);
+                                    {
+                                        let _id = ui.push_id("Metallic");
+                                        let index = material.metallic as usize;
+                                        let mut texture = &mut dyn_scene.textures[index];
+                                        let mut bit = dyn_scene.replaced_textures[index];
+
+                                        ui.text("Metallic");
+                                        ui.table_next_column();
+
+                                        if let glb::DynamicTexture::Scalar(ref mut value) =
+                                            &mut texture
+                                        {
+                                            if imgui::Drag::new("##slider")
+                                                .range(0.0, 1.0)
+                                                .speed(0.01)
+                                                .build(ui, value)
+                                            {
+                                                // Convenience: replace texture when an edit has been made without extra interaction.
+                                                dyn_scene.replaced_textures.set(index, true);
+                                            }
+                                        }
+                                        ui.table_next_column();
+
+                                        {
+                                            if ui.checkbox("##use", &mut bit) {
+                                                dyn_scene.replaced_textures.set(index, bit);
+                                            }
+                                            ui.same_line();
+                                            if ui.button("X") {
+                                                // Convenience: reset to default value and clear replacement with one click.
+                                                *texture = dyn_scene.default_textures[index];
+                                                dyn_scene.replaced_textures.set(index, false);
+                                            }
+                                        }
+                                        ui.table_next_column();
                                     }
                                 }
                             }
 
-                            ui.checkbox("Visualize normals", &mut visualize_normals);
+                            ui.separator();
+
+                            // Sky model.
+                            {
+                                imgui::AngleSlider::new("Elevation")
+                                    .min_degrees(0.0)
+                                    .max_degrees(90.0)
+                                    .build(ui, &mut sky_params.elevation);
+                                imgui::AngleSlider::new("Azimuth")
+                                    .min_degrees(0.0)
+                                    .max_degrees(360.0)
+                                    .build(ui, &mut sky_params.azimuth);
+                                ui.slider("Turbidity", 1.0, 10.0, &mut sky_params.turbidity);
+                                ui.color_edit3("Albedo", sky_params.albedo.raw_mut());
+                                exposure.gui(ui);
+                            }
+
+                            ui.separator();
 
                             // Rendering config.
+                            ui.checkbox("Visualize normals", &mut visualize_normals);
+                            ui.checkbox("Tonemapping", &mut tonemapping);
+                            ui.text("Hemisphere sampler");
                             if let Some(token) =
-                                ui.begin_combo("Hemisphere sampler", hemisphere_sampler.name())
+                                ui.begin_combo("##hemisphere_sampler", hemisphere_sampler.name())
                             {
                                 if ui.selectable(HemisphereSampler::Uniform.name()) {
                                     hemisphere_sampler = HemisphereSampler::Uniform;
@@ -490,22 +573,17 @@ fn editor() -> Result<()> {
 
                             // Image utilities.
                             ui.checkbox("Show raytracing image", &mut display_raytracing_image);
+                            imgui::InputText::new(ui, "Image name", &mut image_name).build();
                             if ui.button("Save image") {
-                                use time::format_description;
-                                use time::OffsetDateTime;
-
                                 if let Some(output) = &latest_output {
-                                    let local_time = OffsetDateTime::now_local()
-                                        .expect("Failed to get local time");
-                                    let format = format_description::parse(
-                                        "[year][month][day]-[hour][minute][second]",
-                                    )
-                                    .expect("Failed to parse format description");
-                                    let timestamp = local_time
-                                        .format(&format)
-                                        .expect("Failed to format local time");
-                                    let path = PathBuf::from(format!("{timestamp}.png"));
-                                    let image = img::RgbImage::from_colors(
+                                    let timestamp =
+                                        utc_timestamp().expect("Failed to generate timestamp");
+                                    let path = if image_name.is_empty() {
+                                        PathBuf::from(format!("{timestamp}.png"))
+                                    } else {
+                                        PathBuf::from(format!("{image_name}.png"))
+                                    };
+                                    let image = vz::image::Rgb::from_colors(
                                         &output.image,
                                         output.image_size,
                                     );
@@ -570,138 +648,6 @@ fn editor() -> Result<()> {
 }
 
 //
-// Offline
-//
-
-// Todo: control camera movement.
-// Todo: control material value interpolation.
-// Todo: a single photo mode.
-// Todo: annotations, just like brdf visualizations.
-// Todo: allow arbitrary aspect ratios by modifying the original perspective matrix.
-#[derive(Serialize, Deserialize, Debug)]
-struct OfflineConfig {
-    samples_per_pixel: NonZeroU32,
-    image_scale: NonZeroU32,
-    frame_count: NonZeroU32,
-    frame_delay_num: NonZeroU16,
-    frame_delay_den: NonZeroU16,
-    material_mappings: Vec<MaterialMapping>,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct MaterialMapping {
-    name: String,
-    field: glb::MaterialField,
-    value: glb::DynamicTexture,
-}
-
-fn offline() -> Result<()> {
-    // Load config.
-    let config = {
-        let config_path = manifest_dir().join("src/assets/rounded_cube.ron");
-        let contents = std::fs::read_to_string(config_path)?;
-        let config: OfflineConfig = ron::from_str(&contents)?;
-        info!("Config: {config:?}");
-        config
-    };
-    let samples_per_pixel = config.samples_per_pixel.get();
-    let frame_count = config.frame_count.get();
-    let image_scale = config.image_scale.get();
-
-    let image_aspect = (16, 9);
-    let image_size = (image_aspect.0 * image_scale, image_aspect.1 * image_scale);
-    let frame_delay_num = config.frame_delay_num.get();
-    let frame_delay_den = config.frame_delay_den.get();
-    let material_mappings = config.material_mappings;
-
-    // Init glb scene.
-    let (glb_scene, mut dyn_scene) = glb::Scene::create(include_bytes!("assets/rounded_cube.glb"))?;
-
-    // Apply material mappings.
-    for mapping in material_mappings {
-        use itertools::Itertools;
-        if let Some((material_index, _)) = glb_scene
-            .materials
-            .iter()
-            .find_position(|m| m.name == mapping.name)
-        {
-            let material = &dyn_scene.materials[material_index];
-            let texture_index = match mapping.field {
-                glb::MaterialField::BaseColor => material.base_color,
-                glb::MaterialField::Metallic => material.metallic,
-                glb::MaterialField::Roughness => material.roughness,
-            } as usize;
-            dyn_scene.textures[texture_index] = mapping.value;
-            dyn_scene.replaced_textures.set(texture_index, true);
-        }
-    }
-
-    // Init cpupt.
-    let raytracer = cpupt::Raytracer::create(
-        cpupt::Params {
-            samples_per_pixel,
-            ..cpupt::Params::default()
-        },
-        glb_scene,
-    );
-
-    // Render frames.
-    let frames = {
-        use easer::functions::*;
-        use indicatif::{ProgressBar, ProgressStyle};
-
-        let timer = Instant::now();
-        let hemisphere_sampler = HemisphereSampler::Cosine;
-        let visualize_normals = false;
-        let pb = ProgressBar::new(u64::from(frame_count)).with_style(ProgressStyle::with_template(
-            "{wide_bar} elapsed={elapsed_precise} eta={eta_precise}",
-        )?);
-        let mut frames = vec![];
-        for frame_index in 0..frame_count {
-            let time = (frame_index as f32 + 0.5) / frame_count as f32;
-            let time = Cubic::ease_in_out(time, 0.0, 1.0, 1.0);
-            let camera_angle = time * PI / 4.0;
-            let camera_transform = Mat4::from_axis_angle(&Vec3::y_axis(), camera_angle);
-            raytracer.send_input(cpupt::Input {
-                camera_transform,
-                image_size,
-                hemisphere_sampler,
-                dyn_scene: dyn_scene.clone(),
-                visualize_normals,
-            });
-            let mut latest_frame: Option<img::RgbImage> = None;
-            for _ in 0..samples_per_pixel {
-                let output = raytracer.recv_output().expect("Something went wrong");
-                latest_frame = Some(img::RgbImage::from_colors(&output.image, output.image_size));
-            }
-            frames.push(latest_frame.unwrap());
-            pb.inc(1);
-        }
-        pb.finish();
-        info!("Rendering took {} seconds", timer.elapsed().as_secs_f64());
-        frames
-    };
-
-    // Make boomerang.
-    let frames = img::create_boomerang(frames);
-
-    // Render animation.
-    img::animation_render(
-        &img::AnimationParams {
-            delay_num: frame_delay_num,
-            delay_den: frame_delay_den,
-        },
-        "work/test.png",
-        frames,
-    )?;
-
-    // Cleanup.
-    raytracer.terminate();
-
-    Ok(())
-}
-
-//
 // Utils
 //
 
@@ -710,4 +656,22 @@ pub fn manifest_dir() -> PathBuf {
     std::env::var("CARGO_MANIFEST_DIR")
         .expect("CARGO_MANIFEST_DIR is not set")
         .into()
+}
+
+#[must_use]
+pub fn work_dir() -> PathBuf {
+    let work_dir = manifest_dir().join("work");
+    if !work_dir.exists() {
+        std::fs::create_dir(&work_dir).expect("Failed to create work directory");
+    }
+    work_dir
+}
+
+pub fn utc_timestamp() -> Result<String> {
+    use time::format_description;
+    use time::OffsetDateTime;
+    let utc_time = OffsetDateTime::now_utc();
+    let format = format_description::parse("[year][month][day]-[hour][minute][second]")?;
+    let timestamp = utc_time.format(&format)?;
+    Ok(timestamp)
 }

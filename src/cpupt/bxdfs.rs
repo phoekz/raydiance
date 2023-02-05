@@ -194,7 +194,7 @@ impl std::fmt::Display for Sample {
 pub enum Model {
     Lambertian,
     DisneyDiffuse,
-    MicrofacetReflection,
+    CookTorrance,
 }
 
 impl Model {
@@ -202,7 +202,7 @@ impl Model {
         match self {
             Self::Lambertian => "lambertian",
             Self::DisneyDiffuse => "disney-diffuse",
-            Self::MicrofacetReflection => "microfacet-reflection",
+            Self::CookTorrance => "cook-torrance",
         }
     }
 }
@@ -349,7 +349,7 @@ impl Bxdf for DisneyDiffuse {
 }
 
 //
-// BxDF - Microfacet Reflection
+// BxDF - Cook-Torrance
 //
 
 //
@@ -365,7 +365,7 @@ impl Bxdf for DisneyDiffuse {
 //
 
 #[derive(Clone, Copy, Debug)]
-pub struct MicrofacetReflectionParams {
+pub struct CookTorranceParams {
     pub base_color: ColorRgb,
     pub metallic: f32,
     pub specular: f32,
@@ -374,14 +374,14 @@ pub struct MicrofacetReflectionParams {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct MicrofacetReflection {
+pub struct CookTorrance {
     specular_color: ColorRgb,
     alpha_x: f32,
     alpha_y: f32,
 }
 
-impl MicrofacetReflection {
-    pub fn new(p: &MicrofacetReflectionParams) -> Self {
+impl CookTorrance {
+    pub fn new(p: &CookTorranceParams) -> Self {
         assert_range!(p.metallic, 0.0, 1.0);
         assert_range!(p.specular, 0.0, 1.0);
         assert_range!(p.roughness, 0.0, 1.0);
@@ -478,9 +478,9 @@ impl MicrofacetReflection {
     }
 }
 
-impl Bxdf for MicrofacetReflection {
+impl Bxdf for CookTorrance {
     fn model(&self) -> Model {
-        Model::MicrofacetReflection
+        Model::CookTorrance
     }
 
     fn eval(&self, wo: &Outgoing, wi: &Incoming) -> Reflectance {

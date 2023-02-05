@@ -179,7 +179,7 @@ impl Scene {
             for mesh in &meshes {
                 let transform = mesh.transform;
                 for position in &mesh.positions {
-                    let world_position = transform.transform_point(&position);
+                    let world_position = transform.transform_point(position);
                     bounding_box.extend(&world_position);
                 }
             }

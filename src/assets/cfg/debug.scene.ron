@@ -1,0 +1,24 @@
+[
+    (
+        name: "elevation",
+        material_mappings: [
+            ("Plane", Metallic, Scalar(0.75)),
+            ("Plane", Roughness, Scalar(0.25)),
+            ("CadCube", Metallic, Scalar(1.0)),
+            ("CadCube", Roughness, Scalar(0.0)),
+        ],
+        sky_elevation_deg: Keyframes([
+            (0.0, 0.0, CubicInOut),
+            (2.0, 90.0, CubicInOut),
+            (4.0, 0.0, CubicInOut),
+        ]),
+        sky_azimuth_deg: Keyframes([
+            (0.0, 0.0, CubicInOut),
+            (1.999, 0.0, CubicInOut),
+            (2.000, 180.0, CubicInOut),
+            (4.0, 180.0, CubicInOut),
+        ]),
+        sky_turbidity: Constant(3.0),
+        sky_albedo: Constant((1.0, 1.0, 1.0)),
+    )
+]

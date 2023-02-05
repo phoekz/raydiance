@@ -1,0 +1,1 @@
+cargo asm --no-color --asm-style=intel --rust raydiance::cpupt::sky::State::new > out.s

@@ -2,6 +2,7 @@ use super::*;
 
 pub mod bxdfs;
 pub mod sampling;
+pub mod sky;
 
 mod bvh;
 mod intersection;
@@ -82,6 +83,9 @@ pub struct Input {
     pub hemisphere_sampler: sampling::HemisphereSampler,
     pub dyn_scene: glb::DynamicScene,
     pub visualize_normals: bool,
+    pub tonemapping: bool,
+    pub exposure: Exposure,
+    pub sky_params: sky::ext::StateExtParams,
 }
 
 impl Default for Input {
@@ -92,6 +96,9 @@ impl Default for Input {
             hemisphere_sampler: sampling::HemisphereSampler::default(),
             dyn_scene: glb::DynamicScene::default(),
             visualize_normals: false,
+            tonemapping: true,
+            exposure: Exposure::default(),
+            sky_params: sky::ext::StateExtParams::default(),
         }
     }
 }
@@ -143,6 +150,7 @@ impl Raytracer {
             let mut timer = Instant::now();
             let mut ray_stats = intersection::RayBvhHitStats::default();
             let mut pixel_buffer = Vec::<ColorRgb>::new();
+            let mut sky_state = sky::ext::StateExt::new(&sky::ext::StateExtParams::default());
 
             loop {
                 // Check for termination command.
@@ -184,6 +192,9 @@ impl Raytracer {
                         world_from_clip = camera_transform * world_from_view * view_from_clip;
                         camera_position = camera_transform.transform_point(&camera.position());
 
+                        // Reset sky.
+                        sky_state = sky::ext::StateExt::new(&input.sky_params);
+
                         // Reset stats.
                         ray_stats = intersection::RayBvhHitStats::default();
 
@@ -221,6 +232,7 @@ impl Raytracer {
                                 &glb_scene,
                                 &input.dyn_scene,
                                 materials,
+                                &sky_state,
                             );
                             (tile, tile_radiance, tile_ray_stats)
                         })
@@ -243,10 +255,30 @@ impl Raytracer {
 
                     // Normalize the current image, send it.
                     let normalization_factor = 1.0 / (sample_index + 1) as f32;
+                    let mut max_radiance = 0.0_f32;
                     let image = pixel_buffer
                         .clone()
                         .into_iter()
-                        .map(|sample| sample * normalization_factor)
+                        .map(|sample| {
+                            // Averaging samples.
+                            sample * normalization_factor
+                        })
+                        .map(|sample| {
+                            // Statistics.
+                            max_radiance = max_radiance.max(sample.red());
+                            max_radiance = max_radiance.max(sample.green());
+                            max_radiance = max_radiance.max(sample.blue());
+                            sample
+                        })
+                        .map(|sample| {
+                            // Exposure and tonemapping.
+                            let sample = input.exposure.expose(sample);
+                            if input.tonemapping {
+                                sample.tonemap()
+                            } else {
+                                sample
+                            }
+                        })
                         .collect();
                     sample_index += 1;
                     output_send.send(Output {
@@ -260,10 +292,12 @@ impl Raytracer {
                     if sample_index == params.samples_per_pixel {
                         let elapsed = timer.elapsed().as_secs_f64();
                         debug!(
-                            "Rendering took {:.03} s, {:.03} rays/s, {:.03} samples/s",
+                            "Rendering took {:.03} s, {:.03} rays/s, \
+                            {:.03} samples/s, {:.03} max radiance",
                             elapsed,
                             ray_stats.rays as f64 / elapsed,
-                            f64::from(params.samples_per_pixel) / elapsed
+                            f64::from(params.samples_per_pixel) / elapsed,
+                            max_radiance
                         );
                         debug!("Stats:\n{ray_stats}");
                     }
@@ -328,6 +362,7 @@ fn tile_radiance(
     glb_scene: &glb::Scene,
     dyn_scene: &glb::DynamicScene,
     materials: &[glb::Material],
+    sky_state: &sky::ext::StateExt,
 ) -> ([ColorRgb; pixel_tile_count()], intersection::RayBvhHitStats) {
     let mut tile_radiance: [ColorRgb; pixel_tile_count()] = [ColorRgb::BLACK; pixel_tile_count()];
     let mut tile_pixel_index = 0;
@@ -346,6 +381,7 @@ fn tile_radiance(
                 glb_scene,
                 dyn_scene,
                 materials,
+                sky_state,
             );
             tile_radiance[tile_pixel_index] = radiance;
             tile_pixel_index += 1;
@@ -367,6 +403,7 @@ fn radiance(
     glb_scene: &glb::Scene,
     dyn_scene: &glb::DynamicScene,
     materials: &[glb::Material],
+    sky_state: &sky::ext::StateExt,
 ) -> (ColorRgb, intersection::RayBvhHitStats) {
     use bxdfs::Bxdf;
 
@@ -412,10 +449,7 @@ fn radiance(
 
         // Special case: ray hit the sky.
         if !found_hit {
-            // Todo: Replace with a proper sky model.
-            let sun_direction = Vec3::new(1.0, 3.0, 1.0).normalize();
-            let sky_factor = 0.5 + 0.5 * sun_direction.dot(&ray.dir);
-            radiance += throughput * sky_factor;
+            radiance += throughput * sky_state.radiance(&ray.dir);
             break;
         }
 
@@ -461,14 +495,13 @@ fn radiance(
                     base_color,
                     roughness,
                 });
-                let specular =
-                    bxdfs::MicrofacetReflection::new(&bxdfs::MicrofacetReflectionParams {
-                        base_color,
-                        metallic,
-                        specular,
-                        roughness,
-                        anisotropic,
-                    });
+                let specular = bxdfs::CookTorrance::new(&bxdfs::CookTorranceParams {
+                    base_color,
+                    metallic,
+                    specular,
+                    roughness,
+                    anisotropic,
+                });
                 let maybe_sample = if uniform.sample() > metallic {
                     diffuse.sample(&wo_local, (uniform.sample(), uniform.sample()))
                 } else {
@@ -513,6 +546,7 @@ fn radiance(
             bxdf_sample
         );
     }
+    assert!(radiance.is_finite(), "radiance={radiance}");
     (radiance, ray_stats)
 }
 

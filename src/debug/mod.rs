@@ -1,38 +1,25 @@
 use super::*;
 
-mod frame;
 mod plot;
-mod scalar;
-mod spherical;
-
-use frame::Draw;
-use spherical::{NormalizedSpherical, Spherical};
 
 const DEFAULT_SAMPLE_COUNT: u32 = 256;
 const DEFAULT_SAMPLE_GRID_WIDTH: u32 = 16; // Must be sqrt(DEFAULT_SAMPLE_COUNT).
-const DEFAULT_INCOMING: bxdfs::LocalVector =
-    bxdfs::LocalVector(vector![-0.70710677, 0.70710677, 0.0]);
-const DEFAULT_SCALAR: f32 = 1.0 / 4.0;
-const DEFAULT_ANISOTROPIC: f32 = 0.0;
 const DEFAULT_BASE_COLOR: ColorRgb = ColorRgb::WHITE;
 
 const ANIMATION_DELAY_DEN: u16 = 20;
 const ANIMATION_DELAY_NUM: u16 = 1;
 const ANIMATION_FRAME_COUNT: u32 = 60;
 
-const PLOT_COLOR_BACKGROUND: ColorRgb = ColorRgb::new(0.0, 0.0, 0.0);
 const PLOT_COLOR_INCOMING: ColorRgb = ColorRgb::new(1.0, 0.0, 1.0);
-const PLOT_COLOR_SAMPLE: ColorRgb = ColorRgb::new(1.0, 0.12, 0.0);
+const PLOT_COLOR_SUN: ColorRgb = ColorRgb::new(1.0, 0.0, 1.0);
+const PLOT_COLOR_SAMPLE: ColorRgb = ColorRgb::new(1.0, 0.26225, 0.0);
 const PLOT_COLOR_TEXT: ColorRgb = ColorRgb::new(1.0, 1.0, 1.0);
 const PLOT_COLOR_POS_X: ColorRgb = ColorRgb::new(1.0, 0.0, 0.0);
 const PLOT_COLOR_POS_Y: ColorRgb = ColorRgb::new(0.0, 1.0, 0.0);
 const PLOT_COLOR_POS_Z: ColorRgb = ColorRgb::new(0.0, 0.0, 1.0);
 const PLOT_COLOR_MID_XY: ColorRgb = ColorRgb::new(0.75, 0.75, 0.0);
 const PLOT_COLOR_MID_ZY: ColorRgb = ColorRgb::new(0.0, 0.75, 0.75);
-const PLOT_IMAGE_BORDER: u32 = 60;
 const PLOT_IMAGE_SCALE: u32 = 4;
-const PLOT_TEXT_MARGIN: i32 = 8;
-const PLOT_TEXT_SCALE: f32 = 16.0;
 
 const ANGLE_PLOT_WIDTH: u32 = 100;
 const ANGLE_PLOT_HEIGHT: u32 = 25;
@@ -76,7 +63,7 @@ impl SampleSequence {
 }
 
 //
-// BRDF - Selector
+// BRDF
 //
 
 const FLAG_UNIFORM: u32 = 0b1;
@@ -98,435 +85,478 @@ impl BrdfComponent {
 }
 
 //
-// BRDF Inputs
+// BRDF visualizations
 //
 
-#[derive(Clone, Copy, Debug)]
-struct BrdfInput {
-    scalar: f32,
-    incoming: bxdfs::LocalVector,
-    angle_theta: f32,
-    anisotropic: f32,
-}
+fn brdf_visualizations() -> Result<()> {
+    struct Task {
+        name: &'static str,
+        model: bxdfs::Model,
+        comp: BrdfComponent,
+        seq: SampleSequence,
+        flags: u32,
+        incoming: vz::cfg::Value<f32>,
+        roughness: vz::cfg::Value<f32>,
+        anisotropic: vz::cfg::Value<f32>,
+    }
 
-#[derive(Clone, Copy)]
-enum BrdfInputParameter<T> {
-    Constant(T),
-    Interpolated,
-}
-
-#[derive(Clone, Copy)]
-struct BrdfInputBuilder {
-    scalar: BrdfInputParameter<f32>,
-    incoming: BrdfInputParameter<(bxdfs::LocalVector, f32)>,
-    anisotropic: BrdfInputParameter<f32>,
-}
-
-impl Default for BrdfInputBuilder {
-    fn default() -> Self {
-        Self {
-            scalar: BrdfInputParameter::Constant(DEFAULT_SCALAR),
-            incoming: BrdfInputParameter::Constant((
-                DEFAULT_INCOMING,
-                DEFAULT_INCOMING.0.dot(&Y_AXIS),
-            )),
-            anisotropic: BrdfInputParameter::Constant(DEFAULT_ANISOTROPIC),
+    impl Default for Task {
+        fn default() -> Self {
+            Self {
+                name: "default",
+                model: bxdfs::Model::Lambertian,
+                comp: BrdfComponent::R,
+                seq: SampleSequence::Sobol,
+                flags: 0,
+                incoming: vz::cfg::Value::Constant(0.25),
+                roughness: vz::cfg::Value::Constant(0.25),
+                anisotropic: vz::cfg::Value::Constant(0.0),
+            }
         }
     }
-}
 
-impl BrdfInputBuilder {
-    fn new() -> Self {
-        Self::default()
-    }
-
-    fn lerp_scalar(mut self) -> Self {
-        self.scalar = BrdfInputParameter::Interpolated;
-        self
-    }
-
-    fn lerp_incoming(mut self) -> Self {
-        self.incoming = BrdfInputParameter::Interpolated;
-        self
-    }
-
-    fn anisotropic(mut self, anisotropic: f32) -> Self {
-        self.anisotropic = BrdfInputParameter::Constant(anisotropic);
-        self
-    }
-
-    fn into_sequence(self) -> Vec<BrdfInput> {
-        (0..ANIMATION_FRAME_COUNT)
-            .into_iter()
-            .map(|frame_index| {
-                use easer::functions::*;
-                let x = (frame_index as f32 + 0.5) / ANIMATION_FRAME_COUNT as f32;
-                let x = Cubic::ease_in_out(x, 0.0, 1.0, 1.0);
-
-                let scalar = match self.scalar {
-                    BrdfInputParameter::Constant(c) => c,
-                    BrdfInputParameter::Interpolated => x,
-                };
-
-                let (incoming, angle_incoming) = match self.incoming {
-                    BrdfInputParameter::Constant(c) => c,
-                    BrdfInputParameter::Interpolated => {
-                        let angle_incoming = x * PI;
-                        let incoming = bxdfs::LocalVector(
-                            vector![f32::cos(angle_incoming - PI), f32::sin(angle_incoming), 0.0]
-                                .normalize(),
-                        );
-                        (incoming, angle_incoming)
-                    }
-                };
-
-                let anisotropic = match self.anisotropic {
-                    BrdfInputParameter::Constant(c) => c,
-                    BrdfInputParameter::Interpolated => x,
-                };
-
-                BrdfInput {
-                    scalar,
-                    incoming,
-                    angle_theta: angle_incoming,
-                    anisotropic,
-                }
-            })
-            .collect()
-    }
-}
-
-//
-// Plot annotation
-//
-
-struct PlotHeader<'a> {
-    model: &'a str,
-    comp: &'a str,
-    name: &'a str,
-    seq: &'a str,
-}
-
-struct PlotAnnotation<'a> {
-    header: &'a PlotHeader<'a>,
-    scalar: f32,
-    incoming: f32,
-    intensity: scalar::Range,
-    anisotropic: f32,
-    inside_hemisphere: u32,
-    sample_count: u32,
-}
-
-#[derive(Clone, Copy)]
-enum PlotType {
-    Hemisphere,
-    Angle,
-}
-
-impl PlotType {
-    fn name(self) -> &'static str {
-        match self {
-            PlotType::Hemisphere => "hemisphere",
-            PlotType::Angle => "angle",
-        }
-    }
-}
-
-impl PlotHeader<'_> {
-    fn to_filename(&self, plot_type: PlotType) -> String {
-        format!(
-            "{model}-{comp}-{name}-{seq}-{plot_type}.png",
-            model = self.model,
-            comp = self.comp,
-            name = self.name,
-            seq = self.seq,
-            plot_type = plot_type.name()
-        )
-    }
-}
-
-impl std::fmt::Display for PlotAnnotation<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "model={model}, comp={comp}, name={name}, seq={seq}\n\
-            scalar={scalar:.02}, wi={wi:.02} deg, anisotropic={anisotropic:.02}\n\
-            inside={inside_hemisphere}/{sample_count}, min={min:.02}, max={max:.02}",
-            model = self.header.model,
-            comp = self.header.comp,
-            name = self.header.name,
-            seq = self.header.seq,
-            scalar = self.scalar,
-            wi = self.incoming.to_degrees(),
-            anisotropic = self.anisotropic,
-            inside_hemisphere = self.inside_hemisphere,
-            sample_count = self.sample_count,
-            min = self.intensity.min(),
-            max = self.intensity.max(),
-        )
-    }
-}
-
-//
-// Render task
-//
-
-struct RenderTask {
-    model: bxdfs::Model,
-    comp: BrdfComponent,
-    inputs: (&'static str, Vec<BrdfInput>),
-    seq: SampleSequence,
-    flags: u32,
-}
-
-pub fn run() -> Result<()> {
     // Default work directory.
-    let work_dir = PathBuf::from("work");
+    let work_dir = work_dir();
 
     // Default font.
-    let font = img::Font::new()?;
+    let font = vz::font::Font::new()?;
 
     // Sequences.
     let seq_grid = SampleSequence::Grid(DEFAULT_SAMPLE_GRID_WIDTH);
     let seq_rand = SampleSequence::Random(UniformSampler::new());
     let seq_sobol = SampleSequence::Sobol;
 
-    // Brdf inputs.
-    let iso_scalar_builder = BrdfInputBuilder::new().lerp_scalar();
-    let iso_incoming_builder = BrdfInputBuilder::new().lerp_incoming();
-    let ani_scalar_builder = iso_scalar_builder.anisotropic(1.0);
-    let ani_incoming_builder = iso_incoming_builder.anisotropic(1.0);
-    let iso_scalar = iso_scalar_builder.into_sequence();
-    let iso_incoming = iso_incoming_builder.into_sequence();
-    let ani_scalar = ani_scalar_builder.into_sequence();
-    let ani_incoming = ani_incoming_builder.into_sequence();
+    // Task definitions.
+    #[allow(clippy::redundant_clone)]
+    let tasks = {
+        use bxdfs::Model::{CookTorrance, DisneyDiffuse, Lambertian};
+        use BrdfComponent::{Pdf, R};
 
-    // Create tasks.
-    macro_rules! task {
-        ($brdf_model:ident, $brdf_comp:ident, $name:literal, $inputs:ident, $seq:ident, $flags:expr) => {
-            RenderTask {
-                model: bxdfs::Model::$brdf_model,
-                comp: BrdfComponent::$brdf_comp,
-                inputs: ($name, $inputs.clone()),
-                seq: $seq.clone(),
-                flags: $flags,
-            }
-        };
-    }
-    #[rustfmt::skip]
-    let tasks = vec![
-        // Uniform vs Cosine.
-        task!(Lambertian, R, "uniform", iso_scalar, seq_grid, FLAG_UNIFORM),
-        task!(Lambertian, Pdf, "uniform", iso_scalar, seq_grid, FLAG_UNIFORM),
-        task!(Lambertian, R, "cosine", iso_scalar, seq_grid, FLAG_COSINE),
-        task!(Lambertian, Pdf, "cosine", iso_scalar, seq_grid, FLAG_COSINE),
-        // Different sequences.
-        task!(Lambertian, R, "grid", iso_scalar, seq_grid, FLAG_COSINE),
-        task!(Lambertian, Pdf, "grid", iso_scalar, seq_grid, FLAG_COSINE),
-        task!(Lambertian, R, "rand", iso_scalar, seq_rand, FLAG_COSINE),
-        task!(Lambertian, Pdf, "rand", iso_scalar, seq_rand, FLAG_COSINE),
-        task!(Lambertian, R, "sobol", iso_scalar, seq_sobol, FLAG_COSINE),
-        task!(Lambertian, Pdf, "sobol", iso_scalar, seq_sobol, FLAG_COSINE),
-        // Lambert.
-        task!(Lambertian, R, "scalar", iso_scalar, seq_sobol, 0),
-        task!(Lambertian, Pdf, "scalar", iso_scalar, seq_sobol, 0),
-        task!(Lambertian, R, "incoming", iso_incoming, seq_sobol, 0),
-        task!(Lambertian, Pdf, "incoming", iso_incoming, seq_sobol, 0),
-        // Disney Diffuse.
-        task!(DisneyDiffuse, R, "scalar", iso_scalar, seq_sobol, 0),
-        task!(DisneyDiffuse, Pdf, "scalar", iso_scalar, seq_sobol, 0),
-        task!(DisneyDiffuse, R, "incoming", iso_incoming, seq_sobol, 0),
-        task!(DisneyDiffuse, Pdf, "incoming", iso_incoming, seq_sobol, 0),
-        // Microfacet Reflection.
-        task!(MicrofacetReflection, R, "scalar", iso_scalar, seq_sobol, 0),
-        task!(MicrofacetReflection, Pdf, "scalar", iso_scalar, seq_sobol, 0),
-        task!(MicrofacetReflection, R, "incoming", iso_incoming, seq_sobol, 0),
-        task!(MicrofacetReflection, Pdf, "incoming", iso_incoming, seq_sobol, 0),
-        // Microfacet Reflection - Anisotropic.
-        task!(MicrofacetReflection, R, "ani-scalar", ani_scalar, seq_sobol, 0),
-        task!(MicrofacetReflection, Pdf, "ani-scalar", ani_scalar, seq_sobol, 0),
-        task!(MicrofacetReflection, R, "ani-incoming", ani_incoming, seq_sobol, 0),
-        task!(MicrofacetReflection, Pdf, "ani-incoming", ani_incoming, seq_sobol, 0),
-    ];
+        macro_rules! hemisphere {
+            ($name: expr, $flag: expr) => {
+                Task {
+                    name: concat!("hemisphere-", $name),
+                    seq: seq_grid.clone(),
+                    flags: $flag,
+                    ..Task::default()
+                }
+            };
+        }
+        macro_rules! sequences {
+            ($name: expr, $seq: expr) => {
+                Task {
+                    name: concat!("sequences-", $name),
+                    seq: $seq.clone(),
+                    ..Task::default()
+                }
+            };
+        }
+        macro_rules! lambertian {
+            ($name: expr, $comp: ident, $key: ident, $value: expr) => {
+                Task {
+                    name: concat!("lambertian-", $name),
+                    model: Lambertian,
+                    comp: $comp,
+                    seq: seq_sobol.clone(),
+                    $key: $value,
+                    ..Task::default()
+                }
+            };
+        }
+        macro_rules! disney_diffuse {
+            ($name: expr, $comp: ident, $key: ident, $value: expr) => {
+                Task {
+                    name: concat!("disneydiffuse-", $name),
+                    model: DisneyDiffuse,
+                    comp: $comp,
+                    seq: seq_sobol.clone(),
+                    $key: $value,
+                    ..Task::default()
+                }
+            };
+        }
+        macro_rules! cook_torrance {
+            ($name: expr, $comp: ident, $key: ident, $value: expr) => {
+                Task {
+                    name: concat!("cooktorrance-", $name),
+                    model: CookTorrance,
+                    comp: $comp,
+                    seq: seq_sobol.clone(),
+                    $key: $value,
+                    ..Task::default()
+                }
+            };
+        }
+
+        let unit = vz::cfg::Value::Keyframes(vec![
+            vz::cfg::keyframe!(0.0, 0.0, CubicInOut),
+            vz::cfg::keyframe!(1.0, 1.0, CubicInOut),
+        ]);
+
+        [
+            hemisphere!("uniform", FLAG_UNIFORM),
+            hemisphere!("cosine", FLAG_COSINE),
+            sequences!("grid", seq_grid),
+            sequences!("rand", seq_rand),
+            sequences!("sobol", seq_sobol),
+            lambertian!("roughness-r", R, roughness, unit.clone()),
+            lambertian!("roughness-pdf", Pdf, roughness, unit.clone()),
+            lambertian!("incoming-r", R, incoming, unit.clone()),
+            lambertian!("incoming-pdf", Pdf, incoming, unit.clone()),
+            disney_diffuse!("roughness-r", R, roughness, unit.clone()),
+            disney_diffuse!("roughness-pdf", Pdf, roughness, unit.clone()),
+            disney_diffuse!("incoming-r", R, incoming, unit.clone()),
+            disney_diffuse!("incoming-pdf", Pdf, incoming, unit.clone()),
+            cook_torrance!("roughness-r", R, roughness, unit.clone()),
+            cook_torrance!("roughness-pdf", Pdf, roughness, unit.clone()),
+            cook_torrance!("incoming-r", R, incoming, unit.clone()),
+            cook_torrance!("incoming-pdf", Pdf, incoming, unit.clone()),
+            cook_torrance!("anisotropic-r", R, anisotropic, unit.clone()),
+            cook_torrance!("anisotropic-pdf", Pdf, anisotropic, unit.clone()),
+        ]
+    };
 
     // Execute tasks.
-    tasks.par_iter().for_each(|task| {
-        // Metadata.
-        let (input_name, inputs) = task.inputs.clone();
-        let header = PlotHeader {
-            model: task.model.name(),
-            comp: task.comp.name(),
-            name: input_name,
-            seq: task.seq.name(),
-        };
+    let results = tasks
+        .into_par_iter()
+        .map(|task| {
+            let incoming: vz::anim::Value<_> = task.incoming.into();
+            let roughness: vz::anim::Value<_> = task.roughness.into();
+            let anisotropic: vz::anim::Value<_> = task.anisotropic.into();
 
-        let mut frames_angle = Vec::with_capacity(inputs.len());
-        let mut frames_hemisphere = Vec::with_capacity(inputs.len());
-        for input in inputs {
-            // Make hemisphere sampler.
-            let hemisphere = if task.flags & FLAG_UNIFORM > 0 {
-                HemisphereSampler::Uniform
-            } else {
-                HemisphereSampler::Cosine
-            };
+            let mut frames = vec![];
+            for frame_index in 0..ANIMATION_FRAME_COUNT {
+                // Time.
+                let time = (frame_index as f32 + 0.5) / ANIMATION_FRAME_COUNT as f32;
 
-            // Make BRDF.
-            let brdf: Box<dyn bxdfs::Bxdf> = match task.model {
-                bxdfs::Model::Lambertian => {
-                    Box::new(bxdfs::Lambertian::new(&bxdfs::LambertianParams {
-                        hemisphere,
-                        base_color: DEFAULT_BASE_COLOR,
-                    }))
-                }
-                bxdfs::Model::DisneyDiffuse => {
-                    Box::new(bxdfs::DisneyDiffuse::new(&bxdfs::DisneyDiffuseParams {
-                        hemisphere,
-                        base_color: DEFAULT_BASE_COLOR,
-                        roughness: input.scalar,
-                    }))
-                }
-                bxdfs::Model::MicrofacetReflection => Box::new(bxdfs::MicrofacetReflection::new(
-                    &bxdfs::MicrofacetReflectionParams {
-                        base_color: DEFAULT_BASE_COLOR,
-                        metallic: 1.0,
-                        specular: 0.5,
-                        roughness: input.scalar,
-                        anisotropic: input.anisotropic,
-                    },
-                )),
-            };
+                // Tween.
+                let incoming = incoming.value(time);
+                let roughness = roughness.value(time);
+                let anisotropic = anisotropic.value(time);
 
-            let mut plot = plot::new(input.incoming, |surface| match task.comp {
-                BrdfComponent::R => brdf.eval(surface.outgoing(), surface.incoming()),
-                BrdfComponent::Pdf => {
-                    let pdf = brdf.pdf(surface.outgoing(), surface.incoming());
-                    ColorRgb::new(pdf, pdf, pdf)
-                }
-            });
+                // Incoming vector.
+                let incoming_angle_theta = incoming * PI;
+                let incoming = bxdfs::LocalVector(
+                    vector![
+                        f32::cos(incoming_angle_theta),
+                        f32::sin(incoming_angle_theta),
+                        0.0
+                    ]
+                    .normalize(),
+                );
 
-            let mut inside_hemisphere = 0;
-            let mut sequence = task.seq.clone();
-            plot.sample_f((0..DEFAULT_SAMPLE_COUNT).into_iter().map(|sample_index| {
-                let uniform = sequence.sample(sample_index);
-                match brdf.sample(&input.incoming, uniform) {
-                    Some(sample) => {
-                        inside_hemisphere += 1;
-                        sample.wi()
+                // Hemisphere sampler.
+                let hemisphere = if task.flags & FLAG_UNIFORM > 0 {
+                    HemisphereSampler::Uniform
+                } else {
+                    HemisphereSampler::Cosine
+                };
+
+                // Brdf.
+                let brdf: Box<dyn bxdfs::Bxdf> = match task.model {
+                    bxdfs::Model::Lambertian => {
+                        Box::new(bxdfs::Lambertian::new(&bxdfs::LambertianParams {
+                            hemisphere,
+                            base_color: DEFAULT_BASE_COLOR,
+                        }))
                     }
-                    None => bxdfs::LocalVector(Y_AXIS),
-                }
-            }));
+                    bxdfs::Model::DisneyDiffuse => {
+                        Box::new(bxdfs::DisneyDiffuse::new(&bxdfs::DisneyDiffuseParams {
+                            hemisphere,
+                            base_color: DEFAULT_BASE_COLOR,
+                            roughness,
+                        }))
+                    }
+                    bxdfs::Model::CookTorrance => {
+                        Box::new(bxdfs::CookTorrance::new(&bxdfs::CookTorranceParams {
+                            base_color: DEFAULT_BASE_COLOR,
+                            metallic: 1.0,
+                            specular: 0.5,
+                            roughness,
+                            anisotropic,
+                        }))
+                    }
+                };
 
-            let annotation = PlotAnnotation {
-                header: &header,
-                scalar: input.scalar,
-                incoming: input.angle_theta,
-                intensity: plot.intensity(),
-                anisotropic: input.anisotropic,
-                inside_hemisphere,
-                sample_count: DEFAULT_SAMPLE_COUNT,
+                // Plot.
+                let mut plot = plot::Plot::new(|wo| match task.comp {
+                    BrdfComponent::R => brdf.eval(&wo, &incoming),
+                    BrdfComponent::Pdf => {
+                        let pdf = brdf.pdf(&wo, &incoming);
+                        ColorRgb::new(pdf, pdf, pdf)
+                    }
+                });
+
+                // Samples.
+                let mut inside_hemisphere = 0;
+                let mut sequence = task.seq.clone();
+                (0..DEFAULT_SAMPLE_COUNT)
+                    .into_iter()
+                    .for_each(|sample_index| {
+                        let uniform = sequence.sample(sample_index);
+                        let vector = match brdf.sample(&incoming, uniform) {
+                            Some(sample) => {
+                                inside_hemisphere += 1;
+                                sample.wi()
+                            }
+                            None => bxdfs::LocalVector(Y_AXIS),
+                        };
+                        plot.draw_vector(vector, PLOT_COLOR_SAMPLE);
+                    });
+                plot.draw_debug_vectors();
+                plot.draw_vector(incoming, PLOT_COLOR_INCOMING);
+
+                // Annotate.
+                let text_box = vz::annotation::TextBox::new()
+                    .line([("name", task.name)])
+                    .line([
+                        ("model", task.model.name()),
+                        ("comp", task.comp.name()),
+                        ("seq", task.seq.name()),
+                    ])
+                    .line([
+                        ("roughness", format!("{roughness:.02}")),
+                        (
+                            "wi",
+                            format!("{:.02} deg", incoming_angle_theta.to_degrees()),
+                        ),
+                        ("anisotropic", format!("{anisotropic:.02}")),
+                    ])
+                    .line([
+                        (
+                            "inside",
+                            format!("{inside_hemisphere}/{DEFAULT_SAMPLE_COUNT}"),
+                        ),
+                        ("min", format!("{:.02}", plot.intensities().min())),
+                        ("max", format!("{:.02}", plot.intensities().max())),
+                    ])
+                    .line([
+                        ("time", format!("{time:.02}")),
+                        ("frame", format!("{frame_index}/{ANIMATION_FRAME_COUNT}")),
+                    ])
+                    .build();
+                let mut image = plot.into_image();
+                image.draw_text(&font, PLOT_COLOR_TEXT, &text_box);
+
+                // Push.
+                frames.push(image);
+            }
+
+            // Boomerang.
+            let frames = vz::video::create_boomerang(frames);
+
+            // Render animation.
+            let task_name = task.name.to_string();
+            let file_name = format!("brdf-{task_name}.apng");
+            let path = work_dir.join(&file_name);
+            let anim_params = vz::video::Params {
+                delay_num: ANIMATION_DELAY_NUM,
+                delay_den: ANIMATION_DELAY_DEN,
             };
-            let text = annotation.to_string();
-            let (mut angle_image, mut hemisphere_image) = plot.into_images();
-            hemisphere_image.draw_text(
-                PLOT_COLOR_TEXT,
-                PLOT_TEXT_SCALE,
-                PLOT_TEXT_MARGIN,
-                &font,
-                &text,
-            );
-            angle_image.draw_text(
-                PLOT_COLOR_TEXT,
-                PLOT_TEXT_SCALE,
-                PLOT_TEXT_MARGIN,
-                &font,
-                &text,
-            );
-            frames_angle.push(angle_image);
-            frames_hemisphere.push(hemisphere_image);
-        }
+            vz::video::render(&anim_params, path, frames)?;
 
-        // Boomerang.
-        let frames_angle = img::create_boomerang(frames_angle);
-        let frames_hemisphere = img::create_boomerang(frames_hemisphere);
+            Ok::<_, anyhow::Error>((task_name, file_name))
+        })
+        .collect::<Vec<_>>();
 
-        // Render animation.
-        let path_angle = work_dir.join(header.to_filename(PlotType::Angle));
-        let path_hemisphere = work_dir.join(header.to_filename(PlotType::Hemisphere));
-        let anim_params = img::AnimationParams {
-            delay_num: ANIMATION_DELAY_NUM,
-            delay_den: ANIMATION_DELAY_DEN,
-        };
-        img::animation_render(&anim_params, path_angle, frames_angle)
-            .expect("Failed to render animation");
-        img::animation_render(&anim_params, path_hemisphere, frames_hemisphere)
-            .expect("Failed to render animation");
-    });
-
-    // Debug website.
+    // Website.
     {
         use std::io::Write;
-
-        let html = r#"<!doctype html>
-<html lang="en">
-<head>
-    <style>
-        body {
-            background-color: rgb(10, 10, 10);
-            max-width: 2400px;
-            margin: 0 auto;
+        let mut page = vz::page::Builder::new("brdf");
+        for result in results {
+            let (task_name, file_name) = result?;
+            page.push_card(task_name, file_name);
         }
-        h1 {
-            color: white;
-        }
-        .cards {
-            width: 2400px;
-            height: 620px;
-            display: flex;
-            flex-direction: row;
-            flex-wrap: wrap;
-        }
-        .card {
-            width: 400px;
-            height: 620px;
-            display: flex;
-            flex-direction: column;
-        }
-    </style>
-</head>
-
-<body>
-<div class="cards">
-
-{{cards}}
-</div>
-</body>
-</html>
-        "#;
-
-        let file = File::create(work_dir.join("debug.html"))?;
+        let file_name = "brdf.html";
+        let path = work_dir.join(file_name);
+        let file = File::create(&path)?;
         let mut writer = BufWriter::new(file);
-        let mut cards = String::new();
-        for task in tasks {
-            let (input_name, _) = task.inputs;
-            let header = PlotHeader {
-                model: task.model.name(),
-                comp: task.comp.name(),
-                name: input_name,
-                seq: task.seq.name(),
-            };
-            let path_angle = header.to_filename(PlotType::Angle);
-            let path_hemisphere = header.to_filename(PlotType::Hemisphere);
-            cards.push_str(&format!(
-                "   <div class=\"card\"><img src=\"{}\"><img src=\"{}\"></div>\n",
-                path_hemisphere, path_angle,
-            ));
-        }
-        writer.write_all(
-            html.replace("{{cards}}", &cards.replace('\\', "/"))
-                .as_bytes(),
-        )?;
+        write!(&mut writer, "{}", page.build()?)?;
+        info!("Wrote to {}", path.display());
+        info!("Open with http://127.0.0.1:5500/work/{file_name}");
     }
 
+    Ok(())
+}
+
+fn sky_model_visualizations() -> Result<()> {
+    use cpupt::sky;
+
+    struct Task {
+        name: &'static str,
+        elevation: vz::cfg::Value<f32>,
+        azimuth: vz::cfg::Value<f32>,
+        turbidity: vz::cfg::Value<f32>,
+        albedo: vz::cfg::Value<ColorRgb>,
+    }
+
+    impl Default for Task {
+        fn default() -> Self {
+            let params = sky::ext::StateExtParams::default();
+            let elevation = vz::cfg::Value::Constant(params.elevation);
+            let azimuth = vz::cfg::Value::Constant(params.azimuth);
+            let turbidity = vz::cfg::Value::Constant(params.turbidity);
+            let albedo = vz::cfg::Value::Constant(params.albedo);
+            Self {
+                name: "default",
+                elevation,
+                azimuth,
+                turbidity,
+                albedo,
+            }
+        }
+    }
+
+    let tasks = [
+        Task {
+            name: "elevation",
+            elevation: vz::cfg::Value::Keyframes(vec![
+                vz::cfg::keyframe!(0.0, 0.0, CubicInOut),
+                vz::cfg::keyframe!(1.0, 90.0_f32.to_radians(), CubicInOut),
+            ]),
+            ..Task::default()
+        },
+        Task {
+            name: "azimuth",
+            azimuth: vz::cfg::Value::Keyframes(vec![
+                vz::cfg::keyframe!(0.0, 0.0, CubicInOut),
+                vz::cfg::keyframe!(1.0, 360.0_f32.to_radians(), CubicInOut),
+            ]),
+            ..Task::default()
+        },
+        Task {
+            name: "turbidity",
+            turbidity: vz::cfg::Value::Keyframes(vec![
+                vz::cfg::keyframe!(0.0, 1.0, CubicInOut),
+                vz::cfg::keyframe!(1.0, 10.0, CubicInOut),
+            ]),
+            ..Task::default()
+        },
+        Task {
+            name: "albedo",
+            albedo: vz::cfg::Value::Keyframes(vec![
+                vz::cfg::keyframe!(0.0, ColorRgb::BLACK, CubicInOut),
+                vz::cfg::keyframe!(1.0, ColorRgb::new(1.0, 0.26225, 0.0), CubicInOut),
+            ]),
+            ..Task::default()
+        },
+    ];
+
+    // Default work directory.
+    let work_dir = work_dir();
+
+    // Default font.
+    let font = vz::font::Font::new()?;
+
+    // Default exposure.
+    let exposure = Exposure::default();
+
+    // Execute tasks.
+    let results = tasks
+        .into_par_iter()
+        .map(|task| {
+            let elevation: vz::anim::Value<_> = task.elevation.into();
+            let azimuth: vz::anim::Value<_> = task.azimuth.into();
+            let turbidity: vz::anim::Value<_> = task.turbidity.into();
+            let albedo: vz::anim::Value<_> = task.albedo.into();
+
+            let mut frames = vec![];
+            for frame_index in 0..ANIMATION_FRAME_COUNT {
+                // Time.
+                let time = (frame_index as f32 + 0.5) / ANIMATION_FRAME_COUNT as f32;
+
+                // Tween.
+                let elevation = elevation.value(time);
+                let azimuth = azimuth.value(time);
+                let turbidity = turbidity.value(time);
+                let albedo = albedo.value(time);
+
+                // Create sky model.
+                let sky = sky::ext::StateExt::new(&sky::ext::StateExtParams {
+                    elevation,
+                    azimuth,
+                    turbidity,
+                    albedo,
+                });
+
+                // Plot.
+                let mut plot = plot::Plot::new(|wo| {
+                    let wo = normal!(wo.0);
+                    exposure.expose(sky.radiance(&wo)).tonemap()
+                });
+                plot.draw_debug_vectors();
+                plot.draw_vector(bxdfs::LocalVector(*sky.sun_dir()), PLOT_COLOR_SUN);
+
+                // Annotate.
+                let text_box = vz::annotation::TextBox::new()
+                    .line([("name", task.name)])
+                    .line([
+                        ("elevation", format!("{:.02} deg", elevation.to_degrees())),
+                        ("azimuth", format!("{:.02} deg", azimuth.to_degrees())),
+                    ])
+                    .line([
+                        ("turbidity", format!("{turbidity:.02}")),
+                        ("albedo", format!("{albedo:.02}")),
+                        ("exposure", format!("{exposure:.02}")),
+                    ])
+                    .line([
+                        ("min", format!("{:.02}", plot.intensities().min())),
+                        ("max", format!("{:.02}", plot.intensities().max())),
+                    ])
+                    .line([
+                        ("time", format!("{time:.02}")),
+                        ("frame", format!("{frame_index}/{ANIMATION_FRAME_COUNT}")),
+                    ])
+                    .build();
+                let mut image = plot.into_image();
+                image.draw_text(&font, PLOT_COLOR_TEXT, &text_box);
+
+                // Push.
+                frames.push(image);
+            }
+
+            // Boomerang.
+            let frames = vz::video::create_boomerang(frames);
+
+            // Render animations.
+            let file_name = format!("sky-{}.apng", task.name);
+            let path = work_dir.join(&file_name);
+            let anim_params = vz::video::Params {
+                delay_num: ANIMATION_DELAY_NUM,
+                delay_den: ANIMATION_DELAY_DEN,
+            };
+            vz::video::render(&anim_params, path, frames)?;
+
+            Ok::<_, anyhow::Error>((task.name, file_name))
+        })
+        .collect::<Vec<_>>();
+
+    // Website.
+    {
+        use std::io::Write;
+        let mut page = vz::page::Builder::new("sky");
+        for result in results {
+            let (task_name, file_name) = result?;
+            page.push_card(task_name, file_name);
+        }
+        let file_name = "sky.html";
+        let path = work_dir.join(file_name);
+        let file = File::create(&path)?;
+        let mut writer = BufWriter::new(file);
+        write!(&mut writer, "{}", page.build()?)?;
+        info!("Wrote to {}", path.display());
+        info!("Open with http://127.0.0.1:5500/work/{file_name}");
+    }
+
+    Ok(())
+}
+
+//
+// Runner
+//
+
+pub fn run() -> Result<()> {
+    brdf_visualizations()?;
+    sky_model_visualizations()?;
     Ok(())
 }
