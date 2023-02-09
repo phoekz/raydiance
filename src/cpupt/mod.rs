@@ -150,7 +150,8 @@ impl Raytracer {
             let mut timer = Instant::now();
             let mut ray_stats = intersection::RayBvhHitStats::default();
             let mut pixel_buffer = Vec::<ColorRgb>::new();
-            let mut sky_state = sky::ext::StateExt::new(&sky::ext::StateExtParams::default());
+            let mut sky_state =
+                sky::ext::StateExt::new(&sky::ext::StateExtParams::default()).unwrap();
 
             loop {
                 // Check for termination command.
@@ -193,7 +194,7 @@ impl Raytracer {
                         camera_position = camera_transform.transform_point(&camera.position());
 
                         // Reset sky.
-                        sky_state = sky::ext::StateExt::new(&input.sky_params);
+                        sky_state = sky::ext::StateExt::new(&input.sky_params).unwrap();
 
                         // Reset stats.
                         ray_stats = intersection::RayBvhHitStats::default();

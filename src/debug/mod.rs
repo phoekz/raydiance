@@ -477,7 +477,7 @@ fn sky_model_visualizations() -> Result<()> {
                     azimuth,
                     turbidity,
                     albedo,
-                });
+                })?;
 
                 // Plot.
                 let mut plot = plot::Plot::new(|wo| {

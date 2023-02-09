@@ -16,6 +16,7 @@ clap = { version = "4.1.4", features = ["derive"] }
 easer = "0.3.0"
 env_logger = "0.10.0"
 gltf = "1.0.0"
+hw-skymodel = "0.1.1"
 image = "0.24.5"
 imageproc = "0.23.0"
 imgui = { version = "0.10.0", features = ["tables-api"] }
