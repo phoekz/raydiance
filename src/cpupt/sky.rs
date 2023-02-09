@@ -70,7 +70,6 @@ pub struct State {
 }
 
 impl State {
-    #[inline(never)]
     pub fn new(sky_params: &Params) -> Self {
         // Load datasets.
         macro_rules! dataset {
