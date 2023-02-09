@@ -7,30 +7,24 @@
 
 ![](media/implementing-disney-brdf-diffuse-model/title.apng)
 
-[Disney principled
-BRDF](https://blog.selfshadow.com/publications/s2012-shading-course/burley/s2012_pbs_disney_brdf_notes_v3.pdf)
-is a popular physically based reflectance model developed by Brent Burley et al.
-at Disney. It is adopted by
-[Blender](https://docs.blender.org/manual/en/latest/render/shader_nodes/shader/principled.html),
-[Unreal
-Engine](https://cdn2.unrealengine.com/Resources/files/2013SiggraphPresentationsNotes-26915738.pdf),
-[Frostbite](https://seblagarde.files.wordpress.com/2015/07/course_notes_moving_frostbite_to_pbr_v32.pdf),
-and many other productions. The team at Disney analyzed the [MERL BRDF
-Database](https://www.merl.com/brdf/) and fit their model based on MERL's
-empirical measurements. Their goal was to create an artist-friendly model with
-as few parameters as possible. These are the design principles from the course
-notes:
+[Disney principled BRDF][disney-paper] is a popular physically based reflectance
+model developed by Brent Burley et al. at Disney. It is adopted by
+[Blender][blender], [Unreal Engine][unreal], [Frostbite][frostbite], and many
+other productions. The team at Disney analyzed the [MERL BRDF Database][merl]
+and fit their model based on MERL's empirical measurements. Their goal was to
+create an artist-friendly model with as few parameters as possible. These are
+the design principles from the course notes:
 
 1. Intuitive rather than physical parameters should be used.
 2. There should be as few parameters as possible.
 3. Parameters should be zero to one over their plausible range.
 4. Parameters should be allowed to be pushed beyond their plausible range where it makes sense.
-5. All combinations of parameters should be as robust and plausible as possible
+5. All combinations of parameters should be as robust and plausible as possible.
 
-The full Disney model is a combination of multiple scattering models, some of
-which we are currently not very experienced with. To avoid getting overwhelmed,
-we are going to study and implement one model at the time, starting with the
-diffuse model $f_d$, which is defined as:
+The full Disney model combines multiple scattering models, some of which we need
+to become more experienced with. To avoid getting overwhelmed, we will study and
+implement one model at a time, starting with the diffuse model $f_d$, which is
+defined as:
 
 $$
 \begin{aligned}
@@ -49,28 +43,38 @@ $$
 $$
 
 Disney's diffuse model is a novel empirical model which attempts to solve the
-over darkening that comes from the Lambertian diffuse model. This darkening
-happens at grazing angles, i.e. the angle between incoming light and outgoing
-light is close to 0. Disney models this by adding a [Fresnel
-factor](https://en.wikipedia.org/wiki/Fresnel_equations), which is approximated
-with [Schlick's
-approximation](https://en.wikipedia.org/wiki/Schlick%27s_approximation).
-Basically, the grazing angle responses become brighter the rougher the surface
-becomes.
+over-darkening that comes from the Lambertian diffuse model. This darkening
+happens at grazing angles, i.e., the angle between the incoming and outgoing
+light is close to $0$. Disney models this by adding a [Fresnel
+factor][fresnel-wiki], which they approximated with [Schlick's
+approximation][schlick-wiki].
 
-The difference in the comparison above can be a bit subtle. The main difference
-is that the edges on the cube are slightly brighter compared to Lambert model,
-and the right side of the cube, which also appears brighter.
+The difference in the comparison above can be subtle. The main difference is
+that the cube's edges are slightly brighter compared to the Lambert model, and
+the right side of the cube also appears brighter.
 
-Currently, our implementation intentionally ignores the "sheen" term and the
-subsurface scattering approximation. We will come back to them later. Also, any
-roughness value below 1.0 looks incorrect, because our current implementation
-has no specular terms.
+Our implementation ignores the "sheen" term and the subsurface scattering
+approximation. We will come back to these terms later. Also, any roughness value
+below $1$ looks incorrect because our current implementation has no specular
+terms.
 
 References:
 
-- [SIGGRAPH 2012 - Physically Based Shading at Disney - Course Notes](https://blog.selfshadow.com/publications/s2012-shading-course/burley/s2012_pbs_disney_brdf_notes_v3.pdf)
-- [Joe Schutte - Rendering the Moana Island Scene Part 1: Implementing the Disney BSDF](https://schuttejoe.github.io/post/disneybsdf/)
-- [Shih-Chin - Implementing Disney Principled BRDF in Arnold](http://shihchinw.github.io/2015/07/implementing-disney-principled-brdf-in-arnold.html)
-- [`pbrt-v3 - disney.cpp`](https://github.com/mmp/pbrt-v3/blob/master/src/materials/disney.cpp)
-- [Disney BRDF Explorer](https://github.com/wdas/brdf)
+- [SIGGRAPH 2012 - Physically Based Shading at Disney - Course Notes][disney-notes]
+- [Joe Schutte - Rendering the Moana Island Scene Part 1: Implementing the Disney BSDF][joe-schutte]
+- [Shih-Chin - Implementing Disney Principled BRDF in Arnold][shih-chin]
+- [`pbrt-v3 - disney.cpp`][disney-pbrt]
+- [Disney BRDF Explorer][disney-brdf]
+
+[disney-paper]: https://blog.selfshadow.com/publications/s2012-shading-course/burley/s2012_pbs_disney_brdf_notes_v3.pdf
+[disney-notes]: https://blog.selfshadow.com/publications/s2012-shading-course/burley/s2012_pbs_disney_brdf_notes_v3.pdf
+[joe-schutte]: https://schuttejoe.github.io/post/disneybsdf/
+[shih-chin]: http://shihchinw.github.io/2015/07/implementing-disney-principled-brdf-in-arnold.html
+[disney-pbrt]: https://github.com/mmp/pbrt-v3/blob/master/src/materials/disney.cpp
+[disney-brdf]: https://github.com/wdas/brdf
+[blender]: https://docs.blender.org/manual/en/latest/render/shader_nodes/shader/principled.html
+[unreal]: https://cdn2.unrealengine.com/Resources/files/2013SiggraphPresentationsNotes-26915738.pdf
+[frostbite]: https://seblagarde.files.wordpress.com/2015/07/course_notes_moving_frostbite_to_pbr_v32.pdf
+[merl]: https://www.merl.com/brdf/
+[fresnel-wiki]: https://en.wikipedia.org/wiki/Fresnel_equations
+[schlick-wiki]: https://en.wikipedia.org/wiki/Schlick%27s_approximation

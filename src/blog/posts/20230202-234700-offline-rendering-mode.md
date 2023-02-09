@@ -10,7 +10,7 @@
     <source src="media/offline-rendering-mode/title-vp9.webm" type="video/webm" />
 </video>
 
-The raytracer can now run "offline", which means that we never start up the
-Vulkan rasterizer, and the program exits after rendering is done. This mode can
-be used to generate offline rendered animations at high sample counts. The title
-animation is built from 60 frames, each rendered at 256 samples per pixel.
+The raytracer can now run "offline," which means that we never start up the
+Vulkan rasterizer, and the program exits after rendering finishes. This mode can
+generate offline rendered animations at high sample counts. The title animation
+contains 60 frames, each rendered at 256 samples per pixel.

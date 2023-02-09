@@ -7,8 +7,10 @@
 
 ![](media/adding-multisampled-antialiasing-msaa/title.png)
 
-This was pretty easy. Similarly to depth buffer, we create a new color buffer
-which will be multisampled. The depth buffer is also updated to support
+Implementing MSAA was easy. Similarly to the depth buffer, we create a new color
+buffer which will be multisampled. The depth buffer is also updated to support
 multisampling. Then we update all the `resolve*` fields in
-[`VkRenderingAttachmentInfo`](https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkRenderingAttachmentInfo.html),
-and finally we add multisampling state to our pipeline. No more jagged edges.
+[`VkRenderingAttachmentInfo`][vkspec], and finally, we add the multisampling
+state to our pipeline. No more jagged edges.
+
+[vkspec]: https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkRenderingAttachmentInfo.html

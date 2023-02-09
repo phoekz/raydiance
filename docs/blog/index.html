@@ -274,10 +274,10 @@ commit="17e72dada89f79bdc220726be7089aedc419dc3f"
     <source src="media/offline-rendering-mode/title-h265.mp4" type="video/mp4" />
     <source src="media/offline-rendering-mode/title-vp9.webm" type="video/webm" />
 </video>
-<p>The raytracer can now run &quot;offline&quot;, which means that we never start up the
-Vulkan rasterizer, and the program exits after rendering is done. This mode can
-be used to generate offline rendered animations at high sample counts. The title
-animation is built from 60 frames, each rendered at 256 samples per pixel.</p>
+<p>The raytracer can now run &quot;offline,&quot; which means that we never start up the
+Vulkan rasterizer, and the program exits after rendering finishes. This mode can
+generate offline rendered animations at high sample counts. The title animation
+contains 60 frames, each rendered at 256 samples per pixel.</p>
 </article-content>
     <article-commit><p>Commit: <a href="https://github.com/phoekz/raydiance/commit/17e72dada89f79bdc220726be7089aedc419dc3f"><code>17e72dad</code></a></p></article-commit>
 </article>
@@ -294,23 +294,22 @@ commit="d129b2601d8d95112cbd14a0f5e0a7c35a9953da"
     <source src="media/multithreaded-raytracer/title-h265.mp4" type="video/mp4" />
     <source src="media/multithreaded-raytracer/title-vp9.webm" type="video/webm" />
 </video>
-<p>Raytracer is now multithreaded with <a href="https://crates.io/crates/rayon"><code>rayon</code></a>.
-We split the image into 16x16 pixel tiles, and use <code>into_par_iter()</code> to render
-tiles in parallel. On AMD Ryzen 5950X processor, we can render the cube scene at
-66 MRays/s, up from 4.6 MRays/s we had previously with our single threaded
-raytracer. If we only used one sample per pixel, it would run slightly over 60
-fps. Of course the image would be very noisy, but at least it would be
-interactive.</p>
-<p>To retain our previous single threaded debugging capabilities, we can set
-<code>RAYON_NUM_THREADS=1</code> to force <code>rayon</code> only use one thread.</p>
+<p>Raytracer is now multithreaded with <a href="https://crates.io/crates/rayon"><code>rayon</code></a>. We split the image into
+16x16 pixel tiles and use <code>into_par_iter()</code> to render tiles in parallel. On AMD
+Ryzen 5950X processor, we can render the cube scene at 66 MRays/s, up from 4.6
+MRays/s we had previously with our single-threaded raytracer. If we only used
+one sample per pixel, it would run slightly over 60 fps. Of course, the image
+would be very noisy, but at least it would be interactive.</p>
+<p>To retain our previous single-threaded debugging capabilities, we can set
+<code>RAYON_NUM_THREADS=1</code> to force <code>rayon</code> only to use one thread.</p>
 <p>With multithreading, there is a subtle issue with our current random number
-generator, because we can no longer share the same RNG across all threads
-without locking. We can sidestep the whole problem, because we can initialize
-the RNG with an unique seed at each pixel, like so:</p>
+generator because we can no longer share the same RNG across all threads without
+locking. We can sidestep the whole problem because we can initialize the RNG
+with a unique seed at each pixel, like so:</p>
 <p><span class="katex-display"><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal">see</span><span class="mord mathnormal">d</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">(</span><span class="mord mathnormal">p</span><span class="mord mathnormal">i</span><span class="mord mathnormal">x</span><span class="mord mathnormal">e</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.01968em;">l</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0197em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">x</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.9805em;vertical-align:-0.2861em;"></span><span class="mord mathnormal">p</span><span class="mord mathnormal">i</span><span class="mord mathnormal">x</span><span class="mord mathnormal">e</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.01968em;">l</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0197em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.03588em;">y</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">∗</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal">ima</span><span class="mord mathnormal" style="margin-right:0.03588em;">g</span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.02691em;">w</span><span class="mord mathnormal mtight">i</span><span class="mord mathnormal mtight">d</span><span class="mord mathnormal mtight">t</span><span class="mord mathnormal mtight">h</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">∗</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">s</span><span class="mord mathnormal">am</span><span class="mord mathnormal" style="margin-right:0.01968em;">pl</span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">in</span><span class="mord mathnormal mtight">d</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">x</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span></span></p>
-<p>Multiplying by <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">s</span><span class="mord mathnormal">am</span><span class="mord mathnormal" style="margin-right:0.01968em;">pl</span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">in</span><span class="mord mathnormal mtight">d</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">x</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span> makes sure the <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal">see</span><span class="mord mathnormal">d</span></span></span></span> is different at each
-sample. With this strategy we assume that the cost of creating an RNG is
-negligible compared to the rest of the raytracer, which is true with <code>rand_pcg</code>.</p>
+<p>Multiplying by <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">s</span><span class="mord mathnormal">am</span><span class="mord mathnormal" style="margin-right:0.01968em;">pl</span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">in</span><span class="mord mathnormal mtight">d</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight">x</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span> ensures the <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal">see</span><span class="mord mathnormal">d</span></span></span></span> is different at each sample.
+With this strategy, we assume that the cost of creating an RNG is negligible
+compared to the rest of the raytracer, which is true with <code>rand_pcg</code>.</p>
 </article-content>
     <article-commit><p>Commit: <a href="https://github.com/phoekz/raydiance/commit/d129b2601d8d95112cbd14a0f5e0a7c35a9953da"><code>d129b260</code></a></p></article-commit>
 </article>
@@ -327,28 +326,25 @@ commit="bf578f68f0c0906a9cb50548eb3e830cd69222d6"
 <h1>A very brief overview of microfacet models</h1>
 <p>A popular way to model physically based reflective surfaces is to imagine that
 such surfaces are built of small perfect mirrors called microfacets.
-Conceptually, each facet has a random height and orientation. Randomness of
-these properties determine the roughness of the microsurface. These microfacets
+Conceptually, each facet has a random height and orientation. The randomness of
+these properties determines the roughness of the microsurface. These microfacets
 are so tiny that they can be modeled with functions, as opposed to being modeled
-with geometry, or with normal maps for example.</p>
+with geometry or with normal maps, for example.</p>
 <p>Let's define some common terms first:</p>
 <p><span class="katex-display"><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:6em;vertical-align:-2.75em;"></span><span class="mord"><span class="mtable"><span class="col-align-r"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:3.25em;"><span style="top:-5.41em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span><span style="top:-3.91em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">o</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span><span style="top:-2.41em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">m</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span><span style="top:-0.91em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.03588em;">g</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:2.75em;"><span></span></span></span></span></span><span class="col-align-l"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:3.25em;"><span style="top:-5.41em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord text"><span class="mord">incoming direction</span></span></span></span><span style="top:-3.91em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord text"><span class="mord">outgoing direction</span></span></span></span><span style="top:-2.41em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord text"><span class="mord">microsurface normal</span></span></span></span><span style="top:-0.91em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord text"><span class="mord">geometric normal</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:2.75em;"><span></span></span></span></span></span></span></span></span></span></span></span></p>
-<p>The popular <a href="https://inst.eecs.berkeley.edu//~cs283/sp13/lectures/cookpaper.pdf">Cook-Torrance
-model</a> is
-defined as:</p>
+<p>The popular <a href="https://inst.eecs.berkeley.edu//~cs283/sp13/lectures/cookpaper.pdf">Cook-Torrance model</a> is defined as:</p>
 <p><span class="katex-display"><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.10764em;">f</span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">o</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.3991em;vertical-align:-0.9721em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.427em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">4∣</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.03588em;">g</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mord">∣∣</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">o</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.03588em;">g</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mord">∣</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.02778em;">D</span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">m</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mclose">)</span><span class="mord mathnormal" style="margin-right:0.13889em;">F</span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">m</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mclose">)</span><span class="mord mathnormal">G</span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">o</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">m</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.9721em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span></p>
 <p><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">D</span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">m</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span> is the <em>normal distribution function</em>, or NDF. It describes how
-microfacet varies with related to the microsurface normal <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.5806em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">m</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span>. Disney
-model uses the widely popular <a href="https://www.cs.cornell.edu/~srm/publications/EGSR07-btdf.pdf">GGX
-distribution</a>, so
-that is what we are going to use as well.</p>
+microfacet varies related to the microsurface normal <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.5806em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">m</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span>. Disney model
+uses the widely popular <a href="https://www.cs.cornell.edu/~srm/publications/EGSR07-btdf.pdf">GGX distribution</a>, so that is what we are
+going to use as well.</p>
 <p><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">F</span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">m</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span> describes how much light is reflected from a microfacet.
 We use the same Schlick's approximation as we did with Disney diffuse BRDF.</p>
 <p><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal">G</span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">o</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">m</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span> is the masking-shadowing function. It
-describes the ratio of microfacets which are masked or shadowed when viewed from
-a pair of incoming and outgoing directions. We implemented Smith's
-height-correlated masking-shadowing function from this great paper by Eric Heitz
-called <a href="https://jcgt.org/published/0003/02/03/paper.pdf">Understanding the Masking-Shadowing Function in Microfacet-Based
+describes the ratio of masked or shadowed microfacets when viewed from a pair of
+incoming and outgoing directions. We implemented Smith's height-correlated
+masking-shadowing function from this great paper by Eric Heitz called
+<a href="https://jcgt.org/published/0003/02/03/paper.pdf">Understanding the Masking-Shadowing Function in Microfacet-Based
 BRDFs</a>.</p>
 <h1>Microfacet models in practice</h1>
 <article-image>
@@ -360,23 +356,23 @@ BRDFs</a>.</p>
 <p>Translating math into source code has a couple of gotchas we need to be aware
 of:</p>
 <ul>
-<li>Different papers have different naming conventions (incoming vs light,
-outgoing vs view), different coordinate systems (z is up vs y is up) which can
-get confusing fast if we are not being really consistent.</li>
+<li>Different papers have different naming conventions (incoming vs. light,
+outgoing vs. view), and different coordinate systems (z is up vs. y is up),
+which can quickly get confusing if we are not being consistent.</li>
 <li>Floating point inaccuracies can make various terms go to <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord">∞</span></span></span></span> or become a
-<span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord text"><span class="mord">Not a Number</span></span></span></span></span>. For example, if either the incident or outgoing rays are
-really close to being perpendicular to the surface normal, the cosine of their
-angles wrt. surface normal approaches zero. Then, any expression which divides
-by this value results in <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord">∞</span></span></span></span>. The program won't crash, but the image will
-slowly become more and more corrupted with black or white pixels. Extra care
-must be taken to clamp such values to a small positive number to avoid dividing
+<span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord text"><span class="mord">Not a Number</span></span></span></span></span>. For example, if the incident or outgoing rays are close
+to being perpendicular to the surface normal, the cosine of their angles
+related to the surface normal approaches zero. Then, any expression divided by
+this value results in <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord">∞</span></span></span></span>. The program won't crash, but the image will
+slowly become more and more corrupted with black or white pixels. We must take
+extra care to clamp such values to a small positive number to avoid dividing
 by zero.</li>
-<li>Sometimes the sampled vector appears below the hemisphere. In these cases we
-simply discard the whole sample, because those samples have zero reflectance.</li>
+<li>Sometimes the sampled vector appears below the hemisphere. In these cases, we
+discard the whole sample because those samples have zero reflectance.</li>
 </ul>
 <p>We also use the trick from <code>pbrt</code> where they perform all BRDF calculations in a
-local space, where the surface normal <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7167em;vertical-align:-0.2861em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.03588em;">g</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">(</span><span class="mord">0</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">1</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">0</span><span class="mclose">)</span></span></span></span>. In this local space
-many computations simplify a lot, for example computing the dot product between
+local space, where the surface normal <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7167em;vertical-align:-0.2861em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.03588em;">g</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">(</span><span class="mord">0</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">1</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">0</span><span class="mclose">)</span></span></span></span>. In this local space,
+many computations simplify a lot. For example, computing the dot product between
 a vector against the surface normal is simply the y-component of the vector. We
 can use the same orthonormal basis from the previous posts to go from world to
 local space, and once we are done with all BRDF math, we can transform the
@@ -387,21 +383,20 @@ results back to world space.</p>
 <ul>
 <li><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal">m</span><span class="mord mathnormal">e</span><span class="mord mathnormal">t</span><span class="mord mathnormal">a</span><span class="mord mathnormal" style="margin-right:0.01968em;">ll</span><span class="mord mathnormal">i</span><span class="mord mathnormal">c</span></span></span></span> is a linear blend between <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal">d</span><span class="mord mathnormal">i</span><span class="mord mathnormal">e</span><span class="mord mathnormal" style="margin-right:0.01968em;">l</span><span class="mord mathnormal">ec</span><span class="mord mathnormal">t</span><span class="mord mathnormal" style="margin-right:0.02778em;">r</span><span class="mord mathnormal">i</span><span class="mord mathnormal">c</span></span></span></span> and <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">1</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal">m</span><span class="mord mathnormal">e</span><span class="mord mathnormal">t</span><span class="mord mathnormal">a</span><span class="mord mathnormal" style="margin-right:0.01968em;">ll</span><span class="mord mathnormal">i</span><span class="mord mathnormal">c</span></span></span></span>. The
 &quot;specular color&quot; is derived from the base color.</li>
-<li><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">s</span><span class="mord mathnormal">p</span><span class="mord mathnormal">ec</span><span class="mord mathnormal">u</span><span class="mord mathnormal" style="margin-right:0.01968em;">l</span><span class="mord mathnormal">a</span><span class="mord mathnormal" style="margin-right:0.02778em;">r</span></span></span></span> basically replaces the explicit index of refraction. It is
-currently fixed to <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0.5</span></span></span></span>, because we don't have a way to get it from GLB yet.</li>
+<li><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">s</span><span class="mord mathnormal">p</span><span class="mord mathnormal">ec</span><span class="mord mathnormal">u</span><span class="mord mathnormal" style="margin-right:0.01968em;">l</span><span class="mord mathnormal">a</span><span class="mord mathnormal" style="margin-right:0.02778em;">r</span></span></span></span> replaces the explicit index of refraction. It is currently fixed to
+<span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0.5</span></span></span></span> because we don't have a way to get it from GLB yet.</li>
 <li><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.854em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">ani</span><span class="mord mathnormal">so</span><span class="mord mathnormal">t</span><span class="mord mathnormal">ro</span><span class="mord mathnormal">p</span><span class="mord mathnormal">i</span><span class="mord mathnormal">c</span></span></span></span> defines the degree of anisotropy. Controls the aspect ratio of
-the specular highlight. It's currently disabled, because our model does not
+the specular highlight. It's currently disabled because our model does not
 have tangents.</li>
 </ul>
-<p>The Disney paper states that their model allows their artist to simply blend
-between any two combination of parameters and have reasonable results. In the
-small example we interpolate metallic from <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0</span></span></span></span> to <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0.5</span></span></span></span> to <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">1</span></span></span></span>.</p>
-<p>We now have an interesting problem where we need to choose which BRDF to sample
-from. The Disney paper doesn't describe a method for it, so in our
-implementation we simply draw a new random variable which selects between
-diffuse and specular BRDF, based on the metallic parameter. For example, if the
-metallic value is <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0.5</span></span></span></span>, both diffuse and specular BRDFs are equally likely to
-be chosen.</p>
+<p>The Disney paper states that their model allows their artists to blend between
+any two combinations of parameters and have good results. In the example we
+interpolate metallic from <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0</span></span></span></span> to <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0.5</span></span></span></span> to <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">1</span></span></span></span>.</p>
+<p>We now have an interesting problem: choosing which BRDF to sample from. The
+Disney paper doesn't describe a method for it, so in our implementation, we draw
+a new random variable that selects between diffuse and specular BRDF based on
+the metallic parameter. For example, if the metallic value is <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0.5</span></span></span></span>, both
+diffuse and specular BRDFs are equally likely to be chosen.</p>
 <h1>Animated BRDF visualizations</h1>
 <article-image-pair>
     <article-caption-image>
@@ -421,22 +416,21 @@ be chosen.</p>
         Fixed roughness to <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0.25</span></span></span></span>
     </article-caption-image>
 </article-image-pair>
-<p>We dramatically improved the capabilities of sample placement visualizer from
-the previous post. The visualizations are now animated, can render different
-text for each frame, and reflectance is now visualized separately from
-probability density functions.</p>
-<p>The animations are encoded in <a href="https://en.wikipedia.org/wiki/APNG">APNG</a> format.
-We chose APNG because:</p>
+<p>We dramatically improved the capabilities of the sample placement visualizer
+from the previous post. The visualizations are now animated and can render
+different text for each frame, and reflectance is directly visualized separately
+from probability density functions.</p>
+<p>The animations are encoded in <a href="https://en.wikipedia.org/wiki/APNG">APNG</a> format. We chose APNG because:</p>
 <ul>
 <li>GIF is too low quality due to limited 256-color palette limitation</li>
-<li>WebP's crate takes very long to build, and has slightly worse support than APNG</li>
+<li>WebP's crate takes very long to build and has slightly worse support than APNG</li>
 <li>Traditional video formats are not as convenient for short looping animations</li>
 </ul>
-<p>These crates were used to create the animations:</p>
+<p>We used these crates to create the animations:</p>
 <ul>
 <li><a href="https://crates.io/crates/apng"><code>apng</code></a> for encoding APNG's from <a href="https://crates.io/crates/image"><code>image</code></a> buffers.</li>
 <li><a href="https://crates.io/crates/png"><code>png</code></a> so we can properly call into <a href="https://crates.io/crates/apng"><code>apng</code></a>.</li>
-<li><a href="https://crates.io/crates/easer"><code>easer</code></a> for <a href="https://easings.net/">easing functions</a>. We use <code>easeInOutCubic</code> for interesting movement.</li>
+<li><a href="https://crates.io/crates/easer"><code>easer</code></a> for <a href="https://easings.net/">easing functions</a> We use <code>easeInOutCubic</code> for interesting movement.</li>
 <li><a href="https://crates.io/crates/imageproc"><code>imageproc</code></a> for drawing text on <a href="https://crates.io/crates/image"><code>image</code></a> buffers.</li>
 <li><a href="https://crates.io/crates/rusttype"><code>rusttype</code></a> for loading TTF fonts for <a href="https://crates.io/crates/imageproc"><code>imageproc</code></a>.</li>
 <li><a href="https://crates.io/crates/rayon"><code>rayon</code></a> for simple data-parallelism to speed up animation renders.</li>
@@ -447,11 +441,11 @@ We chose APNG because:</p>
     <source src="media/a-new-shiny-specular-brdf/material-editor-vp9.webm" type="video/webm" />
 </video>
 <p>Having to recompile the program or exporting a new scene from Blender every time
-we needed to change the roughness or metallic value quickly became a major
-bottleneck. Since our raytracing is already progressive, we can easily implement
-simple material edits and have the raytracer re-render the image at each change.</p>
-<p>We will rewrite this utility in the future once we do a bigger user interface
-overhaul.</p>
+we needed to change the roughness or metallic value quickly became a significant
+bottleneck. Since our raytracing is already progressive, we can quickly
+implement simple material edits and have the raytracer re-render the image at
+each change.</p>
+<p>We will rewrite this utility after a more extensive user interface overhaul.</p>
 <h1>Visualizing normals</h1>
 <article-image-pair>
     <article-caption-image>
@@ -463,9 +457,9 @@ overhaul.</p>
         Rasterized
     </article-caption-image>
 </article-image-pair>
-<p>While we were hunting for bugs in our specular BRDFs, we added a simple way to
-visualize shading normals both in raytraced and rasterized scenes. We will add
-visualizations for texture coordinates and tangents in the future.</p>
+<p>While hunting for bugs in our specular BRDFs, we added a simple way to visualize
+shading normals in raytraced and rasterized scenes. We will add visualizations
+for texture coordinates and tangents in the future.</p>
 </article-content>
     <article-commit><p>Commit: <a href="https://github.com/phoekz/raydiance/commit/bf578f68f0c0906a9cb50548eb3e830cd69222d6"><code>bf578f68</code></a></p></article-commit>
 </article>
@@ -481,22 +475,23 @@ commit="f5b806749234a4086d84388d7264c0f2fd43122a"
 <p><img src="media/visualizing-sample-placement/title-top.png" alt="" />
 <img src="media/visualizing-sample-placement/title-side.png" alt="" /></p>
 <p>Importance sampling Disney specular models is more challenging than our current
-diffuse models. To improve our chances, we created a small tool which visualizes
-where the sample are placed around the hemisphere.</p>
-<p>To make sure the tool works, we used our existing uniform and cosine-weighted
-hemisphere samplers. We also added two additional sample sequences for
-comparison:</p>
+diffuse models. To improve our chances, we created a small tool that visualizes
+where the samples are placed around the hemisphere.</p>
+<p>We used our existing uniform and cosine-weighted hemisphere samplers to ensure
+the tool worked. We also added two additional sample sequences for comparison:</p>
 <ol>
 <li><code>grid</code> sequence, which uniformly samples the unit square.</li>
-<li><code>sobol</code> sequence, which is provided by <a href="https://crates.io/crates/sobol_burley"><code>sobol_burley</code></a> crate. The implementation is based on <a href="https://www.jcgt.org/published/0009/04/01/">Practical Hash-based Owen Scrambling</a>.</li>
+<li><code>sobol</code> sequence, which is provided by the
+<a href="https://crates.io/crates/sobol_burley"><code>sobol_burley</code></a> crate. The implementation is based on
+<a href="https://www.jcgt.org/published/0009/04/01/">Practical Hash-based Owen Scrambling</a>.</li>
 </ol>
 <p>In terms of coordinate spaces, the <code>top</code> plots view the hemisphere from above in
-cartesian space. The <code>side</code> plots in <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord mathnormal">x</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">ϕ</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">[</span><span class="mord">0</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">2</span><span class="mord mathnormal" style="margin-right:0.03588em;">π</span><span class="mclose">]</span></span></span></span> and <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.03588em;">y</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">θ</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.095em;vertical-align:-0.345em;"></span><span class="mopen">[</span><span class="mord">0</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.6954em;"><span style="top:-2.655em;"><span class="pstrut" style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">2</span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.394em;"><span class="pstrut" style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.03588em;">π</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.345em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mclose">]</span></span></span></span>
-hemispherical space.</p>
-<p>For both sets of plots, the background brightness correspond to the magnitude of
-<span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mop">cos</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">θ</span></span></span></span>.</p>
+cartesian space. The <code>side</code> plots in <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord mathnormal">x</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">ϕ</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">[</span><span class="mord">0</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">2</span><span class="mord mathnormal" style="margin-right:0.03588em;">π</span><span class="mclose">]</span></span></span></span> and
+<span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.03588em;">y</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">θ</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.095em;vertical-align:-0.345em;"></span><span class="mopen">[</span><span class="mord">0</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.6954em;"><span style="top:-2.655em;"><span class="pstrut" style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">2</span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.394em;"><span class="pstrut" style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.03588em;">π</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.345em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mclose">]</span></span></span></span> hemispherical space.</p>
+<p>For both sets of plots, the background brightness corresponds to the magnitude
+of <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mop">cos</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.02778em;">θ</span></span></span></span>.</p>
 <p>Looking at the plots, we can intuitively say that <code>cosine</code> performs better than
-<code>uniform</code> sampling, because it places samples closer to the bright spots.
+<code>uniform</code> sampling because it places samples closer to the bright spots.
 Similarly, <code>sobol</code> performs better than <code>random</code> and <code>grid</code>.</p>
 <p>Note that the new sequences are not currently available for rendering. We will
 revisit low-discrepancy sequences later.</p>
@@ -513,47 +508,38 @@ date="2023-01-19"
 commit="c43f282e24a6eecb54fa3361a6e5e192453d0d8d"
 /></p>
 <p><img src="media/implementing-disney-brdf-diffuse-model/title.apng" alt="" /></p>
-<p><a href="https://blog.selfshadow.com/publications/s2012-shading-course/burley/s2012_pbs_disney_brdf_notes_v3.pdf">Disney principled
-BRDF</a>
-is a popular physically based reflectance model developed by Brent Burley et al.
-at Disney. It is adopted by
-<a href="https://docs.blender.org/manual/en/latest/render/shader_nodes/shader/principled.html">Blender</a>,
-<a href="https://cdn2.unrealengine.com/Resources/files/2013SiggraphPresentationsNotes-26915738.pdf">Unreal
-Engine</a>,
-<a href="https://seblagarde.files.wordpress.com/2015/07/course_notes_moving_frostbite_to_pbr_v32.pdf">Frostbite</a>,
-and many other productions. The team at Disney analyzed the <a href="https://www.merl.com/brdf/">MERL BRDF
-Database</a> and fit their model based on MERL's
-empirical measurements. Their goal was to create an artist-friendly model with
-as few parameters as possible. These are the design principles from the course
-notes:</p>
+<p><a href="https://blog.selfshadow.com/publications/s2012-shading-course/burley/s2012_pbs_disney_brdf_notes_v3.pdf">Disney principled BRDF</a> is a popular physically based reflectance
+model developed by Brent Burley et al. at Disney. It is adopted by
+<a href="https://docs.blender.org/manual/en/latest/render/shader_nodes/shader/principled.html">Blender</a>, <a href="https://cdn2.unrealengine.com/Resources/files/2013SiggraphPresentationsNotes-26915738.pdf">Unreal Engine</a>, <a href="https://seblagarde.files.wordpress.com/2015/07/course_notes_moving_frostbite_to_pbr_v32.pdf">Frostbite</a>, and many
+other productions. The team at Disney analyzed the <a href="https://www.merl.com/brdf/">MERL BRDF Database</a>
+and fit their model based on MERL's empirical measurements. Their goal was to
+create an artist-friendly model with as few parameters as possible. These are
+the design principles from the course notes:</p>
 <ol>
 <li>Intuitive rather than physical parameters should be used.</li>
 <li>There should be as few parameters as possible.</li>
 <li>Parameters should be zero to one over their plausible range.</li>
 <li>Parameters should be allowed to be pushed beyond their plausible range where it makes sense.</li>
-<li>All combinations of parameters should be as robust and plausible as possible</li>
+<li>All combinations of parameters should be as robust and plausible as possible.</li>
 </ol>
-<p>The full Disney model is a combination of multiple scattering models, some of
-which we are currently not very experienced with. To avoid getting overwhelmed,
-we are going to study and implement one model at the time, starting with the
-diffuse model <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.10764em;">f</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.1076em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">d</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span>, which is defined as:</p>
+<p>The full Disney model combines multiple scattering models, some of which we need
+to become more experienced with. To avoid getting overwhelmed, we will study and
+implement one model at a time, starting with the diffuse model <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.10764em;">f</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.1076em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">d</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span>, which is
+defined as:</p>
 <p><span class="katex-display"><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:17.4298em;vertical-align:-8.4649em;"></span><span class="mord"><span class="mtable"><span class="col-align-r"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:8.9649em;"><span style="top:-10.9649em;"><span class="pstrut" style="height:3.3714em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.10764em;">f</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.1076em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">d</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span><span style="top:-9.1148em;"><span class="pstrut" style="height:3.3714em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.10764em;">f</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.1076em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">d</span><span class="mord mathnormal mtight">i</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span><span style="top:-7.5907em;"><span class="pstrut" style="height:3.3714em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.10764em;">f</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.1076em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">d</span><span class="mord mathnormal mtight">o</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span><span style="top:-6.0666em;"><span class="pstrut" style="height:3.3714em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">F</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.02778em;">D</span><span class="mord mtight">90</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span><span style="top:-4.5666em;"><span class="pstrut" style="height:3.3714em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.02778em;">θ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0278em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span><span style="top:-3.0666em;"><span class="pstrut" style="height:3.3714em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.02778em;">θ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0278em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">o</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span><span style="top:-1.5666em;"><span class="pstrut" style="height:3.3714em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.02778em;">θ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.0278em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">d</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span><span style="top:-0.0666em;"><span class="pstrut" style="height:3.3714em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span><span style="top:1.4334em;"><span class="pstrut" style="height:3.3714em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">o</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span><span style="top:2.9334em;"><span class="pstrut" style="height:3.3714em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">m</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span><span style="top:4.4334em;"><span class="pstrut" style="height:3.3714em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.03588em;">g</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:8.4649em;"><span></span></span></span></span></span><span class="col-align-l"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:8.9649em;"><span style="top:-10.9649em;"><span class="pstrut" style="height:3.3714em;"></span><span class="mord"><span class="mord"></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3714em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">π</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal">ba</span><span class="mord mathnormal">se</span><span class="mord mathnormal" style="margin-right:0.07153em;">C</span><span class="mord mathnormal">o</span><span class="mord mathnormal" style="margin-right:0.01968em;">l</span><span class="mord mathnormal" style="margin-right:0.02778em;">or</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.10764em;">f</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.1076em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">d</span><span class="mord mathnormal mtight">i</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.10764em;">f</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.1076em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">d</span><span class="mord mathnormal mtight">o</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span><span style="top:-9.1148em;"><span class="pstrut" style="height:3.3714em;"></span><span class="mord"><span class="mord"></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">F</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.02778em;">D</span><span class="mord mtight">90</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">1</span><span class="mclose">)</span><span class="mopen">(</span><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mop">cos</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.02778em;">θ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0278em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mclose"><span class="mclose">)</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">5</span></span></span></span></span></span></span></span></span></span><span style="top:-7.5907em;"><span class="pstrut" style="height:3.3714em;"></span><span class="mord"><span class="mord"></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">F</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.02778em;">D</span><span class="mord mtight">90</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">1</span><span class="mclose">)</span><span class="mopen">(</span><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mop">cos</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.02778em;">θ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0278em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">o</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mclose"><span class="mclose">)</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">5</span></span></span></span></span></span></span></span></span></span><span style="top:-6.0666em;"><span class="pstrut" style="height:3.3714em;"></span><span class="mord"><span class="mord"></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord">0.5</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">2</span><span class="mord mathnormal">ro</span><span class="mord mathnormal" style="margin-right:0.03588em;">ug</span><span class="mord mathnormal">hn</span><span class="mord mathnormal">ess</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop"><span class="mop">cos</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.02778em;">θ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.0278em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">d</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span><span style="top:-4.5666em;"><span class="pstrut" style="height:3.3714em;"></span><span class="mord"><span class="mord"></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord">∣</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.03588em;">g</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mord">∣</span></span></span><span style="top:-3.0666em;"><span class="pstrut" style="height:3.3714em;"></span><span class="mord"><span class="mord"></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord">∣</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">o</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.03588em;">g</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mord">∣</span></span></span><span style="top:-1.5666em;"><span class="pstrut" style="height:3.3714em;"></span><span class="mord"><span class="mord"></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord">∣</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">ω</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">m</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord">∣</span></span></span><span style="top:-0.0666em;"><span class="pstrut" style="height:3.3714em;"></span><span class="mord"><span class="mord"></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord text"><span class="mord">incoming direction</span></span></span></span><span style="top:1.4334em;"><span class="pstrut" style="height:3.3714em;"></span><span class="mord"><span class="mord"></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord text"><span class="mord">outgoing direction</span></span></span></span><span style="top:2.9334em;"><span class="pstrut" style="height:3.3714em;"></span><span class="mord"><span class="mord"></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord text"><span class="mord">microsurface normal</span></span></span></span><span style="top:4.4334em;"><span class="pstrut" style="height:3.3714em;"></span><span class="mord"><span class="mord"></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord text"><span class="mord">geometric normal</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:8.4649em;"><span></span></span></span></span></span></span></span></span></span></span></span></p>
 <p>Disney's diffuse model is a novel empirical model which attempts to solve the
-over darkening that comes from the Lambertian diffuse model. This darkening
-happens at grazing angles, i.e. the angle between incoming light and outgoing
-light is close to 0. Disney models this by adding a <a href="https://en.wikipedia.org/wiki/Fresnel_equations">Fresnel
-factor</a>, which is approximated
-with <a href="https://en.wikipedia.org/wiki/Schlick%27s_approximation">Schlick's
-approximation</a>.
-Basically, the grazing angle responses become brighter the rougher the surface
-becomes.</p>
-<p>The difference in the comparison above can be a bit subtle. The main difference
-is that the edges on the cube are slightly brighter compared to Lambert model,
-and the right side of the cube, which also appears brighter.</p>
-<p>Currently, our implementation intentionally ignores the &quot;sheen&quot; term and the
-subsurface scattering approximation. We will come back to them later. Also, any
-roughness value below 1.0 looks incorrect, because our current implementation
-has no specular terms.</p>
+over-darkening that comes from the Lambertian diffuse model. This darkening
+happens at grazing angles, i.e., the angle between the incoming and outgoing
+light is close to <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">0</span></span></span></span>. Disney models this by adding a <a href="https://en.wikipedia.org/wiki/Fresnel_equations">Fresnel
+factor</a>, which they approximated with <a href="https://en.wikipedia.org/wiki/Schlick%27s_approximation">Schlick's
+approximation</a>.</p>
+<p>The difference in the comparison above can be subtle. The main difference is
+that the cube's edges are slightly brighter compared to the Lambert model, and
+the right side of the cube also appears brighter.</p>
+<p>Our implementation ignores the &quot;sheen&quot; term and the subsurface scattering
+approximation. We will come back to these terms later. Also, any roughness value
+below <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">1</span></span></span></span> looks incorrect because our current implementation has no specular
+terms.</p>
 <p>References:</p>
 <ul>
 <li><a href="https://blog.selfshadow.com/publications/s2012-shading-course/burley/s2012_pbs_disney_brdf_notes_v3.pdf">SIGGRAPH 2012 - Physically Based Shading at Disney - Course Notes</a></li>
@@ -561,8 +547,7 @@ has no specular terms.</p>
 <li><a href="http://shihchinw.github.io/2015/07/implementing-disney-principled-brdf-in-arnold.html">Shih-Chin - Implementing Disney Principled BRDF in Arnold</a></li>
 <li><a href="https://github.com/mmp/pbrt-v3/blob/master/src/materials/disney.cpp"><code>pbrt-v3 - disney.cpp</code></a></li>
 <li><a href="https://github.com/wdas/brdf">Disney BRDF Explorer</a></li>
-</ul>
-</article-content>
+</ul></article-content>
     <article-commit><p>Commit: <a href="https://github.com/phoekz/raydiance/commit/c43f282e24a6eecb54fa3361a6e5e192453d0d8d"><code>c43f282e</code></a></p></article-commit>
 </article>
 <hr><h1 id="texture-support"><a href="#texture-support">Texture support</a></h1>
@@ -575,15 +560,15 @@ date="2023-01-15"
 commit="41a05a78d6fbba82436faece9815c4e8b3da9951"
 /></p>
 <p><img src="media/texture-support/title.apng" alt="" /></p>
-<p>Raydiance now supports texture mapped surfaces. We used multiple shortcuts to
+<p>Raydiance now supports texture-mapped surfaces. We used multiple shortcuts to
 get a basic implementation going:</p>
 <ul>
-<li>Only nearest neighbor filtering is supported.</li>
+<li>Only nearest-neighbor filtering is supported.</li>
 <li>No mipmaps.</li>
 <li>No anisotropic filtering.</li>
-<li>Only <code>R8G8B8A8_UNORM</code> pixel format is supported.</li>
+<li>Only the <code>R8G8B8A8_UNORM</code> pixel format is supported.</li>
 </ul>
-<p>We will revisit these shortcuts later, once our scenes get more complicated.</p>
+<p>We will revisit these shortcuts later once our scenes get more complicated.</p>
 </article-content>
     <article-commit><p>Commit: <a href="https://github.com/phoekz/raydiance/commit/41a05a78d6fbba82436faece9815c4e8b3da9951"><code>41a05a78</code></a></p></article-commit>
 </article>
@@ -598,13 +583,10 @@ commit="9fb5a3800a337b5d663e1c83932e03fe96abfe0f"
 /></p>
 <p><img src="media/new-user-interface/title.apng" alt="" /></p>
 <p>It was time to replace the window title hacks and random keybindings with a real
-graphical user interface. We use the the excellent <a href="https://github.com/ocornut/imgui">Dear
-ImGui</a> library. Since our project is written
-in Rust, we use <a href="https://crates.io/crates/imgui"><code>imgui</code></a> and
-<a href="https://crates.io/crates/imgui-winit-support"><code>imgui-winit-support</code></a> crates to
-wrap the original C++ library and interface with
-<a href="https://crates.io/crates/winit"><code>winit</code></a>.</p>
-<p><span class="katex-display"><span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">Λ</span><span class="mopen">(</span><span class="mord mathnormal">x</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.0074em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.03588em;">π</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span></p>
+graphical user interface. We use the the excellent <a href="https://github.com/ocornut/imgui">Dear ImGui</a>
+library. Since our project is written in Rust, we use <a href="https://crates.io/crates/imgui"><code>imgui</code></a> and
+<a href="https://crates.io/crates/imgui-winit-support"><code>imgui-winit-support</code></a> crates to wrap the original
+C++ library and interface with <a href="https://crates.io/crates/winit"><code>winit</code></a>.</p>
 </article-content>
     <article-commit><p>Commit: <a href="https://github.com/phoekz/raydiance/commit/9fb5a3800a337b5d663e1c83932e03fe96abfe0f"><code>9fb5a380</code></a></p></article-commit>
 </article>
@@ -618,16 +600,14 @@ date="2023-01-13"
 commit="2e0e31997c20714ccc6a3735cf3a5c0a899f9ab9"
 /></p>
 <p><img src="media/cosine-weighted-hemisphere-sampling/title.apng" alt="" /></p>
-<p>To get a cleaner picture, we could increase the number of samples, but that
-would increase render times, which forces us to find ways to make the renderer
-run faster. Alternatively, we could be smarter at using our limited number of
-samples. This way of reducing noise in Monte Carlo simulations is called
-<a href="https://en.wikipedia.org/wiki/Importance_sampling">importance sampling</a>. For
-our simple diffuse cube scene, one of the most impactful techniques is
-cosine-weighted hemisphere sampling. Since the rendering equation has a cosine
-term, it makes sense to sample from a distribution that is similar to that. Our
-implementation is based on
-<a href="https://www.pbr-book.org/3ed-2018/Monte_Carlo_Integration/2D_Sampling_with_Multidimensional_Transformations#Cosine-WeightedHemisphereSampling"><code>pbrt</code></a>.</p>
+<p>To get a clearer picture, we could increase the number of samples, which would
+increase render times, forcing us to find ways to make the renderer run faster.
+Alternatively, we could be smarter at using our limited number of samples. This
+way of reducing noise in Monte Carlo simulations is called <a href="https://en.wikipedia.org/wiki/Importance_sampling">importance
+sampling</a>. One of the most impactful techniques for
+our simple diffuse cube scene is cosine-weighted hemisphere sampling. Since the
+rendering equation has a cosine term, it makes sense to sample from a similar
+distribution. We based our implementation on <a href="https://www.pbr-book.org/3ed-2018/Monte_Carlo_Integration/2D_Sampling_with_Multidimensional_Transformations#Cosine-WeightedHemisphereSampling"><code>pbrt</code></a>.</p>
 <article-image-pair>
     <article-caption-image>
         <img src="media/cosine-weighted-hemisphere-sampling/uniform.apng"/>
@@ -639,8 +619,8 @@ implementation is based on
     </article-caption-image>
 </article-image-pair>
 <p>Here is the comparison between uniform sampling. It is clear that with identical
-sample counts, cosine-weighted sampling results in much cleaner picture than
-uniform sampling. And it does it at pretty much equivalent time.</p>
+sample counts, cosine-weighted sampling results in a much clearer picture than
+uniform sampling. And it does it at an equivalent time.</p>
 </article-content>
     <article-commit><p>Commit: <a href="https://github.com/phoekz/raydiance/commit/2e0e31997c20714ccc6a3735cf3a5c0a899f9ab9"><code>2e0e3199</code></a></p></article-commit>
 </article>
@@ -654,10 +634,10 @@ date="2023-01-12"
 commit="f50c3b6f92eedd52e43406ee4960d3b50b5025ac"
 /></p>
 <p><img src="media/progressive-rendering/title.apng" alt="" /></p>
-<p>Previously we waited until the entire image was completed before displaying to
-the screen. In this commit we redesigned the path tracing loop to render
-progressively and submit intermediate frames as soon as they are finished. This
-significantly improves interactivity.</p>
+<p>Previously we had to wait until the renderer completed the entire image before
+displaying it on the screen. In this commit, we redesigned the path tracing loop
+to render progressively and submit intermediate frames as soon as they are
+finished. This change significantly improves interactivity.</p>
 </article-content>
     <article-commit><p>Commit: <a href="https://github.com/phoekz/raydiance/commit/f50c3b6f92eedd52e43406ee4960d3b50b5025ac"><code>f50c3b6f</code></a></p></article-commit>
 </article>
@@ -671,42 +651,38 @@ date="2023-01-12"
 commit="956e4bf6a4fdb2db5ea790acac1227c0297e58ac"
 /></p>
 <p><img src="media/interactive-cpu-path-tracer/title.apng" alt="" /></p>
-<p>This commit merges the CPU path tracer with the Vulkan renderer, and makes the
+<p>This commit merges the CPU path tracer with the Vulkan renderer and makes the
 camera interactive. As soon as the path tracer finishes rendering, the image is
 uploaded to the GPU and rendered on the window. We can also toggle between
-raytraced image and rasterized image to confirm that both renderers are in sync.</p>
+raytraced and rasterized images to confirm that both renderers are in sync.</p>
 <p>To keep the Vulkan renderer running while the CPU is busy path tracing, we need
-to run the path tracer on its own thread. To communicate across threads
-boundaries, we use Rust standard library
-<a href="https://doc.rust-lang.org/std/sync/mpsc/index.html"><code>std::sync::mpsc:channel</code></a>.
+to run the path tracer on a separate thread. To communicate across thread
+boundaries, we use Rust standard library <a href="https://doc.rust-lang.org/std/sync/mpsc/index.html"><code>std::sync::mpsc:channel</code></a>.
 The main thread sends camera transforms to the path tracer, and the path tracer
 sends the rendered images back to the main thread. The path tracer thread blocks
-on the channel in prevent busy looping.</p>
-<p>For displaying path traced images on the window, we set up a both the uploader
-and the rendering pipeline for the image. Uploading image data is not very
-exciting, refer to this page from <a href="https://vulkan-tutorial.com/Texture_mapping/Images">Vulkan
-Tutorial</a>.</p>
-<p>However, for rendering we used two tricks:</p>
+the channel to prevent busy looping.</p>
+<p>For displaying path traced images on the window, we set up both the uploader and
+the rendering pipeline for the image.</p>
+<p>We used two tricks to render the image:</p>
 <ul>
-<li>To render a fullscreen textured quad, you don't actually need to create vertex
-buffers, set up vertex inputs, and so on. With this
-<a href="https://www.saschawillems.de/blog/2016/08/13/vulkan-tutorial-on-rendering-a-fullscreen-quad-without-buffers/">trick</a>,
-you can use <code>gl_VertexIndex</code> intrinsic in the vertex shader to build a huge
-triangle and then calculate the UVs within it. This saves a lot of boilerplate.</li>
-<li>In Vulkan if you want to sample a texture in your fragment shader, you need to
-create descriptor pools, descriptor set layouts, allocate descriptor sets, make
-sure pipeline layouts are correct, bind the descriptor sets, and so on. With
-<a href="https://registry.khronos.org/vulkan/specs/1.3-extensions/html/vkspec.html#VK_KHR_push_descriptor"><code>VK_KHR_push_descriptor</code></a>
-extension, it is possible to simplify this process significantly. Enabling it
-allows you to push the descriptor right before issuing the draw call, saving a
-lot of boilerplate. We still have to create one descriptor set layout for the
-pipeline layout object, but that is not too bad compared to what we had to do
-before, just to bind one texture to a shader.</li>
+<li>To render a fullscreen textured quad, you don't need to create vertex buffers,
+set up vertex inputs, etc. With this <a href="https://www.saschawillems.de/blog/2016/08/13/vulkan-tutorial-on-rendering-a-fullscreen-quad-without-buffers/">trick</a>, you can use
+<code>gl_VertexIndex</code> intrinsic in the vertex shader to build a huge triangle and
+then calculate its UVs. This technique saves a lot of boilerplate code.</li>
+<li>In Vulkan, if you want to sample a texture in your fragment shader, you need
+to create descriptor pools, and descriptor set layouts, allocate descriptor
+sets, make sure pipeline layouts are correct, bind the descriptor sets, and so
+on. With <a href="https://registry.khronos.org/vulkan/specs/1.3-extensions/html/vkspec.html#VK_KHR_push_descriptor"><code>VK_KHR_push_descriptor</code></a> extension, it is possible
+to simplify this process significantly. Enabling it allows you to push the
+descriptor right before issuing the draw call, saving a lot of boilerplate. We
+still have to create one descriptor set layout for the pipeline layout object,
+but that is pretty good compared to what we had to do before, only to bind one
+texture to a shader.</li>
 </ul>
-<p>As a side, <code>vulkan.rs</code> is reaching 2000 LOC, which is getting pretty challenging
-to work with. We will have to break it down soon.</p>
-<p>The path tracing performance is not great because we are still using only one
-thread. It is also why the image is noisier than the previous post, since we had
+<p>As a side, <code>vulkan.rs</code> is reaching 2000 LOC, which is getting challenging to
+work with. We will have to break it down soon.</p>
+<p>The path tracing performance could be better because we are still using only one
+thread. It is also why the image is noisier than the previous post since we had
 to lower the sample count to get barely interactive frame rates. We will address
 the noise and the performance in upcoming commits.</p>
 </article-content>
@@ -723,13 +699,13 @@ commit="4ade2d5b2acc3da8fabb5d275b9152171ed01ea9"
 /></p>
 <p><img src="media/path-tracing-on-cpu/title.png" alt="" /></p>
 <p>Finally, we are getting into the main feature of <code>raydiance</code>: rendering pretty
-images using ray tracing. We start with a pure CPU implementation. The plan is
+images using path tracing. We start with a pure CPU implementation. The plan is
 to develop and maintain the CPU version as the reference implementation for the
-future GPU version, mainly because it is much easier to work with compared to
-debugging shaders. The Vulkan renderer we've built so far serves as the visual
-interface for <code>raydiance</code>, and later, we will use Vulkan's ray tracing
-extensions to build the GPU version.</p>
-<p>Our implementation use the following components:</p>
+future GPU version, mainly because it is much easier to work with, especially
+when debugging shaders. The Vulkan renderer we've built so far serves as the
+visual interface for <code>raydiance</code>, and later, we will use Vulkan's ray tracing
+extensions to create the GPU version.</p>
+<p>We use the following components:</p>
 <ul>
 <li>Ray vs triangle intersection: <a href="https://jcgt.org/published/0002/01/05/">Watertight Ray/Triangle Intersection</a></li>
 <li>Orthonormal basis: <a href="https://jcgt.org/published/0006/01/01/">Building an Orthonormal Basis, Revisited</a></li>
@@ -737,29 +713,26 @@ extensions to build the GPU version.</p>
 <li>Uniform hemisphere sampling: <a href="https://www.pbr-book.org/3ed-2018/Monte_Carlo_Integration/2D_Sampling_with_Multidimensional_Transformations#UniformlySamplingaHemisphere"><code>pbrt</code></a></li>
 <li>Acceleration structure (bounding volume hierarchy): <a href="https://www.pbr-book.org/3ed-2018/Primitives_and_Intersection_Acceleration/Bounding_Volume_Hierarchies"><code>pbrt</code></a></li>
 </ul>
-<p>We put this together into a path tracing loop, where we bounce rays until they
-hit the sky or they have bounced too many times. Each pixel in the image does
-this a number of times, averages all the samples and writes out the final color
-to the image</p>
+<p>We put this together into a loop, where we bounce rays until they hit the sky or
+have bounced too many times. Each pixel in the image does this several times,
+averages all the samples, and writes out the final color to the image buffer.</p>
 <p>For materials, we start with the simplest one: Lambertian material, which
-scatters incoming light equally in all directions. However, there is a subtle
-detail in Lambertian BRDF, which is that you have to divide the base color with
-π. Here's the explanation from
-<a href="https://www.pbr-book.org/3ed-2018/Reflection_Models/Lambertian_Reflection"><code>pbrt</code></a>.</p>
+scatters incoming light equally in all directions. However, a subtle detail in
+Lambertian BRDF is that you have to divide the base color with <span class="katex"><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.03588em;">π</span></span></span></span>. Here's the
+explanation from <a href="https://www.pbr-book.org/3ed-2018/Reflection_Models/Lambertian_Reflection"><code>pbrt</code></a>.</p>
 <p>For lights, we assume that every ray that bounces off the scene will hit “the
-sky”. In that case, we just return some bright white color.</p>
+sky.” In that case, we return a bright white color.</p>
 <p>For anti-aliasing, we randomly shift the subpixel position of each primary ray
 and apply the box filter over the samples. With enough samples, this naturally
-resolves into a nice image with no aliasing.
-<a href="https://www.pbr-book.org/3ed-2018/Sampling_and_Reconstruction/Image_Reconstruction"><code>pbrt</code></a>'s
-image reconstruction chapter has better alternatives for box filter, which we
+resolves into a nice image with no aliasing. <a href="https://www.pbr-book.org/3ed-2018/Sampling_and_Reconstruction/Image_Reconstruction"><code>pbrt</code></a>'s image
+reconstruction chapter has better alternatives for the box filter, which we
 might look into later.</p>
-<p>For performance, we currently run the path tracer in a single CPU thread.
-Obviously this is not ideal, but for such a tiny image and low sample count, the
-rendering only takes a couple of seconds. We will come back to this once we need
-to make the path tracer run at interactive speeds.</p>
-<p>Currently raydiance doesn't display the path traced image anywhere, for this
-post we wrote the image out to the disk. We will fix this soon.</p>
+<p>We currently run the path tracer in a single CPU thread. This could be better,
+but the rendering only takes a couple of seconds for such a tiny image and a low
+sample count. We will return to this once we need to make the path tracer run at
+interactive speeds.</p>
+<p>Currently, raydiance doesn't display the path traced image anywhere. For this
+post, we wrote the image out directly into the disk. We will fix this soon.</p>
 </article-content>
     <article-commit><p>Commit: <a href="https://github.com/phoekz/raydiance/commit/4ade2d5b2acc3da8fabb5d275b9152171ed01ea9"><code>4ade2d5b</code></a></p></article-commit>
 </article>
@@ -773,11 +746,11 @@ date="2023-01-09"
 commit="ca2a23caaa5e9d9b321a50389af492fbc708b560"
 /></p>
 <p><img src="media/adding-multisampled-antialiasing-msaa/title.png" alt="" /></p>
-<p>This was pretty easy. Similarly to depth buffer, we create a new color buffer
-which will be multisampled. The depth buffer is also updated to support
+<p>Implementing MSAA was easy. Similarly to the depth buffer, we create a new color
+buffer which will be multisampled. The depth buffer is also updated to support
 multisampling. Then we update all the <code>resolve*</code> fields in
-<a href="https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkRenderingAttachmentInfo.html"><code>VkRenderingAttachmentInfo</code></a>,
-and finally we add multisampling state to our pipeline. No more jagged edges.</p>
+<a href="https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkRenderingAttachmentInfo.html"><code>VkRenderingAttachmentInfo</code></a>, and finally, we add the multisampling
+state to our pipeline. No more jagged edges.</p>
 </article-content>
     <article-commit><p>Commit: <a href="https://github.com/phoekz/raydiance/commit/ca2a23caaa5e9d9b321a50389af492fbc708b560"><code>ca2a23ca</code></a></p></article-commit>
 </article>
@@ -792,60 +765,54 @@ commit="cb1bcc1975e3860b7208cffb4286fec3e91cc5d2"
 /></p>
 <p><img src="media/more-triangles-cameras-light-and-depth/title.apng" alt="spinning cube" /></p>
 <p>A lot has happened since our single hardcoded triangle. We can now render
-shaded, depth tested, transformed, indexed triangle lists, with perspective
+shaded, depth tested, transformed, and indexed triangle lists with perspective
 projection.</p>
 <h1>Loading and rendering GLTF scenes</h1>
 <p><img src="media/more-triangles-cameras-light-and-depth/blender-view.png" alt="" /></p>
 <p>We created a simple &quot;cube on a plane&quot; scene in Blender. Each object has a
-&quot;Principled BSDF&quot; material attached to it. This material is <a href="https://docs.blender.org/manual/en/latest/addons/import_export/scene_gltf2.html#extensions">well
-supported</a>
-by Blender's GLTF exporter, which is what we will use for our application. GLTF
-supports text formats, but we will export the scene in binary (<code>.glb</code>) for
-efficiency.</p>
-<p>To load the <code>.glb</code> file, we use <a href="https://crates.io/crates/gltf"><code>gltf</code></a> crate.
-Immediately after loading, we pick out the interesting fields (cameras, meshes,
-materials) and convert them into our <a href="https://github.com/phoekz/raydiance/blob/cb1bcc1975e3860b7208cffb4286fec3e91cc5d2/src/assets.rs#L3-L35">internal data
-format</a>.
-This internal format is designed to be easy to upload to the GPU. We also do
-aggressive validation in order to catch any properties that we don't support
-yet, such as textures, meshes that do not have normals, and so on. Our internal
-formats represent matrices and vectors with types from
-<a href="https://crates.io/crates/nalgebra"><code>nalgebra</code></a> crate. To turn our internal
-formats into byte slices <a href="https://crates.io/crates/bytemuck"><code>bytemuck</code></a> crate.</p>
-<p>Before we can render, we need to upload geometry data to the GPU. For now, we
-assume the number of meshes is much less than 4096 (on most Windows hosts the
-<a href="https://vulkan.gpuinfo.org/displaydevicelimit.php?platform=windows&amp;name=maxMemoryAllocationCount"><code>maxMemoryAllocationCount</code></a>
-is 4096). This allows us to cheat and allocate buffers for each mesh. The better
-way to handle allocations is make a few large allocations and sub-allocate
-within those, which we can do ourselves, or use a library like
-<a href="https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator"><code>VulkanMemoryAllocator</code></a>.
-We will come back to memory allocators in the future.</p>
+&quot;Principled BSDF&quot; material attached to it. This material is well supported by
+<a href="https://docs.blender.org/manual/en/latest/addons/import_export/scene_gltf2.html#extensions">Blender's GLTF exporter</a>, which is what we will use for our
+application. GLTF supports text formats, but we will export the scene in binary
+(<code>.glb</code>) for efficiency.</p>
+<p>To load the <code>.glb</code> file, we use <a href="https://crates.io/crates/gltf"><code>gltf</code></a> crate. Immediately after
+loading, we pick out the interesting fields (cameras, meshes, materials) and
+convert them into our <a href="https://github.com/phoekz/raydiance/blob/cb1bcc1975e3860b7208cffb4286fec3e91cc5d2/src/assets.rs#L3-L35">internal data format</a>. We designed this
+internal format to be easy to upload to the GPU. We also do aggressive
+validation to catch any properties that we don't support yet, such as textures,
+meshes that do not have normals, etc. Our internal formats represent matrices
+and vectors with types from <a href="https://crates.io/crates/nalgebra"><code>nalgebra</code></a> crate. To turn our
+internal formats into byte slices, we use the <a href="https://crates.io/crates/bytemuck"><code>bytemuck</code></a>
+crate.</p>
+<p>Before we can render, we need to upload geometry data to the GPU. We assume the
+number of meshes is much less than 4096 (on most Windows hosts, the
+<a href="https://vulkan.gpuinfo.org/displaydevicelimit.php?platform=windows&amp;name=maxMemoryAllocationCount"><code>maxMemoryAllocationCount</code></a> is 4096). This assumption allows us to
+cheat and allocate buffers for each mesh. The better way to handle allocations
+is to make a few large allocations and sub-allocate within those, which we can
+do ourselves or use a library like <a href="https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator"><code>VulkanMemoryAllocator</code></a>. We will come
+back to memory allocators in the future.</p>
 <p>To render, we will have to work out the perspective projection, the view
-transform and object transforms from GLTF. We also add rotation transform to
+transform, and object transforms from GLTF. We also add a rotation transform to
 animate the cube. We pre-multiply all transforms and upload the final matrix to
-the vertex shader using <a href="https://registry.khronos.org/vulkan/specs/1.3-extensions/html/vkspec.html#descriptorsets-push-constants">push
-constants</a>.
-The base color of the mesh is also packed into a push constant. Push constants
-are great for small data, because we can avoid:</p>
+the vertex shader using <a href="https://registry.khronos.org/vulkan/specs/1.3-extensions/html/vkspec.html#descriptorsets-push-constants">push constants</a>. We also pack the base
+color into the push constant. Push constants are great for small data because we
+can avoid the following:</p>
 <ol>
 <li>Descriptor set layouts, descriptor pools, descriptor sets</li>
-<li>Uniform buffers, which would have to be double buffered to avoid stalls</li>
+<li>Uniform buffers, which would have to be double buffered to avoid pipeline stalls</li>
 <li>Synchronizing updates to uniform buffers</li>
 </ol>
 <p>As a side, while looking into push constants, we learned about
-<a href="https://registry.khronos.org/vulkan/specs/1.3-extensions/html/vkspec.html#VK_KHR_push_descriptor"><code>VK_KHR_push_descriptor</code></a>.
-This extension sounds like it could further simplify working with Vulkan, which
-is really exciting. We will come back to it in the future once we get into
+<a href="https://registry.khronos.org/vulkan/specs/1.3-extensions/html/vkspec.html#VK_KHR_push_descriptor"><code>VK_KHR_push_descriptor</code></a>. This extension could simplify
+working with Vulkan, which is exciting. We will return to it once we get into
 texture mapping.</p>
 <h1>Depth testing with <code>VK_KHR_dynamic_rendering</code></h1>
 <p><img src="media/more-triangles-cameras-light-and-depth/depth-attachment.png" alt="" /></p>
 <p>Depth testing requires a depth texture, which we create at startup, and
 re-create when the window changes size. To enable depth testing with
 <code>VK_KHR_dynamic_rendering</code>, we had to extend our graphics pipeline with a new
-structure called
-<a href="https://registry.khronos.org/vulkan/specs/1.3-extensions/html/vkspec.html#VkPipelineRenderingCreateInfo"><code>VkPipelineRenderingCreateInfo</code></a>,
-and also add color blend state which was previously left out. One additional
-pipeline barrier was required to transition the depth texture for rendering.</p>
+structure called <a href="https://registry.khronos.org/vulkan/specs/1.3-extensions/html/vkspec.html#VkPipelineRenderingCreateInfo"><code>VkPipelineRenderingCreateInfo</code></a> and add a
+color blend state which was previously left out. One additional pipeline barrier
+was required to transition the depth texture for rendering.</p>
 </article-content>
     <article-commit><p>Commit: <a href="https://github.com/phoekz/raydiance/commit/cb1bcc1975e3860b7208cffb4286fec3e91cc5d2"><code>cb1bcc19</code></a></p></article-commit>
 </article>
@@ -860,13 +827,11 @@ commit="c8f9ef2c0f3b51ddfd71f33ec086fca1531051ab"
 /></p>
 <p><img src="media/first-triangle/title.apng" alt="first triangle" /></p>
 <p>This is the simplest triangle example rendered without any device memory
-allocations. The triangle is hard coded in the vertex shader and we index into
+allocations. The triangle is hardcoded in the vertex shader, and we index into
 its attributes with vertex index.</p>
-<p>We added a simple shader compiling step in
-<a href="https://doc.rust-lang.org/cargo/reference/build-scripts.html"><code>build.rs</code></a> which
-builds <code>.glsl</code> source code into <code>.spv</code> binary format using Google's
-<a href="https://github.com/google/shaderc/tree/main/glslc"><code>glslc</code></a>, which is included
-in <a href="https://vulkan.lunarg.com/sdk/home">LunarG's Vulkan SDK</a></p>
+<p>We added a simple shader compiling step in <a href="https://doc.rust-lang.org/cargo/reference/build-scripts.html"><code>build.rs</code></a> which builds
+<code>.glsl</code> source code into <code>.spv</code> binary format using Google's <a href="https://github.com/google/shaderc/tree/main/glslc"><code>glslc</code></a>,
+which is included in <a href="https://vulkan.lunarg.com/sdk/home">LunarG's Vulkan SDK</a>.</p>
 </article-content>
     <article-commit><p>Commit: <a href="https://github.com/phoekz/raydiance/commit/c8f9ef2c0f3b51ddfd71f33ec086fca1531051ab"><code>c8f9ef2c</code></a></p></article-commit>
 </article>
@@ -885,28 +850,25 @@ commit="0f6d7f1bf1b22d1fff43e87080c854eadb3e459d"
 <li>Load Vulkan with <a href="https://crates.io/crates/ash"><code>ash</code></a> crate.</li>
 <li>Creates Vulkan instance with <code>VK_LAYER_KHRONOS_validation</code> and debug
 utilities.</li>
-<li>Creates window surface with
-<a href="https://crates.io/crates/ash-window"><code>ash-window</code></a> and
+<li>Creates window surface with <a href="https://crates.io/crates/ash-window"><code>ash-window</code></a> and
 <a href="https://crates.io/crates/raw-window-handle"><code>raw-window-handle</code></a> crates.</li>
-<li>Creates logical device and queues.</li>
+<li>Creates a logical device and queues.</li>
 <li>Creates command pool and buffers.</li>
-<li>Creates swapchain.</li>
-<li>Creates semaphores and fences for host to host and host to device
+<li>Creates the swapchain.</li>
+<li>Creates semaphores and fences for host-to-host and host-to-device
 synchronization.</li>
-<li>Clears the screen with a different color every frame.</li>
+<li>Clears the screen with a different color for every frame.</li>
 </ol>
-<p>We also handle tricky situations such as user resizing the window and minimizing
-the window.</p>
-<p>Notably we are not creating render passes or framebuffers, thanks to
-<code>VK_KHR_dynamic_rendering</code>. We do have to specify some render pass parameters
-when we record command buffers, but reducing the number of API abstractions
-simplifies the implementation signifcantly. We used this
-<a href="https://github.com/SaschaWillems/Vulkan/blob/313ac10de4a765997ddf5202c599e4a0ca32c8ca/examples/dynamicrendering/dynamicrendering.cpp">example</a>
-by Sascha Willems as a reference.</p>
-<p>Everything is written under <code>main()</code> with minimal abstractions and with liberal
-use of <code>unsafe</code>. We will do a <a href="https://caseymuratori.com/blog_0015">semantic
-compression</a> pass later once we have
-learned more about how the program should be laid out.</p>
+<p>We also handle tricky situations, such as the user resizing the window and
+minimizing the window.</p>
+<p>We don't have to create render passes or framebuffers, thanks to the
+<code>VK_KHR_dynamic_rendering</code> extension. However, we have to specify some render
+pass parameters when we record command buffers, but reducing the number of API
+abstractions simplifies the implementation. We used this
+<a href="https://github.com/SaschaWillems/Vulkan/blob/313ac10de4a765997ddf5202c599e4a0ca32c8ca/examples/dynamicrendering/dynamicrendering.cpp">example</a> by Sascha Willems as a reference.</p>
+<p>We wrote everything under the <code>main()</code> with minimal abstractions and liberal use
+of the <code>unsafe</code> keyword. We will do a <a href="https://caseymuratori.com/blog_0015">semantic compression</a> pass later
+once we learn more about how to structure the program.</p>
 <p>Next we will continue with more Vulkan code to get a triangle on the screen.</p>
 </article-content>
     <article-commit><p>Commit: <a href="https://github.com/phoekz/raydiance/commit/0f6d7f1bf1b22d1fff43e87080c854eadb3e459d"><code>0f6d7f1b</code></a></p></article-commit>
@@ -921,15 +883,15 @@ date="2023-01-07"
 commit="ff4c31c2c6c2039d33bfd07865448da963febfd6"
 /></p>
 <p><img src="media/hello-winit/title.png" alt="empty window" /></p>
-<p>Before anything interesting can happen, we are going to need a window to draw
-on. We use <a href="https://crates.io/crates/winit"><code>winit</code></a> crate for windowing and
-handling inputs. For convenience, we bound the Escape key to close the window
-and center the window in the middle of the primary monitor.</p>
-<p>For simple logging we use <a href="https://crates.io/crates/log"><code>log</code></a> and
-<a href="https://crates.io/crates/env_logger"><code>env_logger</code></a>, and for application-level
-error handling we use <a href="https://crates.io/crates/anyhow"><code>anyhow</code></a>.</p>
-<p>Next we are going to slog through a huge amount of Vulkan boilerplate to begin
-drawing something on our blank window.</p>
+<p>Before anything interesting can happen, we need a window to draw on. We use the
+<a href="https://crates.io/crates/winit"><code>winit</code></a> crate for windowing and handling inputs. For convenience,
+we bound the Escape key to close the window and center the window in the middle
+of the primary monitor.</p>
+<p>For simple logging, we use <a href="https://crates.io/crates/log"><code>log</code></a> and
+<a href="https://crates.io/crates/env_logger"><code>env_logger</code></a>, and for application-level error handling, we
+use <a href="https://crates.io/crates/anyhow"><code>anyhow</code></a>.</p>
+<p>Next, we will slog through a huge Vulkan boilerplate to draw something on our
+blank window.</p>
 </article-content>
     <article-commit><p>Commit: <a href="https://github.com/phoekz/raydiance/commit/ff4c31c2c6c2039d33bfd07865448da963febfd6"><code>ff4c31c2</code></a></p></article-commit>
 </article>

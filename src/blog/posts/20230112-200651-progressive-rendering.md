@@ -7,7 +7,7 @@
 
 ![](media/progressive-rendering/title.apng)
 
-Previously we waited until the entire image was completed before displaying to
-the screen. In this commit we redesigned the path tracing loop to render
-progressively and submit intermediate frames as soon as they are finished. This
-significantly improves interactivity.
+Previously we had to wait until the renderer completed the entire image before
+displaying it on the screen. In this commit, we redesigned the path tracing loop
+to render progressively and submit intermediate frames as soon as they are
+finished. This change significantly improves interactivity.
