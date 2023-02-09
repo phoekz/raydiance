@@ -30,6 +30,10 @@ nalgebra = { version = "0.32.1", features = ["bytemuck"] }
 num = "0.4.0"
 num-format = "0.4.4"
 palette = { version = "0.6.1", features = ["bytemuck"] }
+plotters = { version = "0.3.4", default-features = false, features = [
+    "svg_backend",
+    "line_series",
+] }
 png = "0.17.7"
 rand = "0.8.5"
 rand_pcg = "0.3.1"
