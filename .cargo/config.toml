@@ -1,0 +1,13 @@
+[alias]
+rr = "run --release"
+rr-dbg = "rr debug"
+rr-ed = "rr editor"
+rr-off = "rr offline --render-config src/assets/cfg/preview.render.ron --scene-config src/assets/cfg/rounded_cube.scene.ron"
+
+w-blog = "watch -i docs/blog/index.html -- cargo run blog"
+w-test-all = "watch -- cargo test -- --nocapture"
+w-test-exact = "watch -- cargo test -- --nocapture --exact"
+
+[env]
+RUST_LOG = "info"
+# RAYON_NUM_THREADS = "1"
