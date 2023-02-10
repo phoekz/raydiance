@@ -154,6 +154,7 @@ enum Commands {
     Offline(offline::Args),
     Debug,
     Blog,
+    BlogPlot,
 }
 
 impl Default for Commands {
@@ -174,6 +175,7 @@ fn main() -> Result<()> {
         Commands::Offline(args) => offline::run(args),
         Commands::Debug => debug::run(),
         Commands::Blog => blog::build(),
+        Commands::BlogPlot => blog::plot(),
     }
 }
 

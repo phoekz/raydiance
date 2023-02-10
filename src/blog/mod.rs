@@ -7,8 +7,8 @@ mod plot;
 mod template;
 
 pub fn build() -> Result<()> {
-    // Generate plots.
-    plot::gen()?;
+    // Timing.
+    let timer = Instant::now();
 
     // Find posts.
     let posts = input::find_posts()?;
@@ -32,6 +32,7 @@ pub fn build() -> Result<()> {
             if index < post_count - 1 {
                 articles.push_str("<hr>");
             }
+            info!("Processed {}", post.link_name);
         }
         articles
     };
@@ -43,6 +44,21 @@ pub fn build() -> Result<()> {
         File::create(index_html_path())?.write_all(index.as_bytes())?;
     }
 
+    info!(
+        "Blog generation took {} seconds",
+        timer.elapsed().as_secs_f64()
+    );
+
+    Ok(())
+}
+
+pub fn plot() -> Result<()> {
+    let timer = Instant::now();
+    plot::gen()?;
+    info!(
+        "Blog plot generation took {} seconds",
+        timer.elapsed().as_secs_f64()
+    );
     Ok(())
 }
 
