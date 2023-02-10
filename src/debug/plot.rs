@@ -107,7 +107,7 @@ impl Plot {
         let image = image.resize_exact(
             PLOT_IMAGE_SCALE * image.width(),
             PLOT_IMAGE_SCALE * image.height(),
-            image::imageops::Nearest,
+            imagelib::imageops::Nearest,
         );
         image.into_rgb8().into()
     }

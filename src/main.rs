@@ -35,7 +35,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use ::image as imagelib;
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use ash::vk;
 use bitvec::prelude::*;

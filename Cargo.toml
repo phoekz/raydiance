@@ -17,7 +17,7 @@ easer = "0.3.0"
 env_logger = "0.10.0"
 gltf = "1.0.0"
 hw-skymodel = "0.1.1"
-image = "0.24.5"
+imagelib = { version = "0.24.5", package = "image" }
 imageproc = "0.23.0"
 imgui = { version = "0.10.0", features = ["tables-api"] }
 imgui-winit-support = "0.10.0"
