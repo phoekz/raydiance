@@ -8,7 +8,7 @@ rr-off-preview-mat = "rr offline --render-job-name material --render-config src/
 rr-off-preview-sky = "rr offline --render-job-name sky --render-config src/assets/cfg/preview.render.ron --scene-config src/assets/cfg/sky.scene.ron"
 
 
-w-blog = "watch -i docs/blog/index.html -- cargo run blog"
+w-blog = "watch -i docs/blog/index.html -- cargo run blog-build"
 w-off = "watch -- cargo rr -- offline --render-job-name debug-preview --render-config src/assets/cfg/preview.render.ron --scene-config src/assets/cfg/debug.scene.ron"
 w-test-all = "watch -- cargo test -- --nocapture"
 w-test-exact = "watch -- cargo test -- --nocapture --exact"

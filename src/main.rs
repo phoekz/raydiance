@@ -153,7 +153,8 @@ enum Commands {
     Editor,
     Offline(offline::Args),
     Debug,
-    Blog,
+    BlogNew(blog::NewArgs),
+    BlogBuild,
     BlogPlot,
 }
 
@@ -174,7 +175,8 @@ fn main() -> Result<()> {
         Commands::Editor => editor(),
         Commands::Offline(args) => offline::run(args),
         Commands::Debug => debug::run(),
-        Commands::Blog => blog::build(),
+        Commands::BlogNew(args) => blog::new(args),
+        Commands::BlogBuild => blog::build(),
         Commands::BlogPlot => blog::plot(),
     }
 }

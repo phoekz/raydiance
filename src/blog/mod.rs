@@ -6,6 +6,37 @@ mod md;
 mod plot;
 mod template;
 
+#[derive(clap::Args)]
+pub struct NewArgs {
+    #[arg(long)]
+    title: String,
+
+    #[arg(long)]
+    link_name: String,
+}
+
+pub fn new(args: NewArgs) -> Result<()> {
+    use std::io::Write;
+
+    let title = args.title;
+    let link_name = args.link_name;
+    let commit = (0..40).into_iter().map(|_| '0').collect::<String>();
+
+    let timestamp = utc_timestamp()?;
+    let post_dir_name = format!("{timestamp}-{link_name}");
+    let post_dir = posts_dir().join(post_dir_name);
+    let post_md = post_dir.join("post.md");
+    let post_content = format!("{{{{Meta((title:\"{title}\", commit:\"{commit}\"))}}}}");
+
+    std::fs::create_dir(&post_dir)?;
+    info!("Created directory: {}", post_dir.display());
+
+    BufWriter::new(File::create(&post_md)?).write_all(post_content.as_bytes())?;
+    info!("Created file: {}", post_md.display());
+
+    Ok(())
+}
+
 pub fn build() -> Result<()> {
     // Timing.
     let timer = Instant::now();
