@@ -143,7 +143,17 @@ article-commit {
 </head>
 <body>
     <header><h1>Raydiance - Blog</h1></header><hr>
-    <section><h1 id="new-skylight-model"><a href="#new-skylight-model">New skylight model, tone mapping, new visualizations</a></h1>
+    <section><h1 id="sky-model-crate"><a href="#sky-model-crate">Releasing skylight model as a crate</a></h1>
+<article>
+    <article-date>2023-02-11</article-date>
+    <article-content><p></p>
+<p><img src="posts/20230211-190654-sky-model-crate/crates.png" alt="" /></p>
+<p>We have released the skylight model from the previous post as a standalone crate named <a href="https://crates.io/crates/hw-skymodel"><code>hw-skymodel</code></a>. The implementation is almost identical, except that the <code>new()</code> function returns <code>Result</code> instead of <code>assert!</code>.</p>
+<p>Publishing into <a href="https://crates.io">crates.io</a> was straightforward; we had to get an API key and fill in all the required fields in the <code>Cargo.toml</code> file, as mentioned in this <a href="https://doc.rust-lang.org/cargo/reference/publishing.html">article</a>.</p>
+</article-content>
+    <article-commit><p>Commit: <a href="https://github.com/phoekz/raydiance/commit/3069b84b8d8c5b8b455452d95e0c7386f577e046"><code>3069b84b</code></a></p></article-commit>
+</article>
+<hr><h1 id="new-skylight-model"><a href="#new-skylight-model">New skylight model, tone mapping, new visualizations</a></h1>
 <article>
     <article-date>2023-02-09</article-date>
     <article-content><p></p>
