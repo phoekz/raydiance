@@ -86,6 +86,7 @@ pub struct Input {
     pub tonemapping: bool,
     pub exposure: Exposure,
     pub sky_params: sky::ext::StateExtParams,
+    pub salt: Option<u64>,
 }
 
 impl Default for Input {
@@ -99,6 +100,7 @@ impl Default for Input {
             tonemapping: true,
             exposure: Exposure::default(),
             sky_params: sky::ext::StateExtParams::default(),
+            salt: None,
         }
     }
 }
@@ -468,7 +470,10 @@ fn radiance(
             glb::dynamic_sample(glb_scene, dyn_scene, material.roughness, tex_coord).red();
         let metallic =
             glb::dynamic_sample(glb_scene, dyn_scene, material.metallic, tex_coord).red();
-        let specular = 0.5;
+        let specular =
+            glb::dynamic_sample(glb_scene, dyn_scene, material.specular, tex_coord).red();
+        let specular_tint =
+            glb::dynamic_sample(glb_scene, dyn_scene, material.specular_tint, tex_coord).red();
         let anisotropic = 0.0;
 
         // Orthonormal basis.
@@ -500,6 +505,7 @@ fn radiance(
                     base_color,
                     metallic,
                     specular,
+                    specular_tint,
                     roughness,
                     anisotropic,
                 });

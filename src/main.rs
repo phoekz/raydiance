@@ -350,6 +350,7 @@ fn editor() -> Result<()> {
                     tonemapping,
                     exposure,
                     sky_params,
+                    salt: None,
                 });
 
                 // Draw screen.
@@ -423,12 +424,13 @@ fn editor() -> Result<()> {
                                     ui.table_next_row();
                                     ui.table_set_column_index(0);
                                     {
-                                        let _id = ui.push_id("Base color");
+                                        let name = "Base color";
+                                        let _id = ui.push_id(name);
                                         let index = material.base_color as usize;
                                         let mut texture = &mut dyn_scene.textures[index];
                                         let mut bit = dyn_scene.replaced_textures[index];
 
-                                        ui.text("Base Color");
+                                        ui.text(name);
                                         ui.table_next_column();
 
                                         if let glb::DynamicTexture::Vector4(ref mut value) =
@@ -460,12 +462,13 @@ fn editor() -> Result<()> {
                                         ui.table_next_column();
                                     }
                                     {
-                                        let _id = ui.push_id("Roughness");
+                                        let name = "Roughness";
+                                        let _id = ui.push_id(name);
                                         let index = material.roughness as usize;
                                         let mut texture = &mut dyn_scene.textures[index];
                                         let mut bit = dyn_scene.replaced_textures[index];
 
-                                        ui.text("Roughness");
+                                        ui.text(name);
                                         ui.table_next_column();
 
                                         if let glb::DynamicTexture::Scalar(ref mut value) =
@@ -496,12 +499,87 @@ fn editor() -> Result<()> {
                                         ui.table_next_column();
                                     }
                                     {
-                                        let _id = ui.push_id("Metallic");
+                                        let name = "Metallic";
+                                        let _id = ui.push_id(name);
                                         let index = material.metallic as usize;
                                         let mut texture = &mut dyn_scene.textures[index];
                                         let mut bit = dyn_scene.replaced_textures[index];
 
-                                        ui.text("Metallic");
+                                        ui.text(name);
+                                        ui.table_next_column();
+
+                                        if let glb::DynamicTexture::Scalar(ref mut value) =
+                                            &mut texture
+                                        {
+                                            if imgui::Drag::new("##slider")
+                                                .range(0.0, 1.0)
+                                                .speed(0.01)
+                                                .build(ui, value)
+                                            {
+                                                // Convenience: replace texture when an edit has been made without extra interaction.
+                                                dyn_scene.replaced_textures.set(index, true);
+                                            }
+                                        }
+                                        ui.table_next_column();
+
+                                        {
+                                            if ui.checkbox("##use", &mut bit) {
+                                                dyn_scene.replaced_textures.set(index, bit);
+                                            }
+                                            ui.same_line();
+                                            if ui.button("X") {
+                                                // Convenience: reset to default value and clear replacement with one click.
+                                                *texture = dyn_scene.default_textures[index];
+                                                dyn_scene.replaced_textures.set(index, false);
+                                            }
+                                        }
+                                        ui.table_next_column();
+                                    }
+                                    {
+                                        let name = "Specular";
+                                        let _id = ui.push_id(name);
+                                        let index = material.specular as usize;
+                                        let mut texture = &mut dyn_scene.textures[index];
+                                        let mut bit = dyn_scene.replaced_textures[index];
+
+                                        ui.text(name);
+                                        ui.table_next_column();
+
+                                        if let glb::DynamicTexture::Scalar(ref mut value) =
+                                            &mut texture
+                                        {
+                                            if imgui::Drag::new("##slider")
+                                                .range(0.0, 1.0)
+                                                .speed(0.01)
+                                                .build(ui, value)
+                                            {
+                                                // Convenience: replace texture when an edit has been made without extra interaction.
+                                                dyn_scene.replaced_textures.set(index, true);
+                                            }
+                                        }
+                                        ui.table_next_column();
+
+                                        {
+                                            if ui.checkbox("##use", &mut bit) {
+                                                dyn_scene.replaced_textures.set(index, bit);
+                                            }
+                                            ui.same_line();
+                                            if ui.button("X") {
+                                                // Convenience: reset to default value and clear replacement with one click.
+                                                *texture = dyn_scene.default_textures[index];
+                                                dyn_scene.replaced_textures.set(index, false);
+                                            }
+                                        }
+                                        ui.table_next_column();
+                                    }
+                                    {
+                                        let name = "Specular Tint";
+                                        let _id = ui.push_id(name);
+                                        let index = material.specular_tint as usize;
+                                        let mut texture = &mut dyn_scene.textures[index];
+                                        let mut bit = dyn_scene.replaced_textures[index];
+
+                                        ui.text(name);
                                         ui.table_next_column();
 
                                         if let glb::DynamicTexture::Scalar(ref mut value) =

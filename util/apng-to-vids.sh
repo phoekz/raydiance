@@ -2,9 +2,9 @@
 
 name=$1
 post=$2
-input="${name}.apng"
-output_h265="docs/blog/media/${post}/${name}-h265.mp4"
-output_vp9="docs/blog/media/${post}/${name}-vp9.webm"
+input="work/${name}.apng"
+output_h265="work/${name}-h265.mp4"
+output_vp9="work/${name}-vp9.webm"
 loops=2
 
 time ffmpeg \
@@ -41,7 +41,7 @@ du -h $output_vp9
 
 echo "
 <video width=\"800\" height=\"450\" autoplay loop muted playsinline>
-    <source src=\"media/${post}/${output_h265}\" type=\"video/mp4\" />
-    <source src=\"media/${post}/${output_vp9}\" type=\"video/webm\" />
+    <source src=\"${output_h265}\" type=\"video/mp4\" />
+    <source src=\"${output_vp9}\" type=\"video/webm\" />
 </video>
 "

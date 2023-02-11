@@ -2,9 +2,11 @@
 rr = "run --release"
 rr-dbg = "rr debug"
 rr-ed = "rr editor"
-rr-off = "rr offline --render-config src/assets/cfg/preview.render.ron --scene-config src/assets/cfg/rounded_cube.scene.ron"
+rr-off-default = "rr offline --render-config src/assets/cfg/default.render.ron --scene-config src/assets/cfg/debug.scene.ron"
+rr-off-preview = "rr offline --render-config src/assets/cfg/preview.render.ron --scene-config src/assets/cfg/debug.scene.ron"
 
 w-blog = "watch -i docs/blog/index.html -- cargo run blog"
+w-off = "watch -- cargo rr -- offline --render-config src/assets/cfg/preview.render.ron --scene-config src/assets/cfg/debug.scene.ron"
 w-test-all = "watch -- cargo test -- --nocapture"
 w-test-exact = "watch -- cargo test -- --nocapture --exact"
 

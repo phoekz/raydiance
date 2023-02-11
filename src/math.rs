@@ -115,6 +115,10 @@ impl ColorRgb {
         Self::new(aces(self.red()), aces(self.green()), aces(self.blue()))
     }
 
+    pub fn luminance(self) -> f32 {
+        0.2126 * self.red() + 0.7152 * self.green() + 0.0722 * self.blue()
+    }
+
     pub fn raw_mut(&mut self) -> &mut [f32; 3] {
         &mut self.0
     }
@@ -307,6 +311,14 @@ pub fn lerp_color(a: &ColorRgb, b: &ColorRgb, t: f32) -> ColorRgb {
         lerp_scalar(a.green(), b.green(), t),
         lerp_scalar(a.blue(), b.blue(), t),
     )
+}
+
+pub fn lerp_array<const LEN: usize>(lhs: [f32; LEN], rhs: [f32; LEN], time: f32) -> [f32; LEN] {
+    let mut result = [0.0_f32; LEN];
+    for i in 0..LEN {
+        result[i] = lerp_scalar(lhs[i], rhs[i], time);
+    }
+    result
 }
 
 //
