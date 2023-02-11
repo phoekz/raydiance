@@ -29,7 +29,7 @@ pub mod ext {
             Self {
                 elevation: 45.0_f32.to_radians(),
                 azimuth: 0.0,
-                turbidity: 1.0,
+                turbidity: 3.0,
                 albedo: ColorRgb::WHITE,
             }
         }

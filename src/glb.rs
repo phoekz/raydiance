@@ -42,6 +42,8 @@ pub enum MaterialField {
     BaseColor,
     Metallic,
     Roughness,
+    Specular,
+    SpecularTint,
 }
 
 #[derive(Clone, Debug)]
@@ -51,6 +53,8 @@ pub struct Material {
     pub base_color: u32,
     pub metallic: u32,
     pub roughness: u32,
+    pub specular: u32,
+    pub specular_tint: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -82,6 +86,8 @@ pub struct DynamicMaterial {
     pub base_color: u32,
     pub metallic: u32,
     pub roughness: u32,
+    pub specular: u32,
+    pub specular_tint: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -161,13 +167,27 @@ impl Scene {
             }
             info!("Scene contains {} materials", materials.len());
             for material in &materials {
-                let roughness = &textures[material.roughness as usize];
+                let base_color = &textures[material.base_color as usize];
                 let metallic = &textures[material.metallic as usize];
-                let roughness = roughness.sample(Point2::new(0.5, 0.5)).red();
+                let roughness = &textures[material.roughness as usize];
+                let specular = &textures[material.specular as usize];
+                let specular_tint = &textures[material.specular_tint as usize];
+                let base_color = base_color.sample(Point2::new(0.5, 0.5));
                 let metallic = metallic.sample(Point2::new(0.5, 0.5)).red();
+                let roughness = roughness.sample(Point2::new(0.5, 0.5)).red();
+                let specular = specular.sample(Point2::new(0.5, 0.5)).red();
+                let specular_tint = specular_tint.sample(Point2::new(0.5, 0.5)).red();
+                info!("  {}:", material.name);
                 info!(
-                    "  {}: {}=roughness={}, {}=metallic={}",
-                    &material.name, material.roughness, roughness, material.metallic, metallic
+                    "    base_color=({}, {:.03})",
+                    material.base_color, base_color
+                );
+                info!("    metallic=({}, {:.03})", material.metallic, metallic);
+                info!("    roughness=({}, {:.03})", material.roughness, roughness);
+                info!("    specular=({}, {:.03})", material.specular, specular);
+                info!(
+                    "    specular_tint=({}, {:.03})",
+                    material.specular_tint, specular_tint
                 );
             }
             info!("Scene contains {} textures", textures.len());
@@ -196,6 +216,8 @@ impl Scene {
                     base_color: material.base_color,
                     metallic: material.metallic,
                     roughness: material.roughness,
+                    specular: material.specular,
+                    specular_tint: material.specular_tint,
                 })
                 .collect();
             let textures = textures
@@ -451,6 +473,18 @@ fn import_gltf_material(
         (metallic_index, roughness_index)
     };
 
+    // Specular & specular tint.
+    let (specular, specular_tint) = {
+        // Todo: Check if Blender can export both metallic and specular.
+        let specular = Texture::Scalar(0.5);
+        let specular_tint = Texture::Scalar(0.0);
+        let specular_index = textures.len() as u32;
+        let specular_tint_index = textures.len() as u32 + 1;
+        textures.push(specular);
+        textures.push(specular_tint);
+        (specular_index, specular_tint_index)
+    };
+
     // Append.
     let material_index = materials.len() as u32;
     materials.push(Material {
@@ -459,6 +493,8 @@ fn import_gltf_material(
         base_color,
         metallic,
         roughness,
+        specular,
+        specular_tint,
     });
 
     Ok(material_index)
@@ -678,6 +714,18 @@ impl std::fmt::Display for MaterialModel {
     }
 }
 
+impl DynamicMaterial {
+    pub fn texture(&self, field: MaterialField) -> u32 {
+        match field {
+            MaterialField::BaseColor => self.base_color,
+            MaterialField::Metallic => self.metallic,
+            MaterialField::Roughness => self.roughness,
+            MaterialField::Specular => self.specular,
+            MaterialField::SpecularTint => self.specular_tint,
+        }
+    }
+}
+
 //
 // Texture
 //
@@ -734,6 +782,44 @@ impl DynamicTexture {
     }
 }
 
+struct DisplayArray<'a, const LEN: usize>(&'a [f32; LEN]);
+
+impl<'a, const LEN: usize> std::fmt::Display for DisplayArray<'a, LEN> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (i, v) in self.0.iter().enumerate() {
+            if i > 0 {
+                write!(f, ",")?;
+            }
+            if let Some(precision) = f.precision() {
+                write!(f, "{v:.precision$}")?;
+            } else {
+                write!(f, "{v}")?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl std::fmt::Display for DynamicTexture {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(precision) = f.precision() {
+            match self {
+                DynamicTexture::Scalar(s) => write!(f, "{s:.precision$}"),
+                DynamicTexture::Vector2(v) => write!(f, "{:.precision$}", DisplayArray(v)),
+                DynamicTexture::Vector3(v) => write!(f, "{:.precision$}", DisplayArray(v)),
+                DynamicTexture::Vector4(v) => write!(f, "{:.precision$}", DisplayArray(v)),
+            }
+        } else {
+            match self {
+                DynamicTexture::Scalar(s) => write!(f, "{s}"),
+                DynamicTexture::Vector2(v) => write!(f, "{}", DisplayArray(v)),
+                DynamicTexture::Vector3(v) => write!(f, "{}", DisplayArray(v)),
+                DynamicTexture::Vector4(v) => write!(f, "{}", DisplayArray(v)),
+            }
+        }
+    }
+}
+
 pub fn dynamic_sample(
     scene: &Scene,
     dyn_scene: &DynamicScene,
@@ -759,4 +845,17 @@ pub fn dynamic_try_sample(dyn_scene: &DynamicScene, texture_index: u32) -> Optio
 pub fn dynamic_model(dyn_scene: &DynamicScene, material_index: u32) -> MaterialModel {
     let index = material_index as usize;
     dyn_scene.materials[index].model
+}
+
+pub fn dynamic_material_by_name(
+    scene: &Scene,
+    dyn_scene: &DynamicScene,
+    name: &str,
+) -> Option<DynamicMaterial> {
+    use itertools::Itertools;
+    if let Some((material, _)) = scene.materials.iter().find_position(|m| m.name == name) {
+        Some(dyn_scene.materials[material])
+    } else {
+        None
+    }
 }

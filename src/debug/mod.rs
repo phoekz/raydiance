@@ -272,6 +272,7 @@ fn brdf_visualizations() -> Result<()> {
                             base_color: DEFAULT_BASE_COLOR,
                             metallic: 1.0,
                             specular: 0.5,
+                            specular_tint: 0.0,
                             roughness,
                             anisotropic,
                         }))

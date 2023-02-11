@@ -5,7 +5,7 @@ const PAGE_TEMPLATE: &str = r#"
 <html lang="en">
 <head>
     <meta charset="utf-8" />
-    <title>{timestamp}</title>
+    <title>{title}</title>
     <style>
         {style}
     </style>
@@ -47,7 +47,7 @@ const CARD_TEMPLATE: &str = r#"
 
 #[derive(Serialize)]
 struct Page {
-    timestamp: String,
+    title: String,
     style: String,
     cards: String,
 }
@@ -59,15 +59,15 @@ struct Card {
 }
 
 pub struct Builder {
+    title: String,
     cards: Vec<Card>,
-    timestamp: String,
 }
 
 impl Builder {
-    pub fn new(timestamp: impl ToString) -> Self {
+    pub fn new(title: impl ToString) -> Self {
         Self {
+            title: title.to_string(),
             cards: vec![],
-            timestamp: timestamp.to_string(),
         }
     }
 
@@ -97,7 +97,7 @@ impl Builder {
         let page = tt.render(
             "page",
             &Page {
-                timestamp: self.timestamp,
+                title: self.title,
                 style: STYLE_TEMPLATE.to_owned(),
                 cards,
             },

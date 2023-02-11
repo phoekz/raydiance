@@ -86,6 +86,7 @@ pub struct Input {
     pub tonemapping: bool,
     pub exposure: Exposure,
     pub sky_params: sky::ext::StateExtParams,
+    pub salt: Option<u64>,
 }
 
 impl Default for Input {
@@ -99,6 +100,7 @@ impl Default for Input {
             tonemapping: true,
             exposure: Exposure::default(),
             sky_params: sky::ext::StateExtParams::default(),
+            salt: None,
         }
     }
 }
@@ -468,7 +470,10 @@ fn radiance(
             glb::dynamic_sample(glb_scene, dyn_scene, material.roughness, tex_coord).red();
         let metallic =
             glb::dynamic_sample(glb_scene, dyn_scene, material.metallic, tex_coord).red();
-        let specular = 0.5;
+        let specular =
+            glb::dynamic_sample(glb_scene, dyn_scene, material.specular, tex_coord).red();
+        let specular_tint =
+            glb::dynamic_sample(glb_scene, dyn_scene, material.specular_tint, tex_coord).red();
         let anisotropic = 0.0;
 
         // Orthonormal basis.
@@ -491,22 +496,24 @@ fn radiance(
                 }
             }
             glb::MaterialModel::Disney => {
-                let diffuse = bxdfs::DisneyDiffuse::new(&bxdfs::DisneyDiffuseParams {
+                let diffuse_brdf = bxdfs::DisneyDiffuse::new(&bxdfs::DisneyDiffuseParams {
                     hemisphere,
                     base_color,
                     roughness,
                 });
-                let specular = bxdfs::CookTorrance::new(&bxdfs::CookTorranceParams {
+                let specular_brdf = bxdfs::CookTorrance::new(&bxdfs::CookTorranceParams {
                     base_color,
                     metallic,
                     specular,
+                    specular_tint,
                     roughness,
                     anisotropic,
                 });
-                let maybe_sample = if uniform.sample() > metallic {
-                    diffuse.sample(&wo_local, (uniform.sample(), uniform.sample()))
+                let diffuse_weight = (1.0 - metallic) * (1.0 - specular);
+                let maybe_sample = if uniform.sample() < diffuse_weight {
+                    diffuse_brdf.sample(&wo_local, (uniform.sample(), uniform.sample()))
                 } else {
-                    specular.sample(&wo_local, (uniform.sample(), uniform.sample()))
+                    specular_brdf.sample(&wo_local, (uniform.sample(), uniform.sample()))
                 };
                 match maybe_sample {
                     Some(s) => s,

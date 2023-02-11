@@ -115,6 +115,13 @@ impl ColorRgb {
         Self::new(aces(self.red()), aces(self.green()), aces(self.blue()))
     }
 
+    pub fn luminance(self) -> f32 {
+        // "3.2: Derivation of luminance signal"
+        // https://www.itu.int/dms_pubrec/itu-r/rec/bt/R-REC-BT.709-6-201506-I!!PDF-E.pdf
+        // https://en.wikipedia.org/wiki/Relative_luminance
+        0.2126 * self.red() + 0.7152 * self.green() + 0.0722 * self.blue()
+    }
+
     pub fn raw_mut(&mut self) -> &mut [f32; 3] {
         &mut self.0
     }
@@ -123,6 +130,18 @@ impl ColorRgb {
 impl From<ColorRgb> for [f32; 3] {
     fn from(value: ColorRgb) -> Self {
         value.0
+    }
+}
+
+impl std::ops::Add for ColorRgb {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self([
+            self.0[0] + rhs.0[0],
+            self.0[1] + rhs.0[1],
+            self.0[2] + rhs.0[2],
+        ])
     }
 }
 
@@ -190,15 +209,12 @@ impl std::ops::Div<f32> for ColorRgb {
 
 impl std::fmt::Display for ColorRgb {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(p) = f.precision() {
+        if let Some(precision) = f.precision() {
             write!(
                 f,
-                "{:.*},{:.*},{:.*}",
-                p,
+                "{:.precision$},{:.precision$},{:.precision$}",
                 self.red(),
-                p,
                 self.green(),
-                p,
                 self.blue(),
             )
         } else {
@@ -233,7 +249,6 @@ impl ColorRgba {
     }
 
     #[inline]
-    #[allow(dead_code)]
     pub const fn alpha(&self) -> f32 {
         self.0[3]
     }
@@ -241,6 +256,30 @@ impl ColorRgba {
     #[inline]
     pub const fn rgb(&self) -> ColorRgb {
         ColorRgb::new(self.red(), self.green(), self.blue())
+    }
+}
+
+impl std::fmt::Display for ColorRgba {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(precision) = f.precision() {
+            write!(
+                f,
+                "{:.precision$},{:.precision$},{:.precision$},{:.precision$}",
+                self.red(),
+                self.green(),
+                self.blue(),
+                self.alpha(),
+            )
+        } else {
+            write!(
+                f,
+                "{},{},{},{}",
+                self.red(),
+                self.green(),
+                self.blue(),
+                self.alpha()
+            )
+        }
     }
 }
 
@@ -307,6 +346,14 @@ pub fn lerp_color(a: &ColorRgb, b: &ColorRgb, t: f32) -> ColorRgb {
         lerp_scalar(a.green(), b.green(), t),
         lerp_scalar(a.blue(), b.blue(), t),
     )
+}
+
+pub fn lerp_array<const LEN: usize>(lhs: [f32; LEN], rhs: [f32; LEN], time: f32) -> [f32; LEN] {
+    let mut result = [0.0_f32; LEN];
+    for i in 0..LEN {
+        result[i] = lerp_scalar(lhs[i], rhs[i], time);
+    }
+    result
 }
 
 //

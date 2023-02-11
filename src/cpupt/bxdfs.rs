@@ -369,6 +369,7 @@ pub struct CookTorranceParams {
     pub base_color: ColorRgb,
     pub metallic: f32,
     pub specular: f32,
+    pub specular_tint: f32,
     pub roughness: f32,
     pub anisotropic: f32,
 }
@@ -384,17 +385,25 @@ impl CookTorrance {
     pub fn new(p: &CookTorranceParams) -> Self {
         assert_range!(p.metallic, 0.0, 1.0);
         assert_range!(p.specular, 0.0, 1.0);
+        assert_range!(p.specular_tint, 0.0, 1.0);
         assert_range!(p.roughness, 0.0, 1.0);
         assert_range!(p.anisotropic, 0.0, 1.0);
+
+        let specular_color = {
+            let luminance = p.base_color.luminance();
+            let tint_color = if luminance > 0.0 {
+                p.base_color / luminance
+            } else {
+                ColorRgb::WHITE
+            };
+            let metallic_color =
+                p.specular * 0.08 * lerp_color(&ColorRgb::WHITE, &tint_color, p.specular_tint);
+            lerp_color(&metallic_color, &p.base_color, p.metallic)
+        };
 
         let aspect = (1.0 - p.anisotropic * 0.9).sqrt();
         let alpha_x = f32::max(0.001, p.roughness.powi(2) / aspect);
         let alpha_y = f32::max(0.001, p.roughness.powi(2) * aspect);
-        let specular_color = lerp_color(
-            &(ColorRgb::WHITE * p.specular * 0.08),
-            &p.base_color,
-            p.metallic,
-        );
 
         Self {
             specular_color,

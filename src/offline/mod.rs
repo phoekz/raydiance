@@ -7,6 +7,9 @@ use super::*;
 #[derive(clap::Args)]
 pub struct Args {
     #[arg(long)]
+    render_job_name: String,
+
+    #[arg(long)]
     render_config: PathBuf,
 
     #[arg(long)]
@@ -34,11 +37,23 @@ struct SceneConfig {
     sky_azimuth_deg: vz::cfg::Value<f32>,
     sky_turbidity: vz::cfg::Value<f32>,
     sky_albedo: vz::cfg::Value<ColorRgb>,
+    text_annotations: Vec<TextAnnotation>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(deny_unknown_fields)]
-struct MaterialMapping(String, glb::MaterialField, glb::DynamicTexture);
+struct MaterialMapping(
+    String,
+    glb::MaterialField,
+    vz::cfg::Value<glb::DynamicTexture>,
+);
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(deny_unknown_fields)]
+enum TextAnnotation {
+    SkyParameters,
+    Material(String),
+}
 
 //
 // Runners
@@ -54,18 +69,18 @@ pub fn run(args: Args) -> Result<()> {
     vz::cfg::write_to_file(work_dir().join("scene.ron"), &scene_configs)?;
 
     // Render configs.
-    let mut page = vz::page::Builder::new("render");
+    let mut page = vz::page::Builder::new(&args.render_job_name);
     for scene_config in scene_configs {
         let name = scene_config.name.clone();
-        let image = render(&render_config, scene_config)?;
+        let image = render(&args.render_job_name, &render_config, scene_config)?;
         page.push_card(name, image);
     }
 
     // Render page.
     {
         use std::io::Write;
-        let file_name = "render.html";
-        let path = work_dir().join(file_name);
+        let file_name = format!("render-{}.html", args.render_job_name);
+        let path = work_dir().join(&file_name);
         let file = File::create(&path)?;
         let mut writer = BufWriter::new(file);
         write!(&mut writer, "{}", page.build()?)?;
@@ -76,7 +91,11 @@ pub fn run(args: Args) -> Result<()> {
     Ok(())
 }
 
-fn render(render_config: &RenderConfig, scene_config: SceneConfig) -> Result<String> {
+fn render(
+    render_job_name: &str,
+    render_config: &RenderConfig,
+    scene_config: SceneConfig,
+) -> Result<String> {
     // Default font.
     let font = vz::font::Font::new()?;
 
@@ -91,44 +110,45 @@ fn render(render_config: &RenderConfig, scene_config: SceneConfig) -> Result<Str
     let exposure = Exposure::new(render_config.exposure);
 
     // Unpack scene config.
-    let material_mappings = &scene_config.material_mappings;
+    let material_mappings = scene_config.material_mappings;
     let sky_elevation_deg: vz::anim::Value<_> = scene_config.sky_elevation_deg.into();
     let sky_azimuth_deg: vz::anim::Value<_> = scene_config.sky_azimuth_deg.into();
     let sky_turbidity: vz::anim::Value<_> = scene_config.sky_turbidity.into();
     let sky_albedo: vz::anim::Value<_> = scene_config.sky_albedo.into();
-
-    // Animation length.
-    let mut total_time = -f32::MAX;
-    total_time = total_time.max(sky_elevation_deg.max_time());
-    total_time = total_time.max(sky_azimuth_deg.max_time());
-    total_time = total_time.max(sky_turbidity.max_time());
-    total_time = total_time.max(sky_albedo.max_time());
-    let frame_time = f32::from(frame_delay_num) / f32::from(frame_delay_den);
-    let frame_count = (total_time / frame_time).ceil() as u32;
-    info!("total_time={total_time}, frame_count={frame_count}");
+    let text_annotations = scene_config.text_annotations;
 
     // Init glb scene.
     let (glb_scene, mut dyn_scene) =
         glb::Scene::create(include_bytes!("../assets/rounded_cube.glb"))?;
 
-    // Apply material mappings.
-    for mapping in material_mappings {
-        use itertools::Itertools;
-        if let Some((material_index, _)) = glb_scene
-            .materials
-            .iter()
-            .find_position(|m| m.name == mapping.0)
-        {
-            let material = &dyn_scene.materials[material_index];
-            let texture_index = match mapping.1 {
-                glb::MaterialField::BaseColor => material.base_color,
-                glb::MaterialField::Metallic => material.metallic,
-                glb::MaterialField::Roughness => material.roughness,
-            } as usize;
-            dyn_scene.textures[texture_index] = mapping.2;
-            dyn_scene.replaced_textures.set(texture_index, true);
-        }
+    // Init materials.
+    let material_mappings = material_mappings
+        .into_iter()
+        .filter_map(|map| {
+            let MaterialMapping(name, field, value) = map;
+            if let Some(material) = glb::dynamic_material_by_name(&glb_scene, &dyn_scene, &name) {
+                let texture = material.texture(field);
+                dyn_scene.replaced_textures.set(texture as usize, true);
+                Some((texture, vz::anim::Value::<_>::from(value)))
+            } else {
+                warn!("Could not find material called {name}");
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+
+    // Calculate animation length.
+    let mut total_time = -f32::MAX;
+    total_time = total_time.max(sky_elevation_deg.max_time());
+    total_time = total_time.max(sky_azimuth_deg.max_time());
+    total_time = total_time.max(sky_turbidity.max_time());
+    total_time = total_time.max(sky_albedo.max_time());
+    for (_, value) in &material_mappings {
+        total_time = total_time.max(value.max_time());
     }
+    let frame_time = f32::from(frame_delay_num) / f32::from(frame_delay_den);
+    let frame_count = (total_time / frame_time).ceil() as u32;
+    info!("total_time={total_time}, frame_count={frame_count}");
 
     // Init cpupt.
     let raytracer = cpupt::Raytracer::create(
@@ -136,7 +156,7 @@ fn render(render_config: &RenderConfig, scene_config: SceneConfig) -> Result<Str
             samples_per_pixel,
             ..cpupt::Params::default()
         },
-        glb_scene,
+        glb_scene.clone(),
     );
 
     // Render frames.
@@ -151,13 +171,25 @@ fn render(render_config: &RenderConfig, scene_config: SceneConfig) -> Result<Str
         )?);
         let mut frames = vec![];
         for frame_index in 0..frame_count {
+            // Time.
             let time = frame_index as f32 * frame_time;
+
+            // Camera.
             let camera_angle = 0.0;
             let camera_transform = Mat4::from_axis_angle(&Vec3::y_axis(), camera_angle);
+
+            // Sky.
             let sky_elevation = sky_elevation_deg.value(time).to_radians();
             let sky_azimuth = sky_azimuth_deg.value(time).to_radians();
             let sky_turbidity = sky_turbidity.value(time);
             let sky_albedo = sky_albedo.value(time);
+
+            // Materials.
+            for (index, value) in &material_mappings {
+                dyn_scene.textures[*index as usize] = value.value(time);
+            }
+
+            // Render.
             raytracer.send_input(cpupt::Input {
                 camera_transform,
                 image_size,
@@ -172,6 +204,7 @@ fn render(render_config: &RenderConfig, scene_config: SceneConfig) -> Result<Str
                     turbidity: sky_turbidity,
                     albedo: sky_albedo,
                 },
+                salt: Some(frame_index.into()),
             });
             let mut latest_frame: Option<vz::image::Rgb> = None;
             for _ in 0..samples_per_pixel {
@@ -183,11 +216,47 @@ fn render(render_config: &RenderConfig, scene_config: SceneConfig) -> Result<Str
             }
             let mut latest_frame = latest_frame.unwrap();
             if render_config.annotations {
-                latest_frame.draw_text(
-                    &font,
-                    ColorRgb::WHITE,
-                    &vz::annotation::TextBox::new()
-                        .line([("scene", &scene_config.name)])
+                let mut text = vz::annotation::TextBox::new();
+
+                // Scene name.
+                text = text.line([("scene", &scene_config.name)]);
+
+                // Annotate materials.
+                for ta in &text_annotations {
+                    let name = if let TextAnnotation::Material(name) = ta {
+                        name
+                    } else {
+                        continue;
+                    };
+
+                    let material = if let Some(material) =
+                        glb::dynamic_material_by_name(&glb_scene, &dyn_scene, name)
+                    {
+                        material
+                    } else {
+                        warn!("Could not find material called {name}");
+                        continue;
+                    };
+
+                    let base_color = dyn_scene.textures[material.base_color as usize];
+                    let metallic = dyn_scene.textures[material.metallic as usize];
+                    let roughness = dyn_scene.textures[material.roughness as usize];
+                    let specular = dyn_scene.textures[material.specular as usize];
+                    let specular_tint = dyn_scene.textures[material.specular_tint as usize];
+                    text = text.line([("material", name.as_str())]);
+                    text = text.line([("    base_color", &format!("{base_color:.02}"))]);
+                    text = text.line([("    metallic", &format!("{metallic:.02}"))]);
+                    text = text.line([("    roughness", &format!("{roughness:.02}"))]);
+                    text = text.line([("    specular", &format!("{specular:.02}"))]);
+                    text = text.line([("    specular_tint", &format!("{specular_tint:.02}"))]);
+                }
+
+                // Annotate sky parameters.
+                if text_annotations
+                    .iter()
+                    .any(|ta| matches!(&ta, TextAnnotation::SkyParameters))
+                {
+                    text = text
                         .line([
                             ("elevation", format!("{:.02}°", sky_elevation.to_degrees())),
                             ("azimuth", format!("{:.02}°", sky_azimuth.to_degrees())),
@@ -195,17 +264,22 @@ fn render(render_config: &RenderConfig, scene_config: SceneConfig) -> Result<Str
                         .line([
                             ("turbidity", format!("{sky_turbidity:.02}")),
                             ("albedo", format!("{sky_albedo:.02}")),
-                            ("exposure", format!("{exposure:.02}")),
-                        ])
-                        .line([
-                            ("time", format!("{time:.02}/{total_time:.02}")),
-                            ("frame", format!("{frame_index}/{frame_count}")),
-                            ("res", format!("{}x{}", image_size.0, image_size.1)),
-                            ("spp", format!("{samples_per_pixel}")),
-                            ("tonemap", format!("{tonemapping}")),
-                        ])
-                        .build(),
-                );
+                        ]);
+                }
+
+                // Render configs.
+                text = text.line([
+                    ("time", format!("{time:.02}/{total_time:.02}")),
+                    ("frame", format!("{frame_index}/{frame_count}")),
+                    ("res", format!("{}x{}", image_size.0, image_size.1)),
+                    ("spp", format!("{samples_per_pixel}")),
+                ]);
+                text = text.line([
+                    ("tonemap", format!("{tonemapping}")),
+                    ("exposure", format!("{exposure:.02}")),
+                ]);
+
+                latest_frame.draw_text(&font, ColorRgb::WHITE, &text.build());
             }
             frames.push(latest_frame);
             pb.inc(1);
@@ -219,7 +293,7 @@ fn render(render_config: &RenderConfig, scene_config: SceneConfig) -> Result<Str
     let frames = vz::video::create_boomerang(frames);
 
     // Render animation.
-    let file_name = format!("render-{}.apng", scene_config.name);
+    let file_name = format!("render-{render_job_name}-{}.apng", scene_config.name);
     vz::video::render(
         &vz::video::Params {
             delay_num: frame_delay_num,
@@ -233,4 +307,65 @@ fn render(render_config: &RenderConfig, scene_config: SceneConfig) -> Result<Str
     raytracer.terminate();
 
     Ok(file_name)
+}
+
+#[test]
+fn config_template() {
+    use glb::DynamicTexture::Scalar as TS;
+    use glb::DynamicTexture::Vector3 as TV3;
+    use glb::MaterialField::{BaseColor, Metallic, Roughness};
+    use vz::cfg::{keyframe, Value};
+    use Value::{Constant, Keyframes};
+
+    let config = SceneConfig {
+        name: "roughness".to_owned(),
+        material_mappings: vec![
+            MaterialMapping(
+                "cube".to_owned(),
+                BaseColor,
+                Keyframes(vec![
+                    keyframe!(0.0, TV3([1.0, 1.0, 1.0]), CubicInOut),
+                    keyframe!(1.0, TV3([1.0, 0.5, 0.5]), CubicInOut),
+                    keyframe!(2.0, TV3([0.5, 1.0, 0.5]), CubicInOut),
+                    keyframe!(3.0, TV3([0.5, 0.5, 1.0]), CubicInOut),
+                ]),
+            ),
+            MaterialMapping(
+                "cube".to_owned(),
+                Roughness,
+                Keyframes(vec![
+                    keyframe!(0.0, TS(0.0), CubicInOut),
+                    keyframe!(1.5, TS(1.0), CubicInOut),
+                    keyframe!(3.0, TS(0.0), CubicInOut),
+                ]),
+            ),
+            MaterialMapping("cube".to_owned(), Metallic, Constant(TS(0.75))),
+            MaterialMapping(
+                "plane".to_owned(),
+                Roughness,
+                Keyframes(vec![
+                    keyframe!(0.0, TS(1.0), CubicInOut),
+                    keyframe!(1.5, TS(0.0), CubicInOut),
+                    keyframe!(3.0, TS(0.5), CubicInOut),
+                ]),
+            ),
+            MaterialMapping("plane".to_owned(), Metallic, Constant(TS(0.75))),
+        ],
+        sky_elevation_deg: Constant(45.0),
+        sky_azimuth_deg: Keyframes(vec![
+            keyframe!(0.0, 0.0, CubicInOut),
+            keyframe!(3.0, 180.0, CubicInOut),
+        ]),
+        sky_turbidity: Constant(3.0),
+        sky_albedo: Constant(ColorRgb::WHITE),
+        text_annotations: vec![
+            TextAnnotation::SkyParameters,
+            TextAnnotation::Material("cube".to_owned()),
+        ],
+    };
+
+    println!(
+        "{}",
+        ron::ser::to_string_pretty(&vec![config], ron::ser::PrettyConfig::default()).unwrap()
+    );
 }

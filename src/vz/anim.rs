@@ -20,6 +20,18 @@ impl Tweenable for ColorRgb {
     }
 }
 
+impl Tweenable for glb::DynamicTexture {
+    fn tween(&self, rhs: &Self, time: f32) -> Self {
+        match (*self, *rhs) {
+            (Self::Scalar(lhs), Self::Scalar(rhs)) => Self::Scalar(lerp_scalar(lhs, rhs, time)),
+            (Self::Vector2(lhs), Self::Vector2(rhs)) => Self::Vector2(lerp_array(lhs, rhs, time)),
+            (Self::Vector3(lhs), Self::Vector3(rhs)) => Self::Vector3(lerp_array(lhs, rhs, time)),
+            (Self::Vector4(lhs), Self::Vector4(rhs)) => Self::Vector4(lerp_array(lhs, rhs, time)),
+            _ => panic!("glb::DynamicTextures must have the same enum variant, got {self:?} and {rhs:?} instead"),
+        }
+    }
+}
+
 //
 // Easing functions
 //

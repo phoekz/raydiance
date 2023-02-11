@@ -11,29 +11,28 @@ impl TextBox {
     }
 
     #[must_use]
-    pub fn line<I, A, B>(self, kvs: I) -> Self
+    pub fn line<I, A, B>(mut self, kvs: I) -> Self
     where
         I: IntoIterator<Item = (A, B)>,
         A: std::fmt::Display,
         B: std::fmt::Display,
     {
-        let mut annotation = self;
-        if !annotation.buffer.is_empty() {
-            annotation.buffer.push('\n');
+        if !self.buffer.is_empty() {
+            self.buffer.push('\n');
         }
         for (i, (k, v)) in kvs.into_iter().enumerate() {
             if i > 0 {
-                annotation.buffer.push_str(", ");
+                self.buffer.push_str(", ");
             }
             let k = format!("{k}");
             let v = format!("{v}");
             if v.is_empty() {
-                annotation.buffer.push_str(&k);
+                self.buffer.push_str(&k);
             } else {
-                annotation.buffer.push_str(&format!("{k}={v}"));
+                self.buffer.push_str(&format!("{k}={v}"));
             }
         }
-        annotation
+        self
     }
 
     #[must_use]
