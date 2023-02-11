@@ -189,8 +189,8 @@ fn render(render_config: &RenderConfig, scene_config: SceneConfig) -> Result<Str
                     &vz::annotation::TextBox::new()
                         .line([("scene", &scene_config.name)])
                         .line([
-                            ("elevation", format!("{sky_elevation:.02} deg")),
-                            ("azimuth", format!("{sky_azimuth:.02} deg")),
+                            ("elevation", format!("{:.02}°", sky_elevation.to_degrees())),
+                            ("azimuth", format!("{:.02}°", sky_azimuth.to_degrees())),
                         ])
                         .line([
                             ("turbidity", format!("{sky_turbidity:.02}")),

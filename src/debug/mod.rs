@@ -491,8 +491,8 @@ fn sky_model_visualizations() -> Result<()> {
                 let text_box = vz::annotation::TextBox::new()
                     .line([("name", task.name)])
                     .line([
-                        ("elevation", format!("{:.02} deg", elevation.to_degrees())),
-                        ("azimuth", format!("{:.02} deg", azimuth.to_degrees())),
+                        ("elevation", format!("{:.02}°", elevation.to_degrees())),
+                        ("azimuth", format!("{:.02}°", azimuth.to_degrees())),
                     ])
                     .line([
                         ("turbidity", format!("{turbidity:.02}")),
