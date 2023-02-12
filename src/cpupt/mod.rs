@@ -151,6 +151,8 @@ impl Raytracer {
             let mut camera_position = Point3::origin();
             let mut timer = Instant::now();
             let mut ray_stats = intersection::RayBvhHitStats::default();
+            let mut tiles = vec![];
+            let mut tile_results = vec![];
             let mut pixel_buffer = Vec::<ColorRgb>::new();
             let mut sky_state =
                 sky::ext::StateExt::new(&sky::ext::StateExtParams::default()).unwrap();
@@ -201,6 +203,12 @@ impl Raytracer {
                         // Reset stats.
                         ray_stats = intersection::RayBvhHitStats::default();
 
+                        // Reset tiles.
+                        tiles = PixelTiles::new(input.image_size.0, input.image_size.1)
+                            .into_iter()
+                            .collect::<Vec<_>>();
+                        tile_results.reserve(tiles.len());
+
                         // Reset timer.
                         timer = Instant::now();
                     }
@@ -217,12 +225,10 @@ impl Raytracer {
                     let image_size = input.image_size;
 
                     // Render tiles.
-                    let tiles = PixelTiles::new(image_size.0, image_size.1)
-                        .into_iter()
-                        .collect::<Vec<_>>();
-                    let tile_results = tiles
+                    (0..tiles.len())
                         .into_par_iter()
-                        .map(|tile| {
+                        .map(|tile_index| {
+                            let tile = tiles[tile_index];
                             let (tile_radiance, tile_ray_stats) = tile_radiance(
                                 &tile,
                                 image_size,
@@ -239,10 +245,10 @@ impl Raytracer {
                             );
                             (tile, tile_radiance, tile_ray_stats)
                         })
-                        .collect::<Vec<_>>();
+                        .collect_into_vec(&mut tile_results);
 
                     // Accumulate results.
-                    for (tile, tile_radiance, tile_ray_stats) in tile_results {
+                    for (tile, tile_radiance, tile_ray_stats) in &tile_results {
                         let mut src_pixel_index = 0;
                         for pixel_y in tile.start_y..tile.end_y {
                             for pixel_x in tile.start_x..tile.end_x {
@@ -253,7 +259,7 @@ impl Raytracer {
                                 src_pixel_index += 1;
                             }
                         }
-                        ray_stats += tile_ray_stats;
+                        ray_stats += *tile_ray_stats;
                     }
 
                     // Normalize the current image, send it.
@@ -391,6 +397,7 @@ fn tile_radiance(
             tile_ray_stats += ray_stats;
         }
     }
+
     (tile_radiance, tile_ray_stats)
 }
 
@@ -555,9 +562,11 @@ fn radiance(
         );
     }
     assert!(radiance.is_finite(), "radiance={radiance}");
+
     (radiance, ray_stats)
 }
 
+#[derive(Clone, Copy)]
 struct PixelTile {
     start_x: u32,
     end_x: u32,
