@@ -290,12 +290,12 @@ fn render(
     };
 
     // Make boomerang.
-    let frames = vz::video::create_boomerang(frames);
+    let frames = vz::apng::create_boomerang(frames);
 
     // Render animation.
     let file_name = format!("render-{render_job_name}-{}.apng", scene_config.name);
-    vz::video::render(
-        &vz::video::Params {
+    vz::apng::render(
+        &vz::apng::Params {
             delay_num: frame_delay_num,
             delay_den: frame_delay_den,
         },

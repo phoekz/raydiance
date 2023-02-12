@@ -344,17 +344,17 @@ fn brdf_visualizations() -> Result<()> {
             }
 
             // Boomerang.
-            let frames = vz::video::create_boomerang(frames);
+            let frames = vz::apng::create_boomerang(frames);
 
             // Render animation.
             let task_name = task.name.to_string();
             let file_name = format!("brdf-{task_name}.apng");
             let path = work_dir.join(&file_name);
-            let anim_params = vz::video::Params {
+            let anim_params = vz::apng::Params {
                 delay_num: ANIMATION_DELAY_NUM,
                 delay_den: ANIMATION_DELAY_DEN,
             };
-            vz::video::render(&anim_params, path, frames)?;
+            vz::apng::render(&anim_params, path, frames)?;
 
             Ok::<_, anyhow::Error>((task_name, file_name))
         })
@@ -517,16 +517,16 @@ fn sky_model_visualizations() -> Result<()> {
             }
 
             // Boomerang.
-            let frames = vz::video::create_boomerang(frames);
+            let frames = vz::apng::create_boomerang(frames);
 
             // Render animations.
             let file_name = format!("sky-{}.apng", task.name);
             let path = work_dir.join(&file_name);
-            let anim_params = vz::video::Params {
+            let anim_params = vz::apng::Params {
                 delay_num: ANIMATION_DELAY_NUM,
                 delay_den: ANIMATION_DELAY_DEN,
             };
-            vz::video::render(&anim_params, path, frames)?;
+            vz::apng::render(&anim_params, path, frames)?;
 
             Ok::<_, anyhow::Error>((task.name, file_name))
         })

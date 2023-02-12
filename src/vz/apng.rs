@@ -16,7 +16,7 @@ where
     let num_frames = frame_images.len() as u32;
 
     let mut writer = BufWriter::new(File::create(path.as_ref())?);
-    let config = apng::Config {
+    let config = apnglib::Config {
         width,
         height,
         num_frames,
@@ -25,16 +25,17 @@ where
         depth: png::BitDepth::Eight,
         filter: png::FilterType::NoFilter,
     };
-    let mut encoder = apng::Encoder::new(&mut writer, config)?;
-    let frame = apng::Frame {
+    let mut encoder = apnglib::Encoder::new(&mut writer, config)?;
+    let frame = apnglib::Frame {
         delay_num: Some(params.delay_num),
         delay_den: Some(params.delay_den),
-        ..apng::Frame::default()
+        ..apnglib::Frame::default()
     };
     let images = frame_images
         .into_iter()
         .map(|image| {
-            apng::load_dynamic_image(image.into_dynamic()).expect("Failed to load image into apng")
+            apnglib::load_dynamic_image(image.into_dynamic())
+                .expect("Failed to load image into apng")
         })
         .collect::<Vec<_>>();
     encoder.encode_all(images, Some(&frame))?;

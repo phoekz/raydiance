@@ -6,7 +6,7 @@ version = "0.1.0"
 
 [dependencies]
 anyhow = "1.0.68"
-apng = "0.3.0"
+apnglib = { version = "0.3.0", package = "apng" }
 approx = "0.5.1"
 ash = "0.37.2"
 ash-window = "0.12.0"
@@ -50,6 +50,7 @@ time = { version = "0.3.17", features = [
     "parsing",
 ] }
 tinytemplate = "1.2.1"
+which = "4.4.0"
 winit = "0.27.5"
 
 [build-dependencies]

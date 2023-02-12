@@ -2,6 +2,7 @@
 #![deny(nonstandard_style)]
 #![deny(clippy::pedantic)]
 #![allow(
+    clippy::case_sensitive_file_extension_comparisons,
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap,
     clippy::cast_precision_loss,
@@ -156,6 +157,7 @@ enum Commands {
     BlogNew(blog::NewArgs),
     BlogBuild,
     BlogPlot,
+    Ffmpeg(vz::ffmpeg::Args),
 }
 
 impl Default for Commands {
@@ -178,6 +180,7 @@ fn main() -> Result<()> {
         Commands::BlogNew(args) => blog::new(args),
         Commands::BlogBuild => blog::build(),
         Commands::BlogPlot => blog::plot(),
+        Commands::Ffmpeg(args) => vz::ffmpeg::run(args),
     }
 }
 
