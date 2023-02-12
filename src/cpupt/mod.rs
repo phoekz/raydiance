@@ -274,9 +274,9 @@ impl Raytracer {
                         })
                         .map(|sample| {
                             // Statistics.
-                            max_radiance = max_radiance.max(sample.red());
-                            max_radiance = max_radiance.max(sample.green());
-                            max_radiance = max_radiance.max(sample.blue());
+                            max_radiance = max_radiance.max(sample.r());
+                            max_radiance = max_radiance.max(sample.g());
+                            max_radiance = max_radiance.max(sample.b());
                             sample
                         })
                         .map(|sample| {
@@ -474,13 +474,11 @@ fn radiance(
         let base_color =
             glb::dynamic_sample(glb_scene, dyn_scene, material.base_color, tex_coord).rgb();
         let roughness =
-            glb::dynamic_sample(glb_scene, dyn_scene, material.roughness, tex_coord).red();
-        let metallic =
-            glb::dynamic_sample(glb_scene, dyn_scene, material.metallic, tex_coord).red();
-        let specular =
-            glb::dynamic_sample(glb_scene, dyn_scene, material.specular, tex_coord).red();
+            glb::dynamic_sample(glb_scene, dyn_scene, material.roughness, tex_coord).r();
+        let metallic = glb::dynamic_sample(glb_scene, dyn_scene, material.metallic, tex_coord).r();
+        let specular = glb::dynamic_sample(glb_scene, dyn_scene, material.specular, tex_coord).r();
         let specular_tint =
-            glb::dynamic_sample(glb_scene, dyn_scene, material.specular_tint, tex_coord).red();
+            glb::dynamic_sample(glb_scene, dyn_scene, material.specular_tint, tex_coord).r();
         let anisotropic = 0.0;
 
         // Orthonormal basis.
@@ -539,10 +537,10 @@ fn radiance(
         let cos_theta = wi_world.dot(&normal).abs();
         if input.visualize_normals {
             throughput *= ColorRgb::new(
-                0.5 * (normal.x + 1.0),
-                0.5 * (normal.y + 1.0),
-                0.5 * (normal.z + 1.0),
-            ) * cos_theta;
+                0.5 * (normal.x + 1.0) * cos_theta,
+                0.5 * (normal.y + 1.0) * cos_theta,
+                0.5 * (normal.z + 1.0) * cos_theta,
+            );
         } else {
             throughput *= bxdf_sample.r() * cos_theta / bxdf_sample.pdf();
         }

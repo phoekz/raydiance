@@ -59,6 +59,7 @@ use approx::{assert_abs_diff_eq, assert_ulps_eq};
 extern crate log;
 
 mod blog;
+mod color;
 mod cpupt;
 mod debug;
 mod glb;
@@ -69,6 +70,7 @@ mod vulkan;
 mod vz;
 mod window;
 
+use color::*;
 use cpupt::bxdfs;
 use cpupt::sampling::{HemisphereSampler, UniformSampler};
 use math::*;
@@ -630,7 +632,7 @@ fn editor() -> Result<()> {
                                     .max_degrees(360.0)
                                     .build(ui, &mut sky_params.azimuth);
                                 ui.slider("Turbidity", 1.0, 10.0, &mut sky_params.turbidity);
-                                ui.color_edit3("Albedo", sky_params.albedo.raw_mut());
+                                ui.color_edit3("Albedo", sky_params.albedo.as_mut());
                                 exposure.gui(ui);
                             }
 

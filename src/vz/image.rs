@@ -21,7 +21,7 @@ impl Rgb {
             .iter()
             .zip(image.buffer.pixels_mut())
             .for_each(|(src, dst)| {
-                *dst = imagelib::Rgb(src.clamp01().to_srgb_bytes());
+                *dst = imagelib::Rgb(src.clamp().into_srgb8());
             });
         image
     }
@@ -38,7 +38,7 @@ impl Rgb {
 
     #[inline]
     pub fn put_pixel(&mut self, x: u32, y: u32, color: ColorRgb) {
-        let pixel = imagelib::Rgb(color.to_srgb_bytes());
+        let pixel = imagelib::Rgb(color.into_srgb8());
         self.buffer.put_pixel(x, y, pixel);
     }
 
@@ -58,7 +58,7 @@ impl Rgb {
         use imageproc::drawing::draw_text_mut;
 
         // Init color.
-        let color = imagelib::Rgb(color.to_srgb_bytes());
+        let color = imagelib::Rgb(color.into_srgb8());
 
         // Init font metrics.
         let scale = rusttype::Scale { x: 16.0, y: 16.0 };
@@ -74,7 +74,7 @@ impl Rgb {
 
         // Expand canvas to accomodate text.
         let mut expanded = imagelib::RgbImage::new(self.width(), self.height() + expanded_height);
-        let bg_color = imagelib::Rgb(ColorRgb::BLACK.to_srgb_bytes());
+        let bg_color = imagelib::Rgb(ColorRgb::BLACK.into_srgb8());
         expanded.pixels_mut().for_each(|pixel| {
             *pixel = bg_color;
         });

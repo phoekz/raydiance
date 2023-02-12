@@ -173,10 +173,10 @@ impl Scene {
                 let specular = &textures[material.specular as usize];
                 let specular_tint = &textures[material.specular_tint as usize];
                 let base_color = base_color.sample(Point2::new(0.5, 0.5));
-                let metallic = metallic.sample(Point2::new(0.5, 0.5)).red();
-                let roughness = roughness.sample(Point2::new(0.5, 0.5)).red();
-                let specular = specular.sample(Point2::new(0.5, 0.5)).red();
-                let specular_tint = specular_tint.sample(Point2::new(0.5, 0.5)).red();
+                let metallic = metallic.sample(Point2::new(0.5, 0.5)).r();
+                let roughness = roughness.sample(Point2::new(0.5, 0.5)).r();
+                let specular = specular.sample(Point2::new(0.5, 0.5)).r();
+                let specular_tint = specular_tint.sample(Point2::new(0.5, 0.5)).r();
                 info!("  {}:", material.name);
                 info!(
                     "    base_color=({}, {:.03})",

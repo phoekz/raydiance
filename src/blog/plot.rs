@@ -10,7 +10,7 @@ pub fn gen() -> Result<()> {
         let mut points = vec![];
         for x in 0..=samples {
             let x = 10.0 * (x as f32) / (samples as f32);
-            let y = ColorRgb::new(x, x, x).tonemap().red();
+            let y = ColorRgb::new(x, x, x).tonemap().r();
             points.push((x, y));
         }
         points

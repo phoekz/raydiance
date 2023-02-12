@@ -22,10 +22,10 @@ impl Plot {
                 if let Some(outgoing) = hemisphere::vector_from_pixel(pixel_x, pixel_y) {
                     let reflectance = eval_fn(outgoing);
                     assert!(reflectance.is_finite());
-                    intensities.push(reflectance.red());
-                    intensities.push(reflectance.green());
-                    intensities.push(reflectance.blue());
-                    image.put_pixel(pixel_x, ANGLE_PLOT_HEIGHT + pixel_y, reflectance.clamp01());
+                    intensities.push(reflectance.r());
+                    intensities.push(reflectance.g());
+                    intensities.push(reflectance.b());
+                    image.put_pixel(pixel_x, ANGLE_PLOT_HEIGHT + pixel_y, reflectance.clamp());
                 } else {
                     image.put_pixel(pixel_x, ANGLE_PLOT_HEIGHT + pixel_y, ColorRgb::BLACK);
                 }
@@ -38,10 +38,10 @@ impl Plot {
                 let outgoing = angle::vector_from_pixel(pixel_x, pixel_y);
                 let reflectance = eval_fn(outgoing);
                 assert!(reflectance.is_finite());
-                intensities.push(reflectance.red());
-                intensities.push(reflectance.green());
-                intensities.push(reflectance.blue());
-                image.put_pixel(pixel_x, pixel_y, reflectance.clamp01());
+                intensities.push(reflectance.r());
+                intensities.push(reflectance.g());
+                intensities.push(reflectance.b());
+                image.put_pixel(pixel_x, pixel_y, reflectance.clamp());
             }
         }
 
