@@ -5,7 +5,7 @@ name = "raydiance"
 version = "0.1.0"
 
 [dependencies]
-anyhow = "1.0.68"
+anyhow = "1.0.69"
 apnglib = { version = "0.3.0", package = "apng" }
 approx = "0.5.1"
 ash = "0.37.2"
@@ -15,7 +15,7 @@ bytemuck = { version = "1.13.0", features = ["derive"] }
 clap = { version = "4.1.4", features = ["derive"] }
 easer = "0.3.0"
 env_logger = "0.10.0"
-gltf = "1.0.0"
+gltf = "1.1.0"
 hw-skymodel = "0.1.1"
 imagelib = { version = "0.24.5", package = "image" }
 imageproc = "0.23.0"
@@ -24,7 +24,7 @@ imgui-winit-support = "0.10.0"
 include_bytes_aligned = "0.1.2"
 indicatif = "0.17.3"
 itertools = "0.10.5"
-katex = { version = "0.4.5", default-features = false, features = ["duktape"] }
+katex = { version = "0.4.6", default-features = false, features = ["duktape"] }
 log = "0.4.17"
 nalgebra = { version = "0.32.1", features = ["bytemuck"] }
 num = "0.4.0"
@@ -54,7 +54,7 @@ which = "4.4.0"
 winit = "0.27.5"
 
 [build-dependencies]
-anyhow = "1.0.68"
+anyhow = "1.0.69"
 
 [dev-dependencies]
 textplots = "0.8.0"
