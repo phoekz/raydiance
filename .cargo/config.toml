@@ -16,3 +16,6 @@ w-test-exact = "watch -- cargo test -- --nocapture --exact"
 [env]
 RUST_LOG = "info"
 # RAYON_NUM_THREADS = "1"
+
+[profile.release]
+incremental = true
