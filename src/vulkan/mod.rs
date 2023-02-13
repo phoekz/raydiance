@@ -129,7 +129,7 @@ impl Renderer {
         window: &winit::window::Window,
         window_title: &str,
         window_size: window::Size,
-        glb_scene: &glb::Scene,
+        rds_scene: &rds::Scene,
         font_atlas_texture: &imgui::FontAtlasTexture,
     ) -> Result<Self> {
         let validation = std::env::var("VULKAN_VALIDATION").is_ok();
@@ -146,7 +146,7 @@ impl Renderer {
         let depth = DepthTarget::create(&device, window_size.into())?;
         let gui = Gui::create(&device, font_atlas_texture)?;
         let cmds = Commands::create(&device)?;
-        let scene = RasterScene::create(&device, glb_scene)?;
+        let scene = RasterScene::create(&device, rds_scene)?;
         let rt_image = RaytracingImageRenderer::create(&device)?;
         Ok(Self {
             _entry: entry,
@@ -166,7 +166,7 @@ impl Renderer {
 
     pub unsafe fn redraw(
         &mut self,
-        dyn_scene: &glb::DynamicScene,
+        dyn_scene: &rds::DynamicScene,
         window_size: window::Size,
         resized_window_size: window::Size,
         frame_index: u64,

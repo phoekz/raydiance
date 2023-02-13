@@ -1,5 +1,7 @@
 use super::*;
 
+// `rds` stands for Raydiance Scene.
+
 #[derive(Clone, Debug)]
 pub struct Scene {
     pub cameras: Vec<Camera>,
@@ -111,27 +113,28 @@ impl Scene {
         let mut textures = vec![];
 
         // Import.
-        let (gltf_document, gltf_buffer_data, gltf_image_data) =
-            gltf::import_slice(glb).context("Importing gltf model")?;
+        {
+            let (gltf_json, gltf_data) = gltf::load_glb(glb)?;
+            let gltf: gltf::Gltf = serde_json::from_str(&gltf_json)?;
 
-        // Traverse.
-        for gltf_scene in gltf_document.scenes() {
-            for gltf_node in gltf_scene.nodes() {
-                // Cameras.
-                if let Some(gltf_camera) = gltf_node.camera() {
-                    import_gltf_camera(&gltf_camera, &gltf_node, &mut cameras)?;
-                }
-                // Meshes, materials, textures.
-                else if let Some(gltf_mesh) = gltf_node.mesh() {
-                    import_gltf_mesh(
-                        &gltf_mesh,
-                        &gltf_node,
-                        &gltf_buffer_data,
-                        &gltf_image_data,
-                        &mut meshes,
-                        &mut materials,
-                        &mut textures,
-                    )?;
+            for gltf_scene in &gltf.scenes {
+                for gltf_node in &gltf_scene.nodes {
+                    let gltf_node = &gltf.nodes[*gltf_node];
+                    if let Some(gltf_camera) = gltf_node.camera {
+                        let gltf_camera = &gltf.cameras[gltf_camera];
+                        import_gltf_camera(gltf_camera, gltf_node, &mut cameras)?;
+                    } else if let Some(gltf_mesh) = gltf_node.mesh {
+                        let gltf_mesh = &gltf.meshes[gltf_mesh];
+                        import_gltf_mesh(
+                            &gltf,
+                            gltf_mesh,
+                            gltf_node,
+                            &gltf_data,
+                            &mut meshes,
+                            &mut materials,
+                            &mut textures,
+                        )?;
+                    }
                 }
             }
         }
@@ -271,34 +274,24 @@ fn import_gltf_camera(
     gltf_node: &gltf::Node,
     cameras: &mut Vec<Camera>,
 ) -> Result<()> {
-    use gltf::camera::Projection;
-
     // Name.
-    let name = gltf_camera
-        .name()
-        .context("Camera must define a name")?
-        .to_owned();
+    let name = gltf_camera.name.to_owned();
 
     // Transform.
-    let transform = {
-        let matrix = gltf_node.transform().matrix();
-        unsafe { transmute(matrix) }
-    };
+    let transform = gltf_node.transform();
 
     // Perspective projection.
     let (aspect_ratio, yfov, znear, zfar) = {
-        let projection = gltf_camera.projection();
-        let perspective = if let Projection::Perspective(perspective) = projection {
-            perspective
-        } else {
-            bail!("Only perspective cameras are supported right now");
-        };
-        let aspect_ratio = perspective
-            .aspect_ratio()
-            .context("Cameras must define aspect ratio")?;
-        let yfov = perspective.yfov();
-        let znear = perspective.znear();
-        let zfar = perspective.zfar().context("Cameras must define zfar")?;
+        let projection = gltf_camera.ty;
+        ensure!(
+            projection == "perspective",
+            "Only perspective cameras are supported right now"
+        );
+        let perspective = &gltf_camera.perspective;
+        let aspect_ratio = perspective.aspect_ratio;
+        let yfov = perspective.yfov;
+        let znear = perspective.znear;
+        let zfar = perspective.zfar;
         (aspect_ratio, yfov, znear, zfar)
     };
 
@@ -316,44 +309,30 @@ fn import_gltf_camera(
 }
 
 fn import_gltf_mesh(
+    gltf: &gltf::Gltf,
     gltf_mesh: &gltf::Mesh,
     gltf_node: &gltf::Node,
-    gltf_buffer_data: &[gltf::buffer::Data],
-    gltf_image_data: &[gltf::image::Data],
+    gltf_data: &[u8],
     meshes: &mut Vec<Mesh>,
     materials: &mut Vec<Material>,
     textures: &mut Vec<Texture>,
 ) -> Result<()> {
-    use gltf::mesh::Mode;
-
     // Primitive.
-    let gltf_primitive = {
-        ensure!(gltf_mesh.primitives().count() == 1);
-        let gltf_primitive = gltf_mesh.primitives().next().unwrap();
-        if !matches!(gltf_primitive.mode(), Mode::Triangles) {
-            bail!("Only triangle meshes are supported right now");
-        }
-        gltf_primitive
-    };
+    ensure!(gltf_mesh.primitives.len() == 1);
+    let gltf_primitive = &gltf_mesh.primitives[0];
 
     // Name.
-    let name = gltf_mesh
-        .name()
-        .context("Mesh must define a name")?
-        .to_owned();
+    let name = gltf_mesh.name.to_owned();
 
     // Transform.
-    let transform = {
-        let matrix = gltf_node.transform().matrix();
-        unsafe { transmute(matrix) }
-    };
+    let transform = gltf_node.transform();
 
     // Mesh attributes.
-    let positions = import_gltf_positions(&gltf_primitive, gltf_buffer_data)?;
-    let tex_coords = import_gltf_tex_coords(&gltf_primitive, gltf_buffer_data)?;
-    let normals = import_gltf_normals(&gltf_primitive, gltf_buffer_data)?;
-    let triangles = import_gltf_triangles(&gltf_primitive, gltf_buffer_data)?;
-    let material = import_gltf_material(&gltf_primitive, gltf_image_data, materials, textures)?;
+    let material = import_gltf_material(gltf, gltf_primitive, gltf_data, materials, textures)?;
+    let positions = import_gltf_positions(gltf, gltf_primitive, gltf_data)?;
+    let tex_coords = import_gltf_tex_coords(gltf, gltf_primitive, gltf_data)?;
+    let normals = import_gltf_normals(gltf, gltf_primitive, gltf_data)?;
+    let triangles = import_gltf_triangles(gltf, gltf_primitive, gltf_data)?;
 
     // Append.
     meshes.push(Mesh {
@@ -370,73 +349,41 @@ fn import_gltf_mesh(
 }
 
 fn import_gltf_material(
+    gltf: &gltf::Gltf,
     gltf_primitive: &gltf::Primitive,
-    gltf_image_data: &[gltf::image::Data],
+    gltf_data: &[u8],
     materials: &mut Vec<Material>,
     textures: &mut Vec<Texture>,
 ) -> Result<u32> {
-    use gltf::material::AlphaMode;
-
-    let gltf_material = gltf_primitive.material();
+    let gltf_material = &gltf.materials[gltf_primitive.material];
 
     // Name.
-    let name = gltf_material
-        .name()
-        .context("Material must define a name")?
-        .to_owned();
+    let name = gltf_material.name.to_owned();
 
     // Validate.
-    ensure!(gltf_material.alpha_cutoff().is_none());
-    ensure!(gltf_material.alpha_mode() == AlphaMode::Opaque);
-    ensure!(gltf_material.double_sided() == false);
-    ensure!(gltf_material.normal_texture().is_none());
-    ensure!(gltf_material.occlusion_texture().is_none());
-    ensure!(gltf_material.emissive_texture().is_none());
-    let pbr = gltf_material.pbr_metallic_roughness();
+    let pbr = &gltf_material.pbr_metallic_roughness;
 
     // Base color.
     let base_color = {
-        let base_color = if let Some(base_color) = pbr.base_color_texture() {
-            use gltf::image::Source;
-
+        let base_color = if let Some(id) = &pbr.base_color_texture {
             // Image.
             let image = {
-                let texture = base_color.texture();
-                let image = texture.source();
-                let source = image.source();
-                let view = if let Source::View { view, .. } = source {
-                    view
-                } else {
-                    bail!("Source must be buffer view");
-                };
-                let buffer = view.buffer();
-                let index = buffer.index();
-                &gltf_image_data[index]
+                let texture = &gltf.textures[id.index];
+                let image = &gltf.images[texture.source];
+                let view = &gltf.buffer_views[image.buffer_view];
+                let bytes = &gltf_data[view.byte_offset..(view.byte_offset + view.byte_length)];
+                let format = imagelib::ImageFormat::Png;
+                let image = imagelib::load_from_memory_with_format(bytes, format)?;
+                image.into_rgba32f()
             };
 
             // Validate.
-            let width = image.width;
-            let height = image.height;
+            let width = image.width();
+            let height = image.height();
             let components = 4;
-            let format = image.format;
-            let pixels = &image.pixels;
             ensure!(width > 0 && width.is_power_of_two());
             ensure!(height > 0 && height.is_power_of_two());
-            ensure!(format == gltf::image::Format::R8G8B8A8);
-            ensure!((components * width * height) as usize == pixels.len());
-
-            // Convert R8G8B8A8_UNORM -> R32G32B32A32_SFLOAT.
-            let pixels = pixels
-                .chunks_exact(components as usize)
-                .flat_map(|chunk| {
-                    // Todo: sRGB -> linear?
-                    let r = f32::from(chunk[0]) / 255.0;
-                    let g = f32::from(chunk[1]) / 255.0;
-                    let b = f32::from(chunk[2]) / 255.0;
-                    let a = f32::from(chunk[3]) / 255.0;
-                    [r, g, b, a]
-                })
-                .collect();
+            let pixels = image.into_raw();
 
             Texture::Image {
                 width,
@@ -445,7 +392,7 @@ fn import_gltf_material(
                 pixels,
             }
         } else {
-            Texture::Vector4(pbr.base_color_factor())
+            Texture::Vector4(pbr.base_color_factor.0)
         };
 
         // Append.
@@ -454,16 +401,10 @@ fn import_gltf_material(
         texture_index
     };
 
-    // Roughness & metallic.
     let (metallic, roughness) = {
-        let (metallic, roughness) = if pbr.metallic_roughness_texture().is_some() {
-            todo!("Support metallic roughness textures");
-        } else {
-            (
-                Texture::Scalar(pbr.metallic_factor()),
-                Texture::Scalar(pbr.roughness_factor()),
-            )
-        };
+        // Roughness & metallic.
+        let metallic = Texture::Scalar(pbr.metallic_factor.0);
+        let roughness = Texture::Scalar(pbr.roughness_factor.0);
 
         // Append.
         let metallic_index = textures.len() as u32;
@@ -501,145 +442,68 @@ fn import_gltf_material(
 }
 
 fn import_gltf_positions(
+    gltf: &gltf::Gltf,
     gltf_primitive: &gltf::Primitive,
-    gltf_buffer_data: &[gltf::buffer::Data],
+    gltf_data: &[u8],
 ) -> Result<Vec<Point3>> {
-    use gltf::accessor::DataType;
-    use gltf::accessor::Dimensions;
-    use gltf::mesh::Semantic;
-
-    // Accessor.
-    let acc = gltf_primitive
-        .attributes()
-        .find_map(|(semantic, accessor)| {
-            if semantic == Semantic::Positions {
-                return Some(accessor);
-            };
-            None
-        })
-        .with_context(|| "Mesh is missing positions".to_string())?;
-
-    // Validate.
-    ensure!(acc.data_type() == DataType::F32);
-    ensure!(acc.dimensions() == Dimensions::Vec3);
-    ensure!(acc.size() == size_of::<Point3>());
-    ensure!(acc.offset() == 0);
-    ensure!(acc.normalized() == false);
-    let view = acc.view().context("Accessor must have a buffer view")?;
-    let offset = view.offset();
-    let length = view.length();
-    ensure!(view.stride().is_none());
+    let acc = &gltf.accessors[gltf_primitive.attributes.position];
+    ensure!(acc.ty == gltf::AccessorType::Vec3);
+    let view = &gltf.buffer_views[acc.buffer_view];
+    let offset = view.byte_offset;
+    let length = view.byte_length;
     ensure!(length > 0);
     ensure!(length % size_of::<Point3>() == 0);
-
-    // Reinterpret bytes.
-    let buffer = &*gltf_buffer_data[view.buffer().index()];
-    Ok(bytemuck::cast_slice(&buffer[offset..(offset + length)]).to_vec())
+    Ok(bytemuck::cast_slice(&gltf_data[offset..(offset + length)]).to_vec())
 }
 
 fn import_gltf_tex_coords(
+    gltf: &gltf::Gltf,
     gltf_primitive: &gltf::Primitive,
-    gltf_buffer_data: &[gltf::buffer::Data],
+    gltf_data: &[u8],
 ) -> Result<Vec<Point2>> {
-    use gltf::accessor::DataType;
-    use gltf::accessor::Dimensions;
-    use gltf::mesh::Semantic;
-
-    // Accessor.
-    let acc = gltf_primitive
-        .attributes()
-        .find_map(|(semantic, accessor)| {
-            if semantic == Semantic::TexCoords(0) {
-                return Some(accessor);
-            };
-            None
-        })
-        .with_context(|| "Mesh is missing tex_coords".to_string())?;
-
-    // Validate.
-    ensure!(acc.data_type() == DataType::F32);
-    ensure!(acc.dimensions() == Dimensions::Vec2);
-    ensure!(acc.size() == size_of::<Point2>());
-    ensure!(acc.offset() == 0);
-    ensure!(acc.normalized() == false);
-    let view = acc.view().context("Accessor must have a buffer view")?;
-    let offset = view.offset();
-    let length = view.length();
-    ensure!(view.stride().is_none());
+    let acc = &gltf.accessors[gltf_primitive.attributes.texcoord_0];
+    ensure!(acc.ty == gltf::AccessorType::Vec2);
+    let view = &gltf.buffer_views[acc.buffer_view];
+    let offset = view.byte_offset;
+    let length = view.byte_length;
     ensure!(length > 0);
     ensure!(length % size_of::<Point2>() == 0);
-
-    // Reinterpret bytes.
-    let buffer = &*gltf_buffer_data[view.buffer().index()];
-    Ok(bytemuck::cast_slice(&buffer[offset..(offset + length)]).to_vec())
+    Ok(bytemuck::cast_slice(&gltf_data[offset..(offset + length)]).to_vec())
 }
 
 fn import_gltf_normals(
+    gltf: &gltf::Gltf,
     gltf_primitive: &gltf::Primitive,
-    gltf_buffer_data: &[gltf::buffer::Data],
+    gltf_data: &[u8],
 ) -> Result<Vec<Normal>> {
-    use gltf::accessor::DataType;
-    use gltf::accessor::Dimensions;
-    use gltf::mesh::Semantic;
-
-    // Accessor.
-    let acc = gltf_primitive
-        .attributes()
-        .find_map(|(semantic, accessor)| {
-            if semantic == Semantic::Normals {
-                return Some(accessor);
-            };
-            None
-        })
-        .with_context(|| "Mesh is missing normals".to_string())?;
-
-    // Validate.
-    ensure!(acc.data_type() == DataType::F32);
-    ensure!(acc.dimensions() == Dimensions::Vec3);
-    ensure!(acc.size() == size_of::<Normal>());
-    ensure!(acc.offset() == 0);
-    ensure!(acc.normalized() == false);
-    let view = acc.view().context("Accessor must have a buffer view")?;
-    let offset = view.offset();
-    let length = view.length();
-    ensure!(view.stride().is_none());
+    let acc = &gltf.accessors[gltf_primitive.attributes.normal];
+    ensure!(acc.ty == gltf::AccessorType::Vec3);
+    let view = &gltf.buffer_views[acc.buffer_view];
+    let offset = view.byte_offset;
+    let length = view.byte_length;
     ensure!(length > 0);
     ensure!(length % size_of::<Normal>() == 0);
-
-    // Reinterpret bytes.
-    let buffer = &*gltf_buffer_data[view.buffer().index()];
-    Ok(bytemuck::cast_slice(&buffer[offset..(offset + length)]).to_vec())
+    Ok(bytemuck::cast_slice(&gltf_data[offset..(offset + length)]).to_vec())
 }
 
 fn import_gltf_triangles(
+    gltf: &gltf::Gltf,
     gltf_primitive: &gltf::Primitive,
-    gltf_buffer_data: &[gltf::buffer::Data],
+    gltf_data: &[u8],
 ) -> Result<Vec<Vec3u>> {
-    use gltf::accessor::DataType;
-    use gltf::accessor::Dimensions;
+    const UNSIGNED_SHORT: u32 = 5123;
+    const UNSIGNED_INT: u32 = 5125;
 
-    // Accessor.
-    let acc = gltf_primitive
-        .indices()
-        .with_context(|| "Mesh is missing triangles".to_string())?;
-
-    // Validate.
-    ensure!(acc.data_type() == DataType::U16 || acc.data_type() == DataType::U32);
-    ensure!(acc.dimensions() == Dimensions::Scalar);
-    ensure!(acc.size() == size_of::<u16>() || acc.size() == size_of::<u32>());
-    ensure!(acc.offset() == 0);
-    ensure!(acc.normalized() == false);
-    let view = acc.view().context("Accessor must have a buffer view")?;
-    let offset = view.offset();
-    let length = view.length();
-    ensure!(view.stride().is_none());
+    let acc = &gltf.accessors[gltf_primitive.indices];
+    ensure!(acc.ty == gltf::AccessorType::Scalar);
+    let view = &gltf.buffer_views[acc.buffer_view];
+    let offset = view.byte_offset;
+    let length = view.byte_length;
     ensure!(length > 0);
 
-    // Reinterpret bytes.
-    let buffer = &*gltf_buffer_data[view.buffer().index()];
-    let slice_u8 = &buffer[offset..(offset + length)];
-    Ok(match acc.data_type() {
-        DataType::U16 => {
+    let slice_u8 = &gltf_data[offset..(offset + length)];
+    Ok(match acc.component_type {
+        UNSIGNED_SHORT => {
             ensure!(length % 3 * size_of::<u16>() == 0);
             let slice_u16: &[u16] = bytemuck::cast_slice(slice_u8);
             slice_u16
@@ -653,9 +517,8 @@ fn import_gltf_triangles(
                 })
                 .collect::<Vec<_>>()
         }
-        DataType::U32 => {
+        UNSIGNED_INT => {
             ensure!(length % 3 * size_of::<u32>() == 0);
-
             bytemuck::cast_slice(slice_u8).to_vec()
         }
         _ => unreachable!(),

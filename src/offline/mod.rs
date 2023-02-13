@@ -44,8 +44,8 @@ struct SceneConfig {
 #[serde(deny_unknown_fields)]
 struct MaterialMapping(
     String,
-    glb::MaterialField,
-    vz::cfg::Value<glb::DynamicTexture>,
+    rds::MaterialField,
+    vz::cfg::Value<rds::DynamicTexture>,
 );
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -117,16 +117,16 @@ fn render(
     let sky_albedo: vz::anim::Value<_> = scene_config.sky_albedo.into();
     let text_annotations = scene_config.text_annotations;
 
-    // Init glb scene.
-    let (glb_scene, mut dyn_scene) =
-        glb::Scene::create(include_bytes!("../assets/rounded_cube.glb"))?;
+    // Init rds scene.
+    let (rds_scene, mut dyn_scene) =
+        rds::Scene::create(include_bytes!("../assets/rounded_cube.glb"))?;
 
     // Init materials.
     let material_mappings = material_mappings
         .into_iter()
         .filter_map(|map| {
             let MaterialMapping(name, field, value) = map;
-            if let Some(material) = glb::dynamic_material_by_name(&glb_scene, &dyn_scene, &name) {
+            if let Some(material) = rds::dynamic_material_by_name(&rds_scene, &dyn_scene, &name) {
                 let texture = material.texture(field);
                 dyn_scene.replaced_textures.set(texture as usize, true);
                 Some((texture, vz::anim::Value::<_>::from(value)))
@@ -156,7 +156,7 @@ fn render(
             samples_per_pixel,
             ..cpupt::Params::default()
         },
-        glb_scene.clone(),
+        rds_scene.clone(),
     );
 
     // Render frames.
@@ -230,7 +230,7 @@ fn render(
                     };
 
                     let material = if let Some(material) =
-                        glb::dynamic_material_by_name(&glb_scene, &dyn_scene, name)
+                        rds::dynamic_material_by_name(&rds_scene, &dyn_scene, name)
                     {
                         material
                     } else {
@@ -311,9 +311,9 @@ fn render(
 
 #[test]
 fn config_template() {
-    use glb::DynamicTexture::Scalar as TS;
-    use glb::DynamicTexture::Vector3 as TV3;
-    use glb::MaterialField::{BaseColor, Metallic, Roughness};
+    use rds::DynamicTexture::Scalar as TS;
+    use rds::DynamicTexture::Vector3 as TV3;
+    use rds::MaterialField::{BaseColor, Metallic, Roughness};
     use vz::cfg::{keyframe, Value};
     use Value::{Constant, Keyframes};
 

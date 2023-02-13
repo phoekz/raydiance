@@ -18,14 +18,14 @@ pub struct Scene {
 }
 
 impl Scene {
-    pub fn create(glb_scene: &glb::Scene) -> Self {
-        let max_triangle_count = glb_scene
+    pub fn create(rds_scene: &rds::Scene) -> Self {
+        let max_triangle_count = rds_scene
             .meshes
             .iter()
-            .map(glb::Mesh::triangle_count)
+            .map(rds::Mesh::triangle_count)
             .sum::<u32>();
         let mut triangles = Vec::with_capacity(max_triangle_count as usize);
-        for mesh in &glb_scene.meshes {
+        for mesh in &rds_scene.meshes {
             for triangle in &mesh.triangles {
                 let position_0 = mesh.positions[triangle[0] as usize];
                 let position_1 = mesh.positions[triangle[1] as usize];
@@ -81,7 +81,7 @@ pub struct Input {
     pub camera_transform: Mat4,
     pub image_size: (u32, u32),
     pub hemisphere_sampler: sampling::HemisphereSampler,
-    pub dyn_scene: glb::DynamicScene,
+    pub dyn_scene: rds::DynamicScene,
     pub visualize_normals: bool,
     pub tonemapping: bool,
     pub exposure: Exposure,
@@ -95,7 +95,7 @@ impl Default for Input {
             camera_transform: Mat4::identity(),
             image_size: (0, 0),
             hemisphere_sampler: sampling::HemisphereSampler::default(),
-            dyn_scene: glb::DynamicScene::default(),
+            dyn_scene: rds::DynamicScene::default(),
             visualize_normals: false,
             tonemapping: true,
             exposure: Exposure::default(),
@@ -132,15 +132,15 @@ pub struct Raytracer {
 }
 
 impl Raytracer {
-    pub fn create(params: Params, glb_scene: glb::Scene) -> Self {
+    pub fn create(params: Params, rds_scene: rds::Scene) -> Self {
         let (input_send, input_recv) = mpsc::channel();
         let (output_send, output_recv) = mpsc::channel();
         let (terminate_send, terminate_recv) = mpsc::channel();
         let thread = thread::spawn(move || {
             let params = params;
-            let glb_scene = glb_scene;
-            let scene = Scene::create(&glb_scene);
-            let materials = glb_scene.materials.as_ref();
+            let rds_scene = rds_scene;
+            let scene = Scene::create(&rds_scene);
+            let materials = rds_scene.materials.as_ref();
             let input_recv: mpsc::Receiver<Input> = input_recv;
             let output_send = output_send;
             let terminate_recv = terminate_recv;
@@ -190,7 +190,7 @@ impl Raytracer {
                         );
 
                         // Reset camera.
-                        let camera = &glb_scene.cameras[0];
+                        let camera = &rds_scene.cameras[0];
                         let camera_transform = input.camera_transform.try_inverse().unwrap();
                         let view_from_clip = camera.clip_from_view().inverse();
                         let world_from_view = camera.world_from_view();
@@ -238,7 +238,7 @@ impl Raytracer {
                                 &input,
                                 &params,
                                 &scene,
-                                &glb_scene,
+                                &rds_scene,
                                 &input.dyn_scene,
                                 materials,
                                 &sky_state,
@@ -368,9 +368,9 @@ fn tile_radiance(
     input: &Input,
     params: &Params,
     scene: &Scene,
-    glb_scene: &glb::Scene,
-    dyn_scene: &glb::DynamicScene,
-    materials: &[glb::Material],
+    rds_scene: &rds::Scene,
+    dyn_scene: &rds::DynamicScene,
+    materials: &[rds::Material],
     sky_state: &sky::ext::StateExt,
 ) -> ([ColorRgb; pixel_tile_count()], intersection::RayBvhHitStats) {
     let mut tile_radiance: [ColorRgb; pixel_tile_count()] = [ColorRgb::BLACK; pixel_tile_count()];
@@ -387,7 +387,7 @@ fn tile_radiance(
                 input,
                 params,
                 scene,
-                glb_scene,
+                rds_scene,
                 dyn_scene,
                 materials,
                 sky_state,
@@ -410,9 +410,9 @@ fn radiance(
     input: &Input,
     params: &Params,
     scene: &Scene,
-    glb_scene: &glb::Scene,
-    dyn_scene: &glb::DynamicScene,
-    materials: &[glb::Material],
+    rds_scene: &rds::Scene,
+    dyn_scene: &rds::DynamicScene,
+    materials: &[rds::Material],
     sky_state: &sky::ext::StateExt,
 ) -> (ColorRgb, intersection::RayBvhHitStats) {
     use bxdfs::Bxdf;
@@ -470,15 +470,15 @@ fn radiance(
 
         // Sample textures.
         let material = &materials[triangle.material as usize];
-        let model = glb::dynamic_model(dyn_scene, triangle.material);
+        let model = rds::dynamic_model(dyn_scene, triangle.material);
         let base_color =
-            glb::dynamic_sample(glb_scene, dyn_scene, material.base_color, tex_coord).rgb();
+            rds::dynamic_sample(rds_scene, dyn_scene, material.base_color, tex_coord).rgb();
         let roughness =
-            glb::dynamic_sample(glb_scene, dyn_scene, material.roughness, tex_coord).r();
-        let metallic = glb::dynamic_sample(glb_scene, dyn_scene, material.metallic, tex_coord).r();
-        let specular = glb::dynamic_sample(glb_scene, dyn_scene, material.specular, tex_coord).r();
+            rds::dynamic_sample(rds_scene, dyn_scene, material.roughness, tex_coord).r();
+        let metallic = rds::dynamic_sample(rds_scene, dyn_scene, material.metallic, tex_coord).r();
+        let specular = rds::dynamic_sample(rds_scene, dyn_scene, material.specular, tex_coord).r();
         let specular_tint =
-            glb::dynamic_sample(glb_scene, dyn_scene, material.specular_tint, tex_coord).r();
+            rds::dynamic_sample(rds_scene, dyn_scene, material.specular_tint, tex_coord).r();
         let anisotropic = 0.0;
 
         // Orthonormal basis.
@@ -490,7 +490,7 @@ fn radiance(
 
         // Evaluate material.
         let bxdf_sample = match model {
-            glb::MaterialModel::Diffuse => {
+            rds::MaterialModel::Diffuse => {
                 let bxdf = bxdfs::Lambertian::new(&bxdfs::LambertianParams {
                     hemisphere,
                     base_color,
@@ -500,7 +500,8 @@ fn radiance(
                     None => break,
                 }
             }
-            glb::MaterialModel::Disney => {
+            rds::MaterialModel::Disney => {
+                // Todo: pre-calculate these elsewhere.
                 let diffuse_brdf = bxdfs::DisneyDiffuse::new(&bxdfs::DisneyDiffuseParams {
                     hemisphere,
                     base_color,

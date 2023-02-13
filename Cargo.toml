@@ -15,7 +15,6 @@ bytemuck = { version = "1.13.0", features = ["derive"] }
 clap = { version = "4.1.4", features = ["derive"] }
 easer = "0.3.0"
 env_logger = "0.10.0"
-gltf = "1.1.0"
 hw-skymodel = "0.1.1"
 imagelib = { version = "0.24.5", package = "image" }
 imageproc = "0.23.0"
@@ -43,6 +42,7 @@ rayon = "1.6.1"
 ron = "0.8.0"
 rusttype = "0.9.3"
 serde = { version = "1.0.152", features = ["derive"] }
+serde_json = "1.0.93"
 sobol_burley = "0.4.0"
 time = { version = "0.3.17", features = [
     "local-offset",

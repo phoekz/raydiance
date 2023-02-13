@@ -62,10 +62,11 @@ mod blog;
 mod color;
 mod cpupt;
 mod debug;
-mod glb;
+mod gltf;
 mod gui;
 mod math;
 mod offline;
+mod rds;
 mod vulkan;
 mod vz;
 mod window;
@@ -211,8 +212,8 @@ fn editor() -> Result<()> {
     // Init gui.
     let mut gui = gui::Gui::create(&window);
 
-    // Init glb scene.
-    let (glb_scene, mut dyn_scene) = glb::Scene::create(include_bytes!("assets/rounded_cube.glb"))?;
+    // Init rds scene.
+    let (rds_scene, mut dyn_scene) = rds::Scene::create(include_bytes!("assets/rounded_cube.glb"))?;
 
     // Init cpupt.
     let raytracer = cpupt::Raytracer::create(
@@ -220,7 +221,7 @@ fn editor() -> Result<()> {
             samples_per_pixel: 256,
             ..cpupt::Params::default()
         },
-        glb_scene.clone(),
+        rds_scene.clone(),
     );
 
     // Init Vulkan renderer.
@@ -229,7 +230,7 @@ fn editor() -> Result<()> {
             &window,
             window_title,
             window_size,
-            &glb_scene,
+            &rds_scene,
             &gui.font_atlas_texture(),
         )?
     };
@@ -406,7 +407,7 @@ fn editor() -> Result<()> {
                                 ui.combo(
                                     "Material",
                                     &mut selected_material,
-                                    &glb_scene.materials,
+                                    &rds_scene.materials,
                                     |material| Cow::Borrowed(&material.name),
                                 );
 
@@ -416,11 +417,11 @@ fn editor() -> Result<()> {
                                 {
                                     let model = &mut material.model;
                                     if let Some(token) = ui.begin_combo("Model", model.name()) {
-                                        if ui.selectable(glb::MaterialModel::Diffuse.name()) {
-                                            *model = glb::MaterialModel::Diffuse;
+                                        if ui.selectable(rds::MaterialModel::Diffuse.name()) {
+                                            *model = rds::MaterialModel::Diffuse;
                                         }
-                                        if ui.selectable(glb::MaterialModel::Disney.name()) {
-                                            *model = glb::MaterialModel::Disney;
+                                        if ui.selectable(rds::MaterialModel::Disney.name()) {
+                                            *model = rds::MaterialModel::Disney;
                                         }
                                         token.end();
                                     }
@@ -440,7 +441,7 @@ fn editor() -> Result<()> {
                                         ui.text(name);
                                         ui.table_next_column();
 
-                                        if let glb::DynamicTexture::Vector4(ref mut value) =
+                                        if let rds::DynamicTexture::Vector4(ref mut value) =
                                             &mut texture
                                         {
                                             if ui
@@ -478,7 +479,7 @@ fn editor() -> Result<()> {
                                         ui.text(name);
                                         ui.table_next_column();
 
-                                        if let glb::DynamicTexture::Scalar(ref mut value) =
+                                        if let rds::DynamicTexture::Scalar(ref mut value) =
                                             &mut texture
                                         {
                                             if imgui::Drag::new("##slider")
@@ -515,7 +516,7 @@ fn editor() -> Result<()> {
                                         ui.text(name);
                                         ui.table_next_column();
 
-                                        if let glb::DynamicTexture::Scalar(ref mut value) =
+                                        if let rds::DynamicTexture::Scalar(ref mut value) =
                                             &mut texture
                                         {
                                             if imgui::Drag::new("##slider")
@@ -552,7 +553,7 @@ fn editor() -> Result<()> {
                                         ui.text(name);
                                         ui.table_next_column();
 
-                                        if let glb::DynamicTexture::Scalar(ref mut value) =
+                                        if let rds::DynamicTexture::Scalar(ref mut value) =
                                             &mut texture
                                         {
                                             if imgui::Drag::new("##slider")
@@ -589,7 +590,81 @@ fn editor() -> Result<()> {
                                         ui.text(name);
                                         ui.table_next_column();
 
-                                        if let glb::DynamicTexture::Scalar(ref mut value) =
+                                        if let rds::DynamicTexture::Scalar(ref mut value) =
+                                            &mut texture
+                                        {
+                                            if imgui::Drag::new("##slider")
+                                                .range(0.0, 1.0)
+                                                .speed(0.01)
+                                                .build(ui, value)
+                                            {
+                                                // Convenience: replace texture when an edit has been made without extra interaction.
+                                                dyn_scene.replaced_textures.set(index, true);
+                                            }
+                                        }
+                                        ui.table_next_column();
+
+                                        {
+                                            if ui.checkbox("##use", &mut bit) {
+                                                dyn_scene.replaced_textures.set(index, bit);
+                                            }
+                                            ui.same_line();
+                                            if ui.button("X") {
+                                                // Convenience: reset to default value and clear replacement with one click.
+                                                *texture = dyn_scene.default_textures[index];
+                                                dyn_scene.replaced_textures.set(index, false);
+                                            }
+                                        }
+                                        ui.table_next_column();
+                                    }
+                                    {
+                                        let name = "Sheen";
+                                        let _id = ui.push_id(name);
+                                        let index = material.sheen as usize;
+                                        let mut texture = &mut dyn_scene.textures[index];
+                                        let mut bit = dyn_scene.replaced_textures[index];
+
+                                        ui.text(name);
+                                        ui.table_next_column();
+
+                                        if let rds::DynamicTexture::Scalar(ref mut value) =
+                                            &mut texture
+                                        {
+                                            if imgui::Drag::new("##slider")
+                                                .range(0.0, 1.0)
+                                                .speed(0.01)
+                                                .build(ui, value)
+                                            {
+                                                // Convenience: replace texture when an edit has been made without extra interaction.
+                                                dyn_scene.replaced_textures.set(index, true);
+                                            }
+                                        }
+                                        ui.table_next_column();
+
+                                        {
+                                            if ui.checkbox("##use", &mut bit) {
+                                                dyn_scene.replaced_textures.set(index, bit);
+                                            }
+                                            ui.same_line();
+                                            if ui.button("X") {
+                                                // Convenience: reset to default value and clear replacement with one click.
+                                                *texture = dyn_scene.default_textures[index];
+                                                dyn_scene.replaced_textures.set(index, false);
+                                            }
+                                        }
+                                        ui.table_next_column();
+                                    }
+                                    {
+                                        let name = "Sheen Tint";
+                                        let _id = ui.push_id(name);
+                                        let index = material.sheen_tint as usize;
+                                        let mut texture = &mut dyn_scene.textures[index];
+                                        let mut bit = dyn_scene.replaced_textures[index];
+
+                                        ui.text(name);
+                                        ui.table_next_column();
+
+                                        if let rds::DynamicTexture::Scalar(ref mut value) =
                                             &mut texture
                                         {
                                             if imgui::Drag::new("##slider")

@@ -57,20 +57,20 @@ pub struct RasterScene {
 }
 
 impl RasterScene {
-    pub unsafe fn create(device: &Device, glb_scene: &glb::Scene) -> Result<Self> {
+    pub unsafe fn create(device: &Device, rds_scene: &rds::Scene) -> Result<Self> {
         // Todo: Allocating meshes individually will eventually crash due to
         // `max_memory_allocation_count`, which is only 4096 on most NVIDIA
         // hardware. At that point, we need to start packing meshes into a
         // single allocation.
         let meshes = {
             let mut meshes = vec![];
-            for glb_mesh in &glb_scene.meshes {
-                let positions = glb_mesh.positions.as_ref();
-                let tex_coords = glb_mesh.tex_coords.as_ref();
-                let normals = glb_mesh.normals.as_ref();
-                let triangles = glb_mesh.triangles.as_ref();
-                let transform = glb_mesh.transform;
-                let texture = glb_scene.materials[glb_mesh.material as usize].base_color;
+            for rds_mesh in &rds_scene.meshes {
+                let positions = rds_mesh.positions.as_ref();
+                let tex_coords = rds_mesh.tex_coords.as_ref();
+                let normals = rds_mesh.normals.as_ref();
+                let triangles = rds_mesh.triangles.as_ref();
+                let transform = rds_mesh.transform;
+                let texture = rds_scene.materials[rds_mesh.material as usize].base_color;
 
                 meshes.push(RasterMesh {
                     positions: Buffer::create_init(
@@ -93,7 +93,7 @@ impl RasterScene {
                         vk::BufferUsageFlags::INDEX_BUFFER,
                         triangles,
                     )?,
-                    index_count: glb_mesh.index_count(),
+                    index_count: rds_mesh.index_count(),
                     transform,
                     texture,
                 });
@@ -120,14 +120,14 @@ impl RasterScene {
 
             // Create textures.
             let mut textures = vec![];
-            for glb_texture in &glb_scene.textures {
+            for rds_texture in &rds_scene.textures {
                 // Unpack.
-                let (width, height, format, pixels) = match &glb_texture {
-                    glb::Texture::Scalar(s) => (1, 1, vk::Format::R32_SFLOAT, slice::from_ref(s)),
-                    glb::Texture::Vector2(v) => (1, 1, vk::Format::R32G32_SFLOAT, v.as_ref()),
-                    glb::Texture::Vector3(v) => (1, 1, vk::Format::R32G32B32_SFLOAT, v.as_ref()),
-                    glb::Texture::Vector4(v) => (1, 1, vk::Format::R32G32B32A32_SFLOAT, v.as_ref()),
-                    glb::Texture::Image {
+                let (width, height, format, pixels) = match &rds_texture {
+                    rds::Texture::Scalar(s) => (1, 1, vk::Format::R32_SFLOAT, slice::from_ref(s)),
+                    rds::Texture::Vector2(v) => (1, 1, vk::Format::R32G32_SFLOAT, v.as_ref()),
+                    rds::Texture::Vector3(v) => (1, 1, vk::Format::R32G32B32_SFLOAT, v.as_ref()),
+                    rds::Texture::Vector4(v) => (1, 1, vk::Format::R32G32B32A32_SFLOAT, v.as_ref()),
+                    rds::Texture::Image {
                         width,
                         height,
                         components,
@@ -197,7 +197,7 @@ impl RasterScene {
                     device,
                     vk::BufferUsageFlags::TRANSFER_SRC,
                     vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-                    glb_texture.byte_count(),
+                    rds_texture.byte_count(),
                     bytemuck::cast_slice(pixels),
                 )?;
 
@@ -465,7 +465,7 @@ impl RasterScene {
 
         // Camera.
         let (clip_from_view, view_from_world) = {
-            let camera = &glb_scene.cameras[0];
+            let camera = &rds_scene.cameras[0];
             (
                 *camera.clip_from_view().as_matrix(),
                 camera.world_from_view().try_inverse().unwrap(),
@@ -491,7 +491,7 @@ impl RasterScene {
         device: &Device,
         cmd: vk::CommandBuffer,
         camera_transform: Mat4,
-        dyn_scene: &glb::DynamicScene,
+        dyn_scene: &rds::DynamicScene,
         visualize_normals: bool,
     ) {
         // Prepare matrices.
@@ -502,7 +502,7 @@ impl RasterScene {
         device.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, self.graphics_pipeline);
         for mesh in &self.meshes {
             // Prepare push constants.
-            let base_color = match glb::dynamic_try_sample(dyn_scene, mesh.texture) {
+            let base_color = match rds::dynamic_try_sample(dyn_scene, mesh.texture) {
                 Some(v) => transmute(v),
                 None => vector![0.0, 0.0, 0.0, 0.0],
             };
