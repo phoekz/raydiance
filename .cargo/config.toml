@@ -5,6 +5,7 @@ rr-ed = "rr editor"
 rr-off-default = "rr offline --render-job-name debug-default --render-config src/assets/cfg/default.render.ron --scene-config src/assets/cfg/debug.scene.ron"
 rr-off-preview = "rr offline --render-job-name debug-preview --render-config src/assets/cfg/preview.render.ron --scene-config src/assets/cfg/debug.scene.ron"
 rr-off-preview-mat = "rr offline --render-job-name material --render-config src/assets/cfg/preview.render.ron --scene-config src/assets/cfg/material.scene.ron"
+rr-off-preview-single = "rr offline --render-job-name single --render-config src/assets/cfg/single.render.ron --scene-config src/assets/cfg/single.scene.ron"
 rr-off-preview-sky = "rr offline --render-job-name sky --render-config src/assets/cfg/preview.render.ron --scene-config src/assets/cfg/sky.scene.ron"
 
 
