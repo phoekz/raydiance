@@ -166,9 +166,9 @@ fn render(
         let timer = Instant::now();
         let hemisphere_sampler = HemisphereSampler::Cosine;
         let visualize_normals = false;
-        let pb = ProgressBar::new(u64::from(frame_count)).with_style(ProgressStyle::with_template(
-            "{wide_bar} elapsed={elapsed_precise} eta={eta_precise}",
-        )?);
+        let pb = ProgressBar::new(u64::from(frame_count * samples_per_pixel)).with_style(
+            ProgressStyle::with_template("{wide_bar} elapsed={elapsed_precise} eta={eta_precise}")?,
+        );
         let mut frames = vec![];
         for frame_index in 0..frame_count {
             // Time.
@@ -213,6 +213,7 @@ fn render(
                     &output.image,
                     output.image_size,
                 ));
+                pb.inc(1);
             }
             let mut latest_frame = latest_frame.unwrap();
             if render_config.annotations {
@@ -276,7 +277,6 @@ fn render(
                 latest_frame.draw_text(&font, ColorRgb::WHITE, &text.build());
             }
             frames.push(latest_frame);
-            pb.inc(1);
         }
         pb.finish();
         info!("Rendering took {} seconds", timer.elapsed().as_secs_f64());
