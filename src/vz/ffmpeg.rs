@@ -290,8 +290,7 @@ impl StackArgs {
             // Special: the last odd video center-padded.
             if input_count > 0 {
                 parts.push(format!(
-                    "[{}:v]pad=w=2*iw:x=iw/2[h{}]",
-                    input_index, hstack_index
+                    "[{input_index}:v]pad=w=2*iw:x=iw/2[h{hstack_index}]",
                 ));
                 hstack_index += 1;
             }

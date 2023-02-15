@@ -223,17 +223,11 @@ fn render(
 
                 // Annotate materials.
                 for ta in &text_annotations {
-                    let name = if let TextAnnotation::Material(name) = ta {
-                        name
-                    } else {
+                    let TextAnnotation::Material(name) = ta else {
                         continue;
                     };
 
-                    let material = if let Some(material) =
-                        rds::dynamic_material_by_name(&rds_scene, &dyn_scene, name)
-                    {
-                        material
-                    } else {
+                    let Some(material) = rds::dynamic_material_by_name(&rds_scene, &dyn_scene, name) else {
                         warn!("Could not find material called {name}");
                         continue;
                     };

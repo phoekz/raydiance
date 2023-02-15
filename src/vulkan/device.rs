@@ -38,91 +38,90 @@ impl Deref for Device {
 impl Device {
     pub unsafe fn create(instance: &Instance, surface: &Surface) -> Result<Self> {
         // Find physical device and its queues.
-        let (physical_device, queue_family_index) = if let Some((physical_device, queue_families)) =
-            instance
-                .enumerate_physical_devices()
-                .context("Enumerating physical devices")?
-                .into_iter()
-                .find_map(|physical_device| {
-                    // Make sure the device supports the features we need.
-                    let mut features_11 = vk::PhysicalDeviceVulkan11Features::default();
-                    let mut features_12 = vk::PhysicalDeviceVulkan12Features::default();
-                    let mut features_13 = vk::PhysicalDeviceVulkan13Features::default();
-                    let mut features = vk::PhysicalDeviceFeatures2::builder()
-                        .push_next(&mut features_11)
-                        .push_next(&mut features_12)
-                        .push_next(&mut features_13);
-                    instance.get_physical_device_features2(physical_device, &mut features);
-                    let features_10 = features.features;
-                    debug!("{:#?}", features_10);
-                    debug!("{:#?}", features_11);
-                    debug!("{:#?}", features_12);
-                    debug!("{:#?}", features_13);
-                    if features_13.dynamic_rendering == vk::FALSE {
-                        return None;
-                    }
-                    if features_13.synchronization2 == vk::FALSE {
-                        return None;
-                    }
+        let Some((physical_device, queue_family_index)) = instance
+            .enumerate_physical_devices()
+            .context("Enumerating physical devices")?
+            .into_iter()
+            .find_map(|physical_device| {
+                // Make sure the device supports the features we need.
+                let mut features_11 = vk::PhysicalDeviceVulkan11Features::default();
+                let mut features_12 = vk::PhysicalDeviceVulkan12Features::default();
+                let mut features_13 = vk::PhysicalDeviceVulkan13Features::default();
+                let mut features = vk::PhysicalDeviceFeatures2::builder()
+                    .push_next(&mut features_11)
+                    .push_next(&mut features_12)
+                    .push_next(&mut features_13);
+                instance.get_physical_device_features2(physical_device, &mut features);
+                let features_10 = features.features;
+                debug!("{:#?}", features_10);
+                debug!("{:#?}", features_11);
+                debug!("{:#?}", features_12);
+                debug!("{:#?}", features_13);
+                if features_13.dynamic_rendering == vk::FALSE {
+                    return None;
+                }
+                if features_13.synchronization2 == vk::FALSE {
+                    return None;
+                }
 
-                    // We only support discrete GPUs at this point.
-                    let properties = instance.get_physical_device_properties(physical_device);
-                    if properties.device_type != vk::PhysicalDeviceType::DISCRETE_GPU {
-                        return None;
-                    }
+                // We only support discrete GPUs at this point.
+                let properties = instance.get_physical_device_properties(physical_device);
+                if properties.device_type != vk::PhysicalDeviceType::DISCRETE_GPU {
+                    return None;
+                }
 
-                    // Check limits.
-                    let limits = properties.limits;
-                    if !limits
-                        .framebuffer_color_sample_counts
-                        .contains(DEFAULT_SAMPLE_COUNT)
-                    {
-                        return None;
-                    }
+                // Check limits.
+                let limits = properties.limits;
+                if !limits
+                    .framebuffer_color_sample_counts
+                    .contains(DEFAULT_SAMPLE_COUNT)
+                {
+                    return None;
+                }
 
-                    // Make sure the device supports the queue types we
-                    // need. Todo: We assume that there is at least one
-                    // queue that supports all operations. This might not be
-                    // true on all devices, so we need to come back later to
-                    // generalize this.
-                    let queue_families =
-                        instance.get_physical_device_queue_family_properties(physical_device);
-                    let queue = queue_families.into_iter().enumerate().find_map(
-                        |(queue_family_index, queue_family)| {
-                            if queue_family.queue_flags.contains(
-                                vk::QueueFlags::GRAPHICS
-                                    | vk::QueueFlags::COMPUTE
-                                    | vk::QueueFlags::TRANSFER,
-                            ) {
-                                return Some(queue_family_index);
-                            }
-                            None
-                        },
-                    );
-                    let queue = if let Some(queue) = queue {
-                        queue as u32
-                    } else {
-                        return None;
-                    };
-
-                    // Check for present support.
-                    if let Ok(supports_present) = surface
-                        .loader()
-                        .get_physical_device_surface_support(physical_device, queue, **surface)
-                    {
-                        if !supports_present {
-                            return None;
+                // Make sure the device supports the queue types we
+                // need. Todo: We assume that there is at least one
+                // queue that supports all operations. This might not be
+                // true on all devices, so we need to come back later to
+                // generalize this.
+                let queue_families =
+                    instance.get_physical_device_queue_family_properties(physical_device);
+                let queue = queue_families.into_iter().enumerate().find_map(
+                    |(queue_family_index, queue_family)| {
+                        if queue_family.queue_flags.contains(
+                            vk::QueueFlags::GRAPHICS
+                                | vk::QueueFlags::COMPUTE
+                                | vk::QueueFlags::TRANSFER,
+                        ) {
+                            return Some(queue_family_index);
                         }
-                    } else {
+                        None
+                    },
+                );
+                let queue = if let Some(queue) = queue {
+                    queue as u32
+                } else {
+                    return None;
+                };
+
+                // Check for present support.
+                if let Ok(supports_present) = surface.loader().get_physical_device_surface_support(
+                    physical_device,
+                    queue,
+                    **surface,
+                ) {
+                    if !supports_present {
                         return None;
                     }
+                } else {
+                    return None;
+                }
 
-                    Some((physical_device, queue))
-                }) {
-            (physical_device, queue_families)
-        } else {
-            bail!("Failed to find any suitable physical devices");
-        };
+                Some((physical_device, queue))
+            }) else {
+                bail!("Failed to find any suitable physical devices");
+            };
+
         let device_properties = instance.get_physical_device_properties(physical_device);
         info!(
             "Physical device: {:?}",

@@ -317,10 +317,7 @@ fn brdf_visualizations() -> Result<()> {
                     ])
                     .line([
                         ("roughness", format!("{roughness:.02}")),
-                        (
-                            "wi",
-                            format!("{:.02} deg", incoming_angle_theta.to_degrees()),
-                        ),
+                        ("wi", format!("{:.02}°", incoming_angle_theta.to_degrees())),
                         ("anisotropic", format!("{anisotropic:.02}")),
                     ])
                     .line([

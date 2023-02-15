@@ -206,9 +206,7 @@ impl Renderer {
             .loader()
             .acquire_next_image(**swapchain, u64::MAX, *present_complete, vk::Fence::null())
             .context("Acquiring next image");
-        let present_index = if let Ok((present_index, _)) = acquire_result {
-            present_index
-        } else {
+        let Ok((present_index, _)) = acquire_result else {
             swapchain
                 .recreate(surface, device, window_size.into())
                 .context("Recreating swapchain")?;
