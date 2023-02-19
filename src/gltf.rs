@@ -71,6 +71,8 @@ pub struct Gltf<'a> {
     pub buffer_views: Vec<BufferView>,
     pub buffers: Vec<Buffer>,
     pub cameras: Vec<Camera<'a>>,
+    #[serde(default)]
+    pub extensions_used: Vec<&'a str>,
     pub images: Vec<Image<'a>>,
     pub materials: Vec<Material<'a>>,
     pub meshes: Vec<Mesh<'a>>,
@@ -178,6 +180,7 @@ pub struct Image<'a> {
 pub struct Material<'a> {
     pub name: &'a str,
     pub pbr_metallic_roughness: PbrMetallicRoughness,
+    pub extensions: Option<MaterialExtensions>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -193,6 +196,10 @@ pub struct PbrMetallicRoughness {
     #[serde(default)]
     pub roughness_factor: RoughnessFactor,
 }
+
+#[derive(Deserialize, Debug)]
+#[allow(dead_code)]
+pub struct MaterialExtensions {}
 
 #[derive(Deserialize, Debug)]
 pub struct BaseColorFactor(pub [f32; 4]);
