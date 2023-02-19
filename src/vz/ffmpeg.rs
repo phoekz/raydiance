@@ -250,7 +250,7 @@ struct StackArgs {
 impl StackArgs {
     fn run(self) -> Result<()> {
         // Validation.
-        ensure!(self.input_files.len() >= 3);
+        ensure!(self.input_files.len() >= 2);
         ensure!(self.input_files.iter().all(|f| f.is_file()));
 
         // Build complex filter string.
@@ -295,15 +295,21 @@ impl StackArgs {
                 hstack_index += 1;
             }
 
-            // Build vstacks.
-            let mut vstack_index = 0;
-            // Special: the first vstack is always between h0 and h1.
-            parts.push("[h0][h1]vstack[v]".to_owned());
-            vstack_index += 2;
-            // vstacks afterwards always append to the `v`.
-            while vstack_index < hstack_index {
-                parts.push(format!("[v][h{vstack_index}]vstack[v]"));
-                vstack_index += 1;
+            if self.input_files.len() == 2 {
+                // Special: vstacks are not required if we only have two videos.
+                // In this case, map the only hstack `h0` into `v`.
+                parts.push("[h0]copy[v]".to_owned());
+            } else {
+                // Build vstacks.
+                let mut vstack_index = 0;
+                // Special: the first vstack is always between h0 and h1.
+                parts.push("[h0][h1]vstack[v]".to_owned());
+                vstack_index += 2;
+                // vstacks afterwards always append to the `v`.
+                while vstack_index < hstack_index {
+                    parts.push(format!("[v][h{vstack_index}]vstack[v]"));
+                    vstack_index += 1;
+                }
             }
 
             // Final rounding to avoid odd sizes.
