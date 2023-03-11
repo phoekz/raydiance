@@ -291,19 +291,17 @@ fn brdf_visualizations() -> Result<()> {
                 // Samples.
                 let mut inside_hemisphere = 0;
                 let mut sequence = task.seq.clone();
-                (0..DEFAULT_SAMPLE_COUNT)
-                    .into_iter()
-                    .for_each(|sample_index| {
-                        let uniform = sequence.sample(sample_index);
-                        let vector = match brdf.sample(&incoming, uniform) {
-                            Some(sample) => {
-                                inside_hemisphere += 1;
-                                sample.wi()
-                            }
-                            None => bxdfs::LocalVector(Y_AXIS),
-                        };
-                        plot.draw_vector(vector, PLOT_COLOR_SAMPLE);
-                    });
+                (0..DEFAULT_SAMPLE_COUNT).for_each(|sample_index| {
+                    let uniform = sequence.sample(sample_index);
+                    let vector = match brdf.sample(&incoming, uniform) {
+                        Some(sample) => {
+                            inside_hemisphere += 1;
+                            sample.wi
+                        }
+                        None => bxdfs::LocalVector(Y_AXIS),
+                    };
+                    plot.draw_vector(vector, PLOT_COLOR_SAMPLE);
+                });
                 plot.draw_debug_vectors();
                 plot.draw_vector(incoming, PLOT_COLOR_INCOMING);
 

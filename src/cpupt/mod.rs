@@ -205,7 +205,6 @@ impl Raytracer {
 
                         // Reset tiles.
                         tiles = PixelTiles::new(input.image_size.0, input.image_size.1)
-                            .into_iter()
                             .collect::<Vec<_>>();
                         tile_results.reserve(tiles.len());
 

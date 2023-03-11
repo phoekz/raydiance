@@ -20,7 +20,7 @@ pub fn new(args: NewArgs) -> Result<()> {
 
     let title = args.title;
     let link_name = args.link_name;
-    let commit = (0..40).into_iter().map(|_| '0').collect::<String>();
+    let commit = (0..40).map(|_| '0').collect::<String>();
 
     let timestamp = utc_timestamp()?;
     let post_dir_name = format!("{timestamp}-{link_name}");
