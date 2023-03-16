@@ -82,7 +82,8 @@ impl Gui {
                 .binding(0)
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
                 .descriptor_count(1)
-                .stage_flags(vk::ShaderStageFlags::FRAGMENT);
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT)
+                .immutable_samplers(slice::from_ref(&sampler));
             device.create_descriptor_set_layout(
                 &vk::DescriptorSetLayoutCreateInfo::builder()
                     .bindings(slice::from_ref(&bindings))
@@ -450,8 +451,7 @@ impl Gui {
         {
             let image_info = *vk::DescriptorImageInfo::builder()
                 .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(self.font_atlas.view)
-                .sampler(self.sampler);
+                .image_view(self.font_atlas.view);
             let write = *vk::WriteDescriptorSet::builder()
                 .dst_binding(0)
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
