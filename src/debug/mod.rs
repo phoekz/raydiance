@@ -296,7 +296,7 @@ fn brdf_visualizations() -> Result<()> {
                     let vector = match brdf.sample(&incoming, uniform) {
                         Some(sample) => {
                             inside_hemisphere += 1;
-                            sample.wi
+                            sample.wi()
                         }
                         None => bxdfs::LocalVector(Y_AXIS),
                     };
