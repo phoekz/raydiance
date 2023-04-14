@@ -81,13 +81,13 @@ impl ColorRgb {
     }
 
     pub fn into_srgb8(self) -> [u8; 3] {
-        use palette::{LinSrgb, Pixel, Srgb};
+        use palette::{LinSrgb, Srgb};
         assert!((0.0..=1.0).contains(&self.r()));
         assert!((0.0..=1.0).contains(&self.g()));
         assert!((0.0..=1.0).contains(&self.b()));
-        let linear = LinSrgb::new(self.r(), self.g(), self.b());
-        let srgb = Srgb::from_linear(linear);
-        srgb.into_format().into_raw()
+        let linear = LinSrgb::<f32>::new(self.r(), self.g(), self.b());
+        let srgb = Srgb::<f32>::from_linear(linear);
+        srgb.into_format().into()
     }
 }
 

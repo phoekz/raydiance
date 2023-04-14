@@ -6,59 +6,59 @@ rust-version = "1.67"
 version = "0.1.0"
 
 [dependencies]
-anyhow = "1.0.69"
+anyhow = "1.0.70"
+apnglib = { version = "0.3.1", package = "apng" }
 approx = "0.5.1"
 ash = "0.37.2"
 ash-window = "0.12.0"
 bitvec = "1.0.1"
-bytemuck = { version = "1.13.0", features = ["derive"] }
-clap = { version = "4.1.4", features = ["derive"] }
+bytemuck = { version = "1.13.1", features = ["derive"] }
+clap = { version = "4.2.2", features = ["derive"] }
 easer = "0.3.0"
 env_logger = "0.10.0"
 hw-skymodel = "0.1.1"
-imagelib = { version = "0.24.5", package = "image", default-features = false, features = [
+imagelib = { version = "0.24.6", package = "image", default-features = false, features = [
     "png",
 ] }
-imgui = { version = "0.10.0", features = ["tables-api"] }
-imgui-winit-support = "0.10.0"
+imgui = { version = "0.11.0", features = ["tables-api"] }
+imgui-winit-support = "0.11.0"
 include_bytes_aligned = "0.1.2"
 indicatif = "0.17.3"
 itertools = "0.10.5"
 katex = { version = "0.4.6", default-features = false, features = ["duktape"] }
 log = "0.4.17"
-nalgebra = { version = "0.32.1", features = ["bytemuck"] }
+nalgebra = { version = "0.32.2", features = ["bytemuck"] }
 num = "0.4.0"
 num-format = "0.4.4"
-palette = { version = "0.6.1", features = ["bytemuck"] }
+palette = { version = "0.7.0", features = ["bytemuck"] }
 plotters = { version = "0.3.4", default-features = false, features = [
-    "svg_backend",
     "line_series",
+    "svg_backend",
 ] }
-png = "0.17.7"
+png = "0.17.8"
 pulldown-cmark = { version = "0.9.2", default-features = false }
 rand = "0.8.5"
 rand_pcg = "0.3.1"
-raw-window-handle = "0.5.0"
-rayon = "1.6.1"
+raw-window-handle = "0.5.2"
+rayon = "1.7.0"
 ron = "0.8.0"
 rusttype = "0.9.3"
-serde = { version = "1.0.152", features = ["derive"] }
-serde_json = "1.0.93"
+serde = { version = "1.0.160", features = ["derive"] }
+serde_json = "1.0.96"
 sobol_burley = "0.4.0"
-time = { version = "0.3.17", features = [
-    "local-offset",
+time = { version = "0.3.20", features = [
     "formatting",
+    "local-offset",
     "parsing",
 ] }
 tinytemplate = "1.2.1"
 which = "4.4.0"
 winit = "0.27.5"
 
-apnglib = { git = "https://github.com/phoekz/apng", branch = "pr/trim-image-deps", package = "apng" }
 imageproc = { git = "https://github.com/phoekz/imageproc", branch = "pr/update-deps" }
 
 [build-dependencies]
-anyhow = "1.0.69"
+anyhow = "1.0.70"
 
 [dev-dependencies]
 textplots = "0.8.0"
