@@ -8,6 +8,7 @@
     clippy::cast_precision_loss,
     clippy::cast_sign_loss,
     clippy::collapsible_if,
+    clippy::let_underscore_untyped,
     clippy::many_single_char_names,
     clippy::missing_errors_doc,
     clippy::module_name_repetitions,

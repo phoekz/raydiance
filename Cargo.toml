@@ -13,7 +13,7 @@ ash = "0.37.2"
 ash-window = "0.12.0"
 bitvec = "1.0.1"
 bytemuck = { version = "1.13.1", features = ["derive"] }
-clap = { version = "4.2.2", features = ["derive"] }
+clap = { version = "4.2.4", features = ["derive"] }
 easer = "0.3.0"
 env_logger = "0.10.0"
 hw-skymodel = "0.1.1"
@@ -30,7 +30,7 @@ log = "0.4.17"
 nalgebra = { version = "0.32.2", features = ["bytemuck"] }
 num = "0.4.0"
 num-format = "0.4.4"
-palette = { version = "0.7.0", features = ["bytemuck"] }
+palette = { version = "0.7.1", features = ["bytemuck"] }
 plotters = { version = "0.3.4", default-features = false, features = [
     "line_series",
     "svg_backend",
