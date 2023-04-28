@@ -1,0 +1,38 @@
+[
+    (
+        name: "sheen",
+        material_mappings: [
+            ("cloth", Specular, Constant(Scalar(1.0))),
+            ("cloth", Sheen, Keyframes([
+                (0.0, Scalar(0.0), CubicInOut),
+                (2.0, Scalar(1.0), CubicInOut),
+            ])),
+            ("cloth", SheenTint, Constant(Scalar(0.0))),
+        ],
+        sky_elevation_deg: Constant(45.0),
+        sky_azimuth_deg: Constant(0.0),
+        sky_turbidity: Constant(3.0),
+        sky_albedo: Constant((1.0, 1.0, 1.0)),
+        text_annotations: [
+            Material("cloth")
+        ],
+    ),
+    (
+        name: "sheen_tint",
+        material_mappings: [
+            ("cloth", Specular, Constant(Scalar(1.0))),
+            ("cloth", Sheen, Constant(Scalar(1.0))),
+            ("cloth", SheenTint, Keyframes([
+                (0.0, Scalar(0.0), CubicInOut),
+                (2.0, Scalar(1.0), CubicInOut),
+            ]))
+        ],
+        sky_elevation_deg: Constant(45.0),
+        sky_azimuth_deg: Constant(0.0),
+        sky_turbidity: Constant(3.0),
+        sky_albedo: Constant((1.0, 1.0, 1.0)),
+        text_annotations: [
+            Material("cloth")
+        ],
+    ),
+]

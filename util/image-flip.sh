@@ -1,7 +1,7 @@
 set -x
 
 blog_path="docs/blog"
-blog_post_media="${blog_path}/media/new-skylight-model"
+blog_post_media="${blog_path}/posts/20230219-180330-adding-sheen"
 
 image_annotate() {
     local font="${blog_path}/fonts/SourceSansPro-SemiBold.ttf"
@@ -94,4 +94,5 @@ image_exposure() {
 
 # image_flip "Linear" "Tonemapped" 20230207-214316.png 20230207-214324-tone.png tonemap-compare-dim.apng
 # image_flip "Linear" "Tonemapped" 20230207-214412.png 20230207-214419-tone.png tonemap-compare-bright.apng
-image_exposure "exposure.apng"
+# image_exposure "exposure.apng"
+image_flip "sheen=0" "sheen=1" image-sheen-0.png image-sheen-1.png sheen.gif
