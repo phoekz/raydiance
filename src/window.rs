@@ -56,7 +56,7 @@ pub fn create(params: &Params) -> Result<(EventLoop<()>, Window)> {
         .with_title(params.title)
         .with_inner_size::<PhysicalSize<_>>(params.size.into())
         .with_min_inner_size::<PhysicalSize<_>>(params.min_size.into())
-        .with_always_on_top(true)
+        .with_always_on_top(false)
         .with_resizable(true)
         .with_decorations(params.decorations)
         .build(&event_loop)

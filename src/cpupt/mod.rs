@@ -478,6 +478,9 @@ fn radiance(
         let specular = rds::dynamic_sample(rds_scene, dyn_scene, material.specular, tex_coord).r();
         let specular_tint =
             rds::dynamic_sample(rds_scene, dyn_scene, material.specular_tint, tex_coord).r();
+        let sheen = rds::dynamic_sample(rds_scene, dyn_scene, material.sheen, tex_coord).r();
+        let sheen_tint =
+            rds::dynamic_sample(rds_scene, dyn_scene, material.sheen_tint, tex_coord).r();
         let anisotropic = 0.0;
 
         // Orthonormal basis.
@@ -506,7 +509,7 @@ fn radiance(
                     base_color,
                     roughness,
                 });
-                let specular_brdf = bxdfs::CookTorrance::new(&bxdfs::CookTorranceParams {
+                let specular_brdf = bxdfs::DisneySpecular::new(&bxdfs::DisneySpecularParams {
                     base_color,
                     metallic,
                     specular,
@@ -514,19 +517,49 @@ fn radiance(
                     roughness,
                     anisotropic,
                 });
+                let sheen_brdf = bxdfs::DisneySheen::new(&bxdfs::DisneySheenParams {
+                    hemisphere,
+                    base_color,
+                    sheen,
+                    sheen_tint,
+                });
+
+                // Weights.
                 let diffuse_weight = (1.0 - metallic) * (1.0 - specular);
+
+                // Select which BRDF to sample from.
                 let maybe_sample = if uniform.sample() < diffuse_weight {
                     diffuse_brdf.sample(&wo_local, (uniform.sample(), uniform.sample()))
                 } else {
                     specular_brdf.sample(&wo_local, (uniform.sample(), uniform.sample()))
                 };
-                match maybe_sample {
-                    Some(s) => s,
-                    None => break,
+
+                // Check if the sampled path had zero probability of happening,
+                // which means zero contribution. In that case we must terminate
+                // the path.
+                let Some(sample) = maybe_sample else { break };
+
+                // Sample reflectance and PDFs from all BRDFs.
+                let wi_local = sample.wi;
+                let diffuse_r = diffuse_brdf.eval(&wo_local, &wi_local);
+                let specular_r = specular_brdf.eval(&wo_local, &wi_local);
+                let sheen_r = sheen_brdf.eval(&wo_local, &wi_local);
+                let diffuse_pdf = diffuse_brdf.pdf(&wo_local, &wi_local);
+                let specular_pdf = specular_brdf.pdf(&wo_local, &wi_local);
+                let sheen_pdf = sheen_brdf.pdf(&wo_local, &wi_local);
+
+                // Weight according to Disney model.
+                let r = diffuse_r + sheen_r + specular_r;
+                let pdf = diffuse_pdf + sheen_pdf + specular_pdf;
+
+                bxdfs::Sample {
+                    wi: wi_local,
+                    r,
+                    pdf,
                 }
             }
         };
-        let wi_world = bxdf_sample.wi().world_from_local(onb.world_from_local());
+        let wi_world = bxdf_sample.wi.world_from_local(onb.world_from_local());
 
         // Prepare next direction, adjust closest hit to avoid spawning the next
         // ray inside the surface.
@@ -542,7 +575,7 @@ fn radiance(
                 0.5 * (normal.z + 1.0) * cos_theta,
             );
         } else {
-            throughput *= bxdf_sample.r() * cos_theta / bxdf_sample.pdf();
+            throughput *= bxdf_sample.r * cos_theta / bxdf_sample.pdf;
         }
 
         // Report invalid values.

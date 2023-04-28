@@ -46,6 +46,8 @@ pub enum MaterialField {
     Roughness,
     Specular,
     SpecularTint,
+    Sheen,
+    SheenTint,
 }
 
 #[derive(Clone, Debug)]
@@ -57,6 +59,8 @@ pub struct Material {
     pub roughness: u32,
     pub specular: u32,
     pub specular_tint: u32,
+    pub sheen: u32,
+    pub sheen_tint: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -90,6 +94,8 @@ pub struct DynamicMaterial {
     pub roughness: u32,
     pub specular: u32,
     pub specular_tint: u32,
+    pub sheen: u32,
+    pub sheen_tint: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -175,23 +181,34 @@ impl Scene {
                 let roughness = &textures[material.roughness as usize];
                 let specular = &textures[material.specular as usize];
                 let specular_tint = &textures[material.specular_tint as usize];
+                let sheen = &textures[material.sheen as usize];
+                let sheen_tint = &textures[material.sheen_tint as usize];
                 let base_color = base_color.sample(Point2::new(0.5, 0.5));
                 let metallic = metallic.sample(Point2::new(0.5, 0.5)).r();
                 let roughness = roughness.sample(Point2::new(0.5, 0.5)).r();
                 let specular = specular.sample(Point2::new(0.5, 0.5)).r();
                 let specular_tint = specular_tint.sample(Point2::new(0.5, 0.5)).r();
-                info!("  {}:", material.name);
-                info!(
-                    "    base_color=({}, {:.03})",
-                    material.base_color, base_color
-                );
-                info!("    metallic=({}, {:.03})", material.metallic, metallic);
-                info!("    roughness=({}, {:.03})", material.roughness, roughness);
-                info!("    specular=({}, {:.03})", material.specular, specular);
-                info!(
-                    "    specular_tint=({}, {:.03})",
-                    material.specular_tint, specular_tint
-                );
+                let sheen = sheen.sample(Point2::new(0.5, 0.5)).r();
+                let sheen_tint = sheen_tint.sample(Point2::new(0.5, 0.5)).r();
+                {
+                    macro_rules! print_param {
+                        ($mat:ident, $param:ident) => {
+                            info!(
+                                concat!("    ", stringify!($param), "=({}, {:.03})"),
+                                $mat.$param, $param
+                            )
+                        };
+                    }
+
+                    info!("  {}:", material.name);
+                    print_param!(material, base_color);
+                    print_param!(material, metallic);
+                    print_param!(material, roughness);
+                    print_param!(material, specular);
+                    print_param!(material, specular_tint);
+                    print_param!(material, sheen);
+                    print_param!(material, sheen_tint);
+                }
             }
             info!("Scene contains {} textures", textures.len());
         }
@@ -221,6 +238,8 @@ impl Scene {
                     roughness: material.roughness,
                     specular: material.specular,
                     specular_tint: material.specular_tint,
+                    sheen: material.sheen,
+                    sheen_tint: material.sheen_tint,
                 })
                 .collect();
             let textures = textures
@@ -426,6 +445,18 @@ fn import_gltf_material(
         (specular_index, specular_tint_index)
     };
 
+    // Sheen & sheen tint.
+    let (sheen, sheen_tint) = {
+        // Todo: Check if Blender can export both sheen and sheen tint.
+        let sheen = Texture::Scalar(0.0);
+        let sheen_tint = Texture::Scalar(0.5);
+        let sheen_index = textures.len() as u32;
+        let sheen_tint_index = textures.len() as u32 + 1;
+        textures.push(sheen);
+        textures.push(sheen_tint);
+        (sheen_index, sheen_tint_index)
+    };
+
     // Append.
     let material_index = materials.len() as u32;
     materials.push(Material {
@@ -436,6 +467,8 @@ fn import_gltf_material(
         roughness,
         specular,
         specular_tint,
+        sheen,
+        sheen_tint,
     });
 
     Ok(material_index)
@@ -585,6 +618,8 @@ impl DynamicMaterial {
             MaterialField::Roughness => self.roughness,
             MaterialField::Specular => self.specular,
             MaterialField::SpecularTint => self.specular_tint,
+            MaterialField::Sheen => self.sheen,
+            MaterialField::SheenTint => self.sheen_tint,
         }
     }
 }

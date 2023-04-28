@@ -7,6 +7,9 @@ use super::*;
 #[derive(clap::Args)]
 pub struct Args {
     #[arg(long)]
+    glb_scene: PathBuf,
+
+    #[arg(long)]
     render_job_name: String,
 
     #[arg(long)]
@@ -72,8 +75,13 @@ pub fn run(args: Args) -> Result<()> {
     let mut page = vz::page::Builder::new(&args.render_job_name);
     for scene_config in scene_configs {
         let name = scene_config.name.clone();
-        let image = render(&args.render_job_name, &render_config, scene_config)?;
-        page.push_card(name, image);
+        let image = render(
+            &args.glb_scene,
+            &args.render_job_name,
+            &render_config,
+            scene_config,
+        )?;
+        page.push_card("render", name, image);
     }
 
     // Render page.
@@ -92,6 +100,7 @@ pub fn run(args: Args) -> Result<()> {
 }
 
 fn render(
+    glb_scene: &Path,
     render_job_name: &str,
     render_config: &RenderConfig,
     scene_config: SceneConfig,
@@ -118,8 +127,10 @@ fn render(
     let text_annotations = scene_config.text_annotations;
 
     // Init rds scene.
-    let (rds_scene, mut dyn_scene) =
-        rds::Scene::create(include_bytes!("../assets/rounded_cube.glb"))?;
+    let (rds_scene, mut dyn_scene) = rds::Scene::create(
+        &std::fs::read(glb_scene)
+            .with_context(|| format!("Reading glb scene: {}", glb_scene.display()))?,
+    )?;
 
     // Init materials.
     let material_mappings = material_mappings
@@ -238,12 +249,22 @@ fn render(
                     let roughness = dyn_scene.textures[material.roughness as usize];
                     let specular = dyn_scene.textures[material.specular as usize];
                     let specular_tint = dyn_scene.textures[material.specular_tint as usize];
+                    let sheen = dyn_scene.textures[material.sheen as usize];
+                    let sheen_tint = dyn_scene.textures[material.sheen_tint as usize];
                     text = text.line([("material", name.as_str())]);
                     text = text.line([("    base_color", &format!("{base_color:.02}"))]);
-                    text = text.line([("    metallic", &format!("{metallic:.02}"))]);
-                    text = text.line([("    roughness", &format!("{roughness:.02}"))]);
-                    text = text.line([("    specular", &format!("{specular:.02}"))]);
-                    text = text.line([("    specular_tint", &format!("{specular_tint:.02}"))]);
+                    text = text.line([
+                        ("    metallic", &format!("{metallic:.02}")),
+                        ("roughness", &format!("{roughness:.02}")),
+                    ]);
+                    text = text.line([
+                        ("    specular", &format!("{specular:.02}")),
+                        ("specular_tint", &format!("{specular_tint:.02}")),
+                    ]);
+                    text = text.line([
+                        ("    sheen", &format!("{sheen:.02}")),
+                        ("sheen_tint", &format!("{sheen_tint:.02}")),
+                    ]);
                 }
 
                 // Annotate sky parameters.

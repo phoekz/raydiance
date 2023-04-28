@@ -5,6 +5,7 @@ mod plot;
 const DEFAULT_SAMPLE_COUNT: u32 = 256;
 const DEFAULT_SAMPLE_GRID_WIDTH: u32 = 16; // Must be sqrt(DEFAULT_SAMPLE_COUNT).
 const DEFAULT_BASE_COLOR: ColorRgb = ColorRgb::WHITE;
+const DEFAULT_ALT_BASE_COLOR: ColorRgb = ColorRgb::new(0.0, 0.42118, 1.0);
 
 const ANIMATION_DELAY_DEN: u16 = 20;
 const ANIMATION_DELAY_NUM: u16 = 1;
@@ -35,14 +36,6 @@ enum SampleSequence {
 }
 
 impl SampleSequence {
-    fn name(&self) -> &'static str {
-        match self {
-            Self::Grid(_) => "grid",
-            Self::Random(_) => "random",
-            Self::Sobol => "sobol",
-        }
-    }
-
     fn sample(&mut self, sample_index: u32) -> (f32, f32) {
         match self {
             Self::Grid(size) => {
@@ -62,6 +55,20 @@ impl SampleSequence {
     }
 }
 
+impl std::fmt::Display for SampleSequence {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Grid(_) => "grid",
+                Self::Random(_) => "random",
+                Self::Sobol => "sobol",
+            }
+        )
+    }
+}
+
 //
 // BRDF
 //
@@ -75,12 +82,16 @@ enum BrdfComponent {
     Pdf, // Probability density function
 }
 
-impl BrdfComponent {
-    fn name(self) -> &'static str {
-        match self {
-            Self::R => "r",
-            Self::Pdf => "pdf",
-        }
+impl std::fmt::Display for BrdfComponent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                BrdfComponent::R => "r",
+                BrdfComponent::Pdf => "pdf",
+            }
+        )
     }
 }
 
@@ -90,6 +101,7 @@ impl BrdfComponent {
 
 fn brdf_visualizations() -> Result<()> {
     struct Task {
+        group: &'static str,
         name: &'static str,
         model: bxdfs::Model,
         comp: BrdfComponent,
@@ -97,20 +109,34 @@ fn brdf_visualizations() -> Result<()> {
         flags: u32,
         incoming: vz::cfg::Value<f32>,
         roughness: vz::cfg::Value<f32>,
+        base_color: vz::cfg::Value<ColorRgb>,
         anisotropic: vz::cfg::Value<f32>,
+        metallic: vz::cfg::Value<f32>,
+        specular: vz::cfg::Value<f32>,
+        specular_tint: vz::cfg::Value<f32>,
+        sheen: vz::cfg::Value<f32>,
+        sheen_tint: vz::cfg::Value<f32>,
     }
 
     impl Default for Task {
         fn default() -> Self {
+            use vz::cfg::Value::Constant;
             Self {
+                group: "default",
                 name: "default",
                 model: bxdfs::Model::Lambertian,
                 comp: BrdfComponent::R,
                 seq: SampleSequence::Sobol,
                 flags: 0,
-                incoming: vz::cfg::Value::Constant(0.25),
-                roughness: vz::cfg::Value::Constant(0.25),
-                anisotropic: vz::cfg::Value::Constant(0.0),
+                incoming: Constant(0.25),
+                base_color: Constant(DEFAULT_BASE_COLOR),
+                roughness: Constant(0.25),
+                anisotropic: Constant(0.0),
+                metallic: Constant(0.0),
+                specular: Constant(0.5),
+                specular_tint: Constant(1.0),
+                sheen: Constant(0.0),
+                sheen_tint: Constant(1.0),
             }
         }
     }
@@ -127,102 +153,183 @@ fn brdf_visualizations() -> Result<()> {
     let seq_sobol = SampleSequence::Sobol;
 
     // Task definitions.
-    #[allow(clippy::redundant_clone)]
     let tasks = {
-        use bxdfs::Model::{CookTorrance, DisneyDiffuse, Lambertian};
+        use bxdfs::Model::{DisneyDiffuse, DisneySheen, DisneySpecular, Lambertian};
+        use vz::cfg::Value::{Constant, Keyframes};
         use BrdfComponent::{Pdf, R};
 
         macro_rules! hemisphere {
             ($name: expr, $flag: expr) => {
-                Task {
-                    name: concat!("hemisphere-", $name),
+                vec![Task {
+                    group: "hemisphere",
+                    name: $name,
                     seq: seq_grid.clone(),
                     flags: $flag,
                     ..Task::default()
-                }
+                }]
             };
         }
         macro_rules! sequences {
             ($name: expr, $seq: expr) => {
-                Task {
-                    name: concat!("sequences-", $name),
+                vec![Task {
+                    group: "sequences",
+                    name: $name,
                     seq: $seq.clone(),
                     ..Task::default()
-                }
+                }]
             };
         }
         macro_rules! lambertian {
-            ($name: expr, $comp: ident, $key: ident, $value: expr) => {
-                Task {
-                    name: concat!("lambertian-", $name),
-                    model: Lambertian,
-                    comp: $comp,
-                    seq: seq_sobol.clone(),
-                    $key: $value,
-                    ..Task::default()
-                }
+            ($name: expr, $key: ident, $value: expr) => {
+                vec![
+                    Task {
+                        group: "lambertian",
+                        name: concat!($name, "-", "r"),
+                        model: Lambertian,
+                        comp: R,
+                        seq: seq_sobol.clone(),
+                        $key: $value.clone(),
+                        ..Task::default()
+                    },
+                    Task {
+                        group: "lambertian",
+                        name: concat!($name, "-", "pdf"),
+                        model: Lambertian,
+                        comp: Pdf,
+                        seq: seq_sobol.clone(),
+                        $key: $value.clone(),
+                        ..Task::default()
+                    },
+                ]
             };
         }
         macro_rules! disney_diffuse {
-            ($name: expr, $comp: ident, $key: ident, $value: expr) => {
-                Task {
-                    name: concat!("disneydiffuse-", $name),
-                    model: DisneyDiffuse,
-                    comp: $comp,
-                    seq: seq_sobol.clone(),
-                    $key: $value,
-                    ..Task::default()
-                }
+            ($name: expr, $key: ident, $value: expr) => {
+                vec![
+                    Task {
+                        group: "disney-diffuse",
+                        name: concat!($name, "-", "r"),
+                        model: DisneyDiffuse,
+                        comp: R,
+                        seq: seq_sobol.clone(),
+                        $key: $value.clone(),
+                        ..Task::default()
+                    },
+                    Task {
+                        group: "disney-diffuse",
+                        name: concat!($name, "-", "pdf"),
+                        model: DisneyDiffuse,
+                        comp: Pdf,
+                        seq: seq_sobol.clone(),
+                        $key: $value.clone(),
+                        ..Task::default()
+                    },
+                ]
             };
         }
-        macro_rules! cook_torrance {
-            ($name: expr, $comp: ident, $key: ident, $value: expr) => {
-                Task {
-                    name: concat!("cooktorrance-", $name),
-                    model: CookTorrance,
-                    comp: $comp,
-                    seq: seq_sobol.clone(),
-                    $key: $value,
-                    ..Task::default()
-                }
+        macro_rules! disney_specular {
+            ($name: expr, $key: ident, $value: expr) => {
+                vec![
+                    Task {
+                        group: "disney-specular",
+                        name: concat!($name, "-", "r"),
+                        model: DisneySpecular,
+                        comp: R,
+                        seq: seq_sobol.clone(),
+                        $key: $value.clone(),
+                        ..Task::default()
+                    },
+                    Task {
+                        group: "disney-specular",
+                        name: concat!($name, "-", "pdf"),
+                        model: DisneySpecular,
+                        comp: Pdf,
+                        seq: seq_sobol.clone(),
+                        $key: $value.clone(),
+                        ..Task::default()
+                    },
+                ]
+            };
+        }
+        macro_rules! disney_sheen {
+            ($name: expr, $key: ident, $value: expr) => {
+                vec![
+                    Task {
+                        group: "disney-sheen",
+                        name: concat!($name, "-", "r"),
+                        model: DisneySheen,
+                        comp: R,
+                        seq: seq_sobol.clone(),
+                        $key: $value.clone(),
+                        base_color: Constant(DEFAULT_ALT_BASE_COLOR),
+                        sheen: Constant(1.0),
+                        ..Task::default()
+                    },
+                    Task {
+                        group: "disney-sheen",
+                        name: concat!($name, "-", "pdf"),
+                        model: DisneySheen,
+                        comp: Pdf,
+                        seq: seq_sobol.clone(),
+                        $key: $value.clone(),
+                        base_color: Constant(DEFAULT_ALT_BASE_COLOR),
+                        sheen: Constant(1.0),
+                        ..Task::default()
+                    },
+                ]
             };
         }
 
-        let unit = vz::cfg::Value::Keyframes(vec![
+        let unit = Keyframes(vec![
             vz::cfg::keyframe!(0.0, 0.0, CubicInOut),
             vz::cfg::keyframe!(1.0, 1.0, CubicInOut),
         ]);
 
-        [
+        let unit_color = Keyframes(vec![
+            vz::cfg::keyframe!(0.0, DEFAULT_BASE_COLOR, CubicInOut),
+            vz::cfg::keyframe!(1.0, DEFAULT_ALT_BASE_COLOR, CubicInOut),
+        ]);
+
+        vec![
             hemisphere!("uniform", FLAG_UNIFORM),
             hemisphere!("cosine", FLAG_COSINE),
             sequences!("grid", seq_grid),
             sequences!("rand", seq_rand),
             sequences!("sobol", seq_sobol),
-            lambertian!("roughness-r", R, roughness, unit.clone()),
-            lambertian!("roughness-pdf", Pdf, roughness, unit.clone()),
-            lambertian!("incoming-r", R, incoming, unit.clone()),
-            lambertian!("incoming-pdf", Pdf, incoming, unit.clone()),
-            disney_diffuse!("roughness-r", R, roughness, unit.clone()),
-            disney_diffuse!("roughness-pdf", Pdf, roughness, unit.clone()),
-            disney_diffuse!("incoming-r", R, incoming, unit.clone()),
-            disney_diffuse!("incoming-pdf", Pdf, incoming, unit.clone()),
-            cook_torrance!("roughness-r", R, roughness, unit.clone()),
-            cook_torrance!("roughness-pdf", Pdf, roughness, unit.clone()),
-            cook_torrance!("incoming-r", R, incoming, unit.clone()),
-            cook_torrance!("incoming-pdf", Pdf, incoming, unit.clone()),
-            cook_torrance!("anisotropic-r", R, anisotropic, unit.clone()),
-            cook_torrance!("anisotropic-pdf", Pdf, anisotropic, unit.clone()),
+            lambertian!("incoming", incoming, unit),
+            lambertian!("base_color", base_color, unit_color),
+            lambertian!("roughness", roughness, unit),
+            disney_diffuse!("incoming", incoming, unit),
+            disney_diffuse!("base_color", base_color, unit_color),
+            disney_diffuse!("roughness", roughness, unit),
+            disney_specular!("incoming", incoming, unit),
+            disney_specular!("base_color", base_color, unit_color),
+            disney_specular!("roughness", roughness, unit),
+            disney_specular!("metallic", metallic, unit),
+            disney_specular!("specular", specular, unit),
+            disney_specular!("specular_tint", specular_tint, unit),
+            disney_specular!("anisotropic", anisotropic, unit),
+            disney_sheen!("incoming", incoming, unit),
+            disney_sheen!("sheen_tint", sheen_tint, unit),
         ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
     };
 
     // Execute tasks.
     let results = tasks
         .into_par_iter()
         .map(|task| {
+            let base_color: vz::anim::Value<_> = task.base_color.into();
             let incoming: vz::anim::Value<_> = task.incoming.into();
             let roughness: vz::anim::Value<_> = task.roughness.into();
             let anisotropic: vz::anim::Value<_> = task.anisotropic.into();
+            let metallic: vz::anim::Value<_> = task.metallic.into();
+            let specular: vz::anim::Value<_> = task.specular.into();
+            let specular_tint: vz::anim::Value<_> = task.specular_tint.into();
+            let sheen: vz::anim::Value<_> = task.sheen.into();
+            let sheen_tint: vz::anim::Value<_> = task.sheen_tint.into();
 
             let mut frames = vec![];
             for frame_index in 0..ANIMATION_FRAME_COUNT {
@@ -230,9 +337,15 @@ fn brdf_visualizations() -> Result<()> {
                 let time = (frame_index as f32 + 0.5) / ANIMATION_FRAME_COUNT as f32;
 
                 // Tween.
+                let base_color = base_color.value(time);
                 let incoming = incoming.value(time);
                 let roughness = roughness.value(time);
                 let anisotropic = anisotropic.value(time);
+                let metallic = metallic.value(time);
+                let specular = specular.value(time);
+                let specular_tint = specular_tint.value(time);
+                let sheen = sheen.value(time);
+                let sheen_tint = sheen_tint.value(time);
 
                 // Incoming vector.
                 let incoming_angle_theta = incoming * PI;
@@ -257,24 +370,32 @@ fn brdf_visualizations() -> Result<()> {
                     bxdfs::Model::Lambertian => {
                         Box::new(bxdfs::Lambertian::new(&bxdfs::LambertianParams {
                             hemisphere,
-                            base_color: DEFAULT_BASE_COLOR,
+                            base_color,
                         }))
                     }
                     bxdfs::Model::DisneyDiffuse => {
                         Box::new(bxdfs::DisneyDiffuse::new(&bxdfs::DisneyDiffuseParams {
                             hemisphere,
-                            base_color: DEFAULT_BASE_COLOR,
+                            base_color,
                             roughness,
                         }))
                     }
-                    bxdfs::Model::CookTorrance => {
-                        Box::new(bxdfs::CookTorrance::new(&bxdfs::CookTorranceParams {
-                            base_color: DEFAULT_BASE_COLOR,
-                            metallic: 1.0,
-                            specular: 0.5,
-                            specular_tint: 0.0,
+                    bxdfs::Model::DisneySpecular => {
+                        Box::new(bxdfs::DisneySpecular::new(&bxdfs::DisneySpecularParams {
+                            base_color,
+                            metallic,
+                            specular,
+                            specular_tint,
                             roughness,
                             anisotropic,
+                        }))
+                    }
+                    bxdfs::Model::DisneySheen => {
+                        Box::new(bxdfs::DisneySheen::new(&bxdfs::DisneySheenParams {
+                            hemisphere,
+                            base_color,
+                            sheen,
+                            sheen_tint,
                         }))
                     }
                 };
@@ -296,7 +417,7 @@ fn brdf_visualizations() -> Result<()> {
                     let vector = match brdf.sample(&incoming, uniform) {
                         Some(sample) => {
                             inside_hemisphere += 1;
-                            sample.wi()
+                            sample.wi
                         }
                         None => bxdfs::LocalVector(Y_AXIS),
                     };
@@ -307,11 +428,11 @@ fn brdf_visualizations() -> Result<()> {
 
                 // Annotate.
                 let text_box = vz::annotation::TextBox::new()
-                    .line([("name", task.name)])
+                    .line([("group", task.group), ("name", task.name)])
                     .line([
-                        ("model", task.model.name()),
-                        ("comp", task.comp.name()),
-                        ("seq", task.seq.name()),
+                        ("model", format!("{}", task.model)),
+                        ("comp", format!("{}", task.comp)),
+                        ("seq", format!("{}", task.seq)),
                     ])
                     .line([
                         ("roughness", format!("{roughness:.02}")),
@@ -342,8 +463,9 @@ fn brdf_visualizations() -> Result<()> {
             let frames = vz::apng::create_boomerang(frames);
 
             // Render animation.
+            let task_group = task.group.to_string();
             let task_name = task.name.to_string();
-            let file_name = format!("brdf-{task_name}.apng");
+            let file_name = format!("brdf-{task_group}-{task_name}.apng");
             let path = work_dir.join(&file_name);
             let anim_params = vz::apng::Params {
                 delay_num: ANIMATION_DELAY_NUM,
@@ -351,7 +473,7 @@ fn brdf_visualizations() -> Result<()> {
             };
             vz::apng::render(&anim_params, path, frames)?;
 
-            Ok::<_, anyhow::Error>((task_name, file_name))
+            Ok::<_, anyhow::Error>((task_group, task_name, file_name))
         })
         .collect::<Vec<_>>();
 
@@ -360,8 +482,8 @@ fn brdf_visualizations() -> Result<()> {
         use std::io::Write;
         let mut page = vz::page::Builder::new("brdf");
         for result in results {
-            let (task_name, file_name) = result?;
-            page.push_card(task_name, file_name);
+            let (task_group, task_name, file_name) = result?;
+            page.push_card(task_group, task_name, file_name);
         }
         let file_name = "brdf.html";
         let path = work_dir.join(file_name);
@@ -533,7 +655,7 @@ fn sky_model_visualizations() -> Result<()> {
         let mut page = vz::page::Builder::new("sky");
         for result in results {
             let (task_name, file_name) = result?;
-            page.push_card(task_name, file_name);
+            page.push_card("sky", task_name, file_name);
         }
         let file_name = "sky.html";
         let path = work_dir.join(file_name);

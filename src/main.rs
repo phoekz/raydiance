@@ -155,19 +155,13 @@ struct CliArgs {
 
 #[derive(clap::Subcommand)]
 enum Commands {
-    Editor,
+    Editor(editor::Args),
     Offline(offline::Args),
     Debug,
     BlogNew(blog::NewArgs),
     BlogBuild,
     BlogPlot,
     Ffmpeg(vz::ffmpeg::Args),
-}
-
-impl Default for Commands {
-    fn default() -> Self {
-        Self::Editor
-    }
 }
 
 fn main() -> Result<()> {
@@ -178,7 +172,7 @@ fn main() -> Result<()> {
 
     // Execute command.
     match CliArgs::parse().command {
-        Commands::Editor => editor(),
+        Commands::Editor(args) => editor(args),
         Commands::Offline(args) => offline::run(args),
         Commands::Debug => debug::run(),
         Commands::BlogNew(args) => blog::new(args),
@@ -192,7 +186,19 @@ fn main() -> Result<()> {
 // Editor
 //
 
-fn editor() -> Result<()> {
+// Todo: refactor editor into its own module.
+
+mod editor {
+    use super::*;
+
+    #[derive(clap::Args)]
+    pub struct Args {
+        #[arg(long)]
+        pub glb_scene: PathBuf,
+    }
+}
+
+fn editor(args: editor::Args) -> Result<()> {
     // Init winit.
     let window_title = env!("CARGO_PKG_NAME");
     let window_aspect = (16, 9);
@@ -214,7 +220,10 @@ fn editor() -> Result<()> {
     let mut gui = gui::Gui::create(&window);
 
     // Init rds scene.
-    let (rds_scene, mut dyn_scene) = rds::Scene::create(include_bytes!("assets/rounded_cube.glb"))?;
+    let (rds_scene, mut dyn_scene) = rds::Scene::create(
+        &std::fs::read(&args.glb_scene)
+            .with_context(|| format!("Reading glb scene: {}", args.glb_scene.display()))?,
+    )?;
 
     // Init cpupt.
     let raytracer = cpupt::Raytracer::create(
@@ -585,6 +594,80 @@ fn editor() -> Result<()> {
                                         let name = "Specular Tint";
                                         let _id = ui.push_id(name);
                                         let index = material.specular_tint as usize;
+                                        let mut texture = &mut dyn_scene.textures[index];
+                                        let mut bit = dyn_scene.replaced_textures[index];
+
+                                        ui.text(name);
+                                        ui.table_next_column();
+
+                                        if let rds::DynamicTexture::Scalar(ref mut value) =
+                                            &mut texture
+                                        {
+                                            if imgui::Drag::new("##slider")
+                                                .range(0.0, 1.0)
+                                                .speed(0.01)
+                                                .build(ui, value)
+                                            {
+                                                // Convenience: replace texture when an edit has been made without extra interaction.
+                                                dyn_scene.replaced_textures.set(index, true);
+                                            }
+                                        }
+                                        ui.table_next_column();
+
+                                        {
+                                            if ui.checkbox("##use", &mut bit) {
+                                                dyn_scene.replaced_textures.set(index, bit);
+                                            }
+                                            ui.same_line();
+                                            if ui.button("X") {
+                                                // Convenience: reset to default value and clear replacement with one click.
+                                                *texture = dyn_scene.default_textures[index];
+                                                dyn_scene.replaced_textures.set(index, false);
+                                            }
+                                        }
+                                        ui.table_next_column();
+                                    }
+                                    {
+                                        let name = "Sheen";
+                                        let _id = ui.push_id(name);
+                                        let index = material.sheen as usize;
+                                        let mut texture = &mut dyn_scene.textures[index];
+                                        let mut bit = dyn_scene.replaced_textures[index];
+
+                                        ui.text(name);
+                                        ui.table_next_column();
+
+                                        if let rds::DynamicTexture::Scalar(ref mut value) =
+                                            &mut texture
+                                        {
+                                            if imgui::Drag::new("##slider")
+                                                .range(0.0, 1.0)
+                                                .speed(0.01)
+                                                .build(ui, value)
+                                            {
+                                                // Convenience: replace texture when an edit has been made without extra interaction.
+                                                dyn_scene.replaced_textures.set(index, true);
+                                            }
+                                        }
+                                        ui.table_next_column();
+
+                                        {
+                                            if ui.checkbox("##use", &mut bit) {
+                                                dyn_scene.replaced_textures.set(index, bit);
+                                            }
+                                            ui.same_line();
+                                            if ui.button("X") {
+                                                // Convenience: reset to default value and clear replacement with one click.
+                                                *texture = dyn_scene.default_textures[index];
+                                                dyn_scene.replaced_textures.set(index, false);
+                                            }
+                                        }
+                                        ui.table_next_column();
+                                    }
+                                    {
+                                        let name = "Sheen Tint";
+                                        let _id = ui.push_id(name);
+                                        let index = material.sheen_tint as usize;
                                         let mut texture = &mut dyn_scene.textures[index];
                                         let mut bit = dyn_scene.replaced_textures[index];
 

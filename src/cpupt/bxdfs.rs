@@ -158,31 +158,14 @@ impl std::fmt::Display for LocalVector {
 
 #[derive(Clone, Copy, Debug)]
 pub struct Sample {
-    r: Reflectance,
-    wi: LocalVector,
-    pdf: Pdf,
-}
-
-impl Sample {
-    #[inline]
-    pub fn r(self) -> Reflectance {
-        self.r
-    }
-
-    #[inline]
-    pub fn wi(self) -> LocalVector {
-        self.wi
-    }
-
-    #[inline]
-    pub fn pdf(self) -> Pdf {
-        self.pdf
-    }
+    pub wi: LocalVector,
+    pub r: Reflectance,
+    pub pdf: Pdf,
 }
 
 impl std::fmt::Display for Sample {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "r={}, wi={}, pdf={}", self.r, self.wi, self.pdf)
+        write!(f, "wi={}, r={}, pdf={}", self.wi, self.r, self.pdf)
     }
 }
 
@@ -194,22 +177,22 @@ impl std::fmt::Display for Sample {
 pub enum Model {
     Lambertian,
     DisneyDiffuse,
-    CookTorrance,
-}
-
-impl Model {
-    pub fn name(self) -> &'static str {
-        match self {
-            Self::Lambertian => "lambertian",
-            Self::DisneyDiffuse => "disney-diffuse",
-            Self::CookTorrance => "cook-torrance",
-        }
-    }
+    DisneySpecular,
+    DisneySheen,
 }
 
 impl std::fmt::Display for Model {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.name())
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Lambertian => "lambertian",
+                Self::DisneyDiffuse => "disney-diffuse",
+                Self::DisneySpecular => "disney-specular",
+                Self::DisneySheen => "disney-sheen",
+            }
+        )
     }
 }
 
@@ -330,7 +313,7 @@ impl Bxdf for DisneyDiffuse {
     }
 
     fn pdf(&self, _: &Outgoing, wi: &Incoming) -> Pdf {
-        self.hemisphere.pdf(wi.cos_theta())
+        self.hemisphere.pdf(wi.cos_theta().abs())
     }
 
     fn sample(&self, wo: &Outgoing, u: UniformSample2D) -> Option<Sample> {
@@ -349,7 +332,7 @@ impl Bxdf for DisneyDiffuse {
 }
 
 //
-// BxDF - Cook-Torrance
+// BxDF - Disney Specular
 //
 
 //
@@ -365,7 +348,7 @@ impl Bxdf for DisneyDiffuse {
 //
 
 #[derive(Clone, Copy, Debug)]
-pub struct CookTorranceParams {
+pub struct DisneySpecularParams {
     pub base_color: ColorRgb,
     pub metallic: f32,
     pub specular: f32,
@@ -375,14 +358,14 @@ pub struct CookTorranceParams {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct CookTorrance {
+pub struct DisneySpecular {
     specular_color: ColorRgb,
     alpha_x: f32,
     alpha_y: f32,
 }
 
-impl CookTorrance {
-    pub fn new(p: &CookTorranceParams) -> Self {
+impl DisneySpecular {
+    pub fn new(p: &DisneySpecularParams) -> Self {
         assert_range!(p.metallic, 0.0, 1.0);
         assert_range!(p.specular, 0.0, 1.0);
         assert_range!(p.specular_tint, 0.0, 1.0);
@@ -487,9 +470,9 @@ impl CookTorrance {
     }
 }
 
-impl Bxdf for CookTorrance {
+impl Bxdf for DisneySpecular {
     fn model(&self) -> Model {
-        Model::CookTorrance
+        Model::DisneySpecular
     }
 
     fn eval(&self, wo: &Outgoing, wi: &Incoming) -> Reflectance {
@@ -521,6 +504,72 @@ impl Bxdf for CookTorrance {
         if !wo.same_hemisphere(&wi) {
             return None;
         }
+        let pdf = self.pdf(wo, &wi);
+        if pdf > EPSILON {
+            Some(Sample {
+                r: self.eval(wo, &wi),
+                wi,
+                pdf,
+            })
+        } else {
+            None
+        }
+    }
+}
+
+//
+// BxDF - Disney Sheen
+//
+
+#[derive(Clone, Copy, Debug)]
+pub struct DisneySheenParams {
+    pub hemisphere: HemisphereSampler,
+    pub base_color: ColorRgb,
+    pub sheen: f32,
+    pub sheen_tint: f32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct DisneySheen {
+    hemisphere: HemisphereSampler,
+    sheen_color: ColorRgb,
+}
+
+impl DisneySheen {
+    pub fn new(p: &DisneySheenParams) -> Self {
+        // Todo: Shared with DisneySpecular.
+        let luminance = p.base_color.luminance();
+        let tint_color = if luminance > 0.0 {
+            p.base_color / luminance
+        } else {
+            ColorRgb::WHITE
+        };
+
+        Self {
+            sheen_color: p.sheen * lerp_color(&ColorRgb::WHITE, &tint_color, p.sheen_tint),
+            hemisphere: p.hemisphere,
+        }
+    }
+}
+
+impl Bxdf for DisneySheen {
+    fn model(&self) -> Model {
+        Model::DisneySheen
+    }
+
+    fn eval(&self, wo: &Outgoing, wi: &Incoming) -> Reflectance {
+        let wm = wo.microsurface_normal(wi);
+        let dot_im = wi.0.dot(&wm.0);
+        let fresnel = (1.0 - dot_im).clamp(0.0, 1.0).powi(5);
+        self.sheen_color * fresnel
+    }
+
+    fn pdf(&self, _: &Outgoing, wi: &Incoming) -> Pdf {
+        self.hemisphere.pdf(wi.cos_theta().abs())
+    }
+
+    fn sample(&self, wo: &Outgoing, u: UniformSample2D) -> Option<Sample> {
+        let wi = LocalVector(*self.hemisphere.sample(u.0, u.1));
         let pdf = self.pdf(wo, &wi);
         if pdf > EPSILON {
             Some(Sample {
