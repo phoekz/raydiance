@@ -4,8 +4,7 @@ pub struct Font<'a>(rusttype::Font<'a>);
 
 impl Font<'_> {
     pub fn new() -> Result<Self> {
-        let font =
-            Vec::from(include_bytes!("../../docs/blog/fonts/SourceSansPro-Regular.ttf") as &[u8]);
+        let font = Vec::from(include_bytes!("../assets/fonts/SourceSansPro-Regular.ttf") as &[u8]);
         let font =
             rusttype::Font::try_from_vec(font).ok_or_else(|| anyhow!("Failed to load font"))?;
         Ok(Self(font))

@@ -13,7 +13,7 @@ impl Gui {
         imgui.set_ini_filename(None);
         let mut winit = WinitPlatform::init(&mut imgui);
         winit.attach_window(imgui.io_mut(), window, HiDpiMode::Rounded);
-        let font = include_bytes!("../docs/blog/fonts/SourceSansPro-Regular.ttf");
+        let font = include_bytes!("assets/fonts/SourceSansPro-Regular.ttf");
         let font_source = imgui::FontSource::TtfData {
             data: font,
             size_pixels: 14.0,
