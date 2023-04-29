@@ -549,12 +549,12 @@ impl Editor {
                         .build(ui, &mut sky_params.azimuth);
                     ui.slider("Turbidity", 1.0, 10.0, &mut sky_params.turbidity);
                     ui.color_edit3("Albedo", sky_params.albedo.as_mut());
-                    self.exposure.gui(ui);
                 }
 
                 ui.separator();
 
                 // Rendering config.
+                self.exposure.gui(ui);
                 ui.checkbox("Visualize normals", &mut self.visualize_normals);
                 ui.checkbox("Tonemapping", &mut self.tonemapping);
                 ui.text("Hemisphere sampler");
@@ -571,6 +571,8 @@ impl Editor {
 
                     token.end();
                 }
+
+                ui.separator();
 
                 // Image utilities.
                 ui.checkbox("Show raytracing image", &mut self.display_raytracing_image);

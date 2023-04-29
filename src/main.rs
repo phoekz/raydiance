@@ -55,6 +55,7 @@ mod color;
 mod cpupt;
 mod debug;
 mod editor;
+mod exposure;
 mod gltf;
 mod math;
 mod offline;
@@ -65,6 +66,7 @@ mod vz;
 use color::*;
 use cpupt::bxdfs;
 use cpupt::sampling::{HemisphereSampler, UniformSampler};
+use exposure::Exposure;
 use math::*;
 
 const PI: f32 = std::f32::consts::PI;
