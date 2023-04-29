@@ -24,12 +24,6 @@ impl Exposure {
         color * self.exposure
     }
 
-    pub fn gui(&mut self, ui: &imgui::Ui) {
-        if ui.slider("Exposure", 0.0, 16.0, &mut self.stops) {
-            self.exposure = Self::precalculate_exposure(self.stops);
-        }
-    }
-
     fn precalculate_exposure(stops: f32) -> f32 {
         1.0 / 2.0_f32.powf(stops)
     }
@@ -41,6 +35,14 @@ impl std::fmt::Display for Exposure {
             write!(f, "{:.precision$}", self.stops)
         } else {
             write!(f, "{}", self.stops)
+        }
+    }
+}
+
+impl GuiElement for Exposure {
+    fn gui(&mut self, ui: &imgui::Ui) {
+        if ui.slider("Exposure", 0.0, 16.0, &mut self.stops) {
+            self.exposure = Self::precalculate_exposure(self.stops);
         }
     }
 }

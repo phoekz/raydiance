@@ -1,16 +1,28 @@
 use super::*;
 
-pub mod bxdfs;
-pub mod sampling;
-pub mod sky;
+//
+// Modules
+//
 
 mod bvh;
+pub mod bxdfs;
+mod exposure;
 mod intersection;
 mod ray;
+mod sampling;
+mod sky;
 mod triangle;
 
 use ray::*;
 use triangle::*;
+
+//
+// Re-exports
+//
+
+pub(crate) use exposure::Exposure;
+pub(crate) use sampling::{HemisphereSampler, UniformSampler};
+pub(crate) use sky::{SkyParams, SkyState};
 
 pub struct Scene {
     bvh_nodes: Vec<bvh::Node>,
@@ -85,7 +97,7 @@ pub struct Input {
     pub visualize_normals: bool,
     pub tonemapping: bool,
     pub exposure: Exposure,
-    pub sky_params: sky::ext::StateExtParams,
+    pub sky_params: SkyParams,
     pub salt: Option<u64>,
 }
 
@@ -99,7 +111,7 @@ impl Default for Input {
             visualize_normals: false,
             tonemapping: true,
             exposure: Exposure::default(),
-            sky_params: sky::ext::StateExtParams::default(),
+            sky_params: SkyParams::default(),
             salt: None,
         }
     }
@@ -117,11 +129,33 @@ impl Input {
     }
 }
 
+#[derive(Clone, Copy)]
+pub struct SamplingStatus {
+    index: u32,
+    count: u32,
+}
+
+impl SamplingStatus {
+    pub fn new() -> Self {
+        Self { index: 0, count: 0 }
+    }
+}
+
+impl GuiElement for SamplingStatus {
+    fn gui(&mut self, ui: &imgui::Ui) {
+        let style = ui.clone_style();
+        let progress = self.index as f32 / self.count as f32;
+        imgui::ProgressBar::new(progress).size([0.0, 0.0]).build(ui);
+        ui.same_line();
+        ui.same_line_with_spacing(0.0, style.item_inner_spacing[0]);
+        ui.text("Rendering");
+    }
+}
+
 pub struct Output {
     pub image: Vec<ColorRgb>,
     pub image_size: (u32, u32),
-    pub sample_index: u32,
-    pub sample_count: u32,
+    pub sampling_status: SamplingStatus,
 }
 
 pub struct Raytracer {
@@ -154,7 +188,7 @@ impl Raytracer {
             let mut tiles = vec![];
             let mut tile_results = vec![];
             let mut pixel_buffer = Vec::<ColorRgb>::new();
-            let mut sky_state = sky::ext::StateExt::new(&sky::ext::StateExtParams::default())?;
+            let mut sky_state = SkyState::new(&SkyParams::default())?;
 
             loop {
                 // Check for termination command.
@@ -200,7 +234,7 @@ impl Raytracer {
                         camera_position = camera_transform.transform_point(&camera.position());
 
                         // Reset sky.
-                        sky_state = sky::ext::StateExt::new(&input.sky_params)?;
+                        sky_state = SkyState::new(&input.sky_params)?;
 
                         // Reset stats.
                         ray_stats = intersection::RayBvhHitStats::default();
@@ -294,8 +328,10 @@ impl Raytracer {
                     output_send.send(Output {
                         image,
                         image_size,
-                        sample_index,
-                        sample_count: params.samples_per_pixel,
+                        sampling_status: SamplingStatus {
+                            index: sample_index,
+                            count: params.samples_per_pixel,
+                        },
                     })?;
 
                     // Rendering has completed.
@@ -374,7 +410,7 @@ fn tile_radiance(
     rds_scene: &rds::Scene,
     dyn_scene: &rds::DynamicScene,
     materials: &[rds::Material],
-    sky_state: &sky::ext::StateExt,
+    sky_state: &SkyState,
 ) -> ([ColorRgb; pixel_tile_count()], intersection::RayBvhHitStats) {
     let mut tile_radiance: [ColorRgb; pixel_tile_count()] = [ColorRgb::BLACK; pixel_tile_count()];
     let mut tile_pixel_index = 0;
@@ -416,7 +452,7 @@ fn radiance(
     rds_scene: &rds::Scene,
     dyn_scene: &rds::DynamicScene,
     materials: &[rds::Material],
-    sky_state: &sky::ext::StateExt,
+    sky_state: &SkyState,
 ) -> (ColorRgb, intersection::RayBvhHitStats) {
     use bxdfs::Bxdf;
 

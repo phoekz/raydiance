@@ -116,7 +116,7 @@ fn render(
     let frame_delay_num = render_config.frame_delay_num.get();
     let frame_delay_den = render_config.frame_delay_den.get();
     let tonemapping = render_config.tonemapping;
-    let exposure = Exposure::new(render_config.exposure);
+    let exposure = cpupt::Exposure::new(render_config.exposure);
 
     // Unpack scene config.
     let material_mappings = scene_config.material_mappings;
@@ -175,7 +175,7 @@ fn render(
         use indicatif::{ProgressBar, ProgressStyle};
 
         let timer = Instant::now();
-        let hemisphere_sampler = HemisphereSampler::Cosine;
+        let hemisphere_sampler = cpupt::HemisphereSampler::Cosine;
         let visualize_normals = false;
         let pb = ProgressBar::new(u64::from(frame_count * samples_per_pixel)).with_style(
             ProgressStyle::with_template("{wide_bar} elapsed={elapsed_precise} eta={eta_precise}")?,
@@ -209,7 +209,7 @@ fn render(
                 visualize_normals,
                 tonemapping,
                 exposure,
-                sky_params: cpupt::sky::ext::StateExtParams {
+                sky_params: cpupt::SkyParams {
                     elevation: sky_elevation,
                     azimuth: sky_azimuth,
                     turbidity: sky_turbidity,

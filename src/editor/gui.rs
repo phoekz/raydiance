@@ -64,3 +64,7 @@ impl Gui {
         self.imgui.render()
     }
 }
+
+pub trait GuiElement {
+    fn gui(&mut self, ui: &imgui::Ui);
+}

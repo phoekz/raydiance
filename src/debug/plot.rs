@@ -1,5 +1,7 @@
 use super::*;
 
+use cpupt::bxdfs;
+
 pub struct Plot {
     image: vz::image::Rgb,
     intensities: ScalarStats,

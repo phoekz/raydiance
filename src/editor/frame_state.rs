@@ -55,15 +55,13 @@ impl FrameState {
     }
 }
 
-impl std::fmt::Display for FrameState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl GuiElement for FrameState {
+    fn gui(&mut self, ui: &imgui::Ui) {
         let delta = self.display_delta;
         let delta_ms = 1e3 * delta;
         let fps = delta.recip();
         let frame = self.frame_count;
-        write!(
-            f,
-            "FPS: {fps:.03}\nDelta: {delta_ms:.03} ms\nFrame: {frame}"
-        )
+        let text = format!("FPS: {fps:.03}\nDelta: {delta_ms:.03} ms\nFrame: {frame}");
+        ui.text(text);
     }
 }

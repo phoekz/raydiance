@@ -1,5 +1,7 @@
 use super::*;
 
+use cpupt::bxdfs;
+
 mod plot;
 
 const DEFAULT_SAMPLE_COUNT: u32 = 256;
@@ -31,7 +33,7 @@ const HEMISPHERE_PLOT_HEIGHT: u32 = 100;
 #[derive(Clone)]
 enum SampleSequence {
     Grid(u32),
-    Random(UniformSampler),
+    Random(cpupt::UniformSampler),
     Sobol,
 }
 
@@ -149,7 +151,7 @@ fn brdf_visualizations() -> Result<()> {
 
     // Sequences.
     let seq_grid = SampleSequence::Grid(DEFAULT_SAMPLE_GRID_WIDTH);
-    let seq_rand = SampleSequence::Random(UniformSampler::new());
+    let seq_rand = SampleSequence::Random(cpupt::UniformSampler::new());
     let seq_sobol = SampleSequence::Sobol;
 
     // Task definitions.
@@ -360,9 +362,9 @@ fn brdf_visualizations() -> Result<()> {
 
                 // Hemisphere sampler.
                 let hemisphere = if task.flags & FLAG_UNIFORM > 0 {
-                    HemisphereSampler::Uniform
+                    cpupt::HemisphereSampler::Uniform
                 } else {
-                    HemisphereSampler::Cosine
+                    cpupt::HemisphereSampler::Cosine
                 };
 
                 // Brdf.
@@ -498,8 +500,6 @@ fn brdf_visualizations() -> Result<()> {
 }
 
 fn sky_model_visualizations() -> Result<()> {
-    use cpupt::sky;
-
     struct Task {
         name: &'static str,
         elevation: vz::cfg::Value<f32>,
@@ -510,7 +510,7 @@ fn sky_model_visualizations() -> Result<()> {
 
     impl Default for Task {
         fn default() -> Self {
-            let params = sky::ext::StateExtParams::default();
+            let params = cpupt::SkyParams::default();
             let elevation = vz::cfg::Value::Constant(params.elevation);
             let azimuth = vz::cfg::Value::Constant(params.azimuth);
             let turbidity = vz::cfg::Value::Constant(params.turbidity);
@@ -567,7 +567,7 @@ fn sky_model_visualizations() -> Result<()> {
     let font = vz::font::Font::new()?;
 
     // Default exposure.
-    let exposure = Exposure::default();
+    let exposure = cpupt::Exposure::default();
 
     // Execute tasks.
     let results = tasks
@@ -590,7 +590,7 @@ fn sky_model_visualizations() -> Result<()> {
                 let albedo = albedo.value(time);
 
                 // Create sky model.
-                let sky = sky::ext::StateExt::new(&sky::ext::StateExtParams {
+                let sky = cpupt::SkyState::new(&cpupt::SkyParams {
                     elevation,
                     azimuth,
                     turbidity,

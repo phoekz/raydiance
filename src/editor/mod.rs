@@ -21,6 +21,7 @@ use input_state::InputState;
 // Re-exports.
 //
 
+pub(crate) use gui::GuiElement;
 pub(crate) use window::{Window, WindowSize};
 
 //
@@ -85,16 +86,16 @@ struct Editor {
 
     any_window_focused: bool,
     latest_output: Option<cpupt::Output>,
-    sample_state: (u32, u32),
+    sampling_status: cpupt::SamplingStatus,
     image_name: String,
 
     display_raytracing_image: bool,
-    hemisphere_sampler: HemisphereSampler,
+    hemisphere_sampler: cpupt::HemisphereSampler,
     selected_material: usize,
     visualize_normals: bool,
     tonemapping: bool,
-    exposure: Exposure,
-    sky_params: cpupt::sky::ext::StateExtParams,
+    exposure: cpupt::Exposure,
+    sky_params: cpupt::SkyParams,
 }
 
 impl Editor {
@@ -134,16 +135,16 @@ impl Editor {
 
             any_window_focused: false,
             latest_output: None,
-            sample_state: (0, 0),
+            sampling_status: cpupt::SamplingStatus::new(),
             image_name: String::from("image"),
 
             display_raytracing_image: true,
-            hemisphere_sampler: HemisphereSampler::default(),
+            hemisphere_sampler: cpupt::HemisphereSampler::default(),
             selected_material: 0,
             visualize_normals: false,
             tonemapping: true,
-            exposure: Exposure::default(),
-            sky_params: cpupt::sky::ext::StateExtParams::default(),
+            exposure: cpupt::Exposure::default(),
+            sky_params: cpupt::SkyParams::default(),
         })
     }
 
@@ -236,19 +237,10 @@ impl Editor {
                 .movable(false);
             window.build(|| {
                 // Performance counters.
-                {
-                    ui.text(format!("{}", self.frame_state));
-                }
+                self.frame_state.gui(ui);
 
-                // Rendering status.
-                {
-                    let style = ui.clone_style();
-                    let progress = self.sample_state.0 as f32 / self.sample_state.1 as f32;
-                    imgui::ProgressBar::new(progress).size([0.0, 0.0]).build(ui);
-                    ui.same_line();
-                    ui.same_line_with_spacing(0.0, style.item_inner_spacing[0]);
-                    ui.text("Rendering");
-                }
+                // Sampling status.
+                self.sampling_status.gui(ui);
 
                 ui.separator();
 
@@ -537,19 +529,7 @@ impl Editor {
                 ui.separator();
 
                 // Sky model.
-                {
-                    let sky_params = &mut self.sky_params;
-                    imgui::AngleSlider::new("Elevation")
-                        .min_degrees(0.0)
-                        .max_degrees(90.0)
-                        .build(ui, &mut sky_params.elevation);
-                    imgui::AngleSlider::new("Azimuth")
-                        .min_degrees(0.0)
-                        .max_degrees(360.0)
-                        .build(ui, &mut sky_params.azimuth);
-                    ui.slider("Turbidity", 1.0, 10.0, &mut sky_params.turbidity);
-                    ui.color_edit3("Albedo", sky_params.albedo.as_mut());
-                }
+                self.sky_params.gui(ui);
 
                 ui.separator();
 
@@ -561,12 +541,12 @@ impl Editor {
                 if let Some(token) =
                     ui.begin_combo("##hemisphere_sampler", self.hemisphere_sampler.name())
                 {
-                    if ui.selectable(HemisphereSampler::Uniform.name()) {
-                        self.hemisphere_sampler = HemisphereSampler::Uniform;
+                    if ui.selectable(cpupt::HemisphereSampler::Uniform.name()) {
+                        self.hemisphere_sampler = cpupt::HemisphereSampler::Uniform;
                     }
 
-                    if ui.selectable(HemisphereSampler::Cosine.name()) {
-                        self.hemisphere_sampler = HemisphereSampler::Cosine;
+                    if ui.selectable(cpupt::HemisphereSampler::Cosine.name()) {
+                        self.hemisphere_sampler = cpupt::HemisphereSampler::Cosine;
                     }
 
                     token.end();
@@ -606,7 +586,7 @@ impl Editor {
             if let Some(output) = output {
                 self.renderer
                     .update_raytracing_image(&output.image, output.image_size)?;
-                self.sample_state = (output.sample_index, output.sample_count);
+                self.sampling_status = output.sampling_status;
                 self.latest_output = Some(output);
             }
 
