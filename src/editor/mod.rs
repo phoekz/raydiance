@@ -5,15 +5,15 @@ use super::*;
 //
 
 mod control_flow;
+mod frame_state;
 mod gui;
 mod inputs;
-mod timing;
 mod window;
 
 use control_flow::ControlFlow;
+use frame_state::FrameState;
 use gui::Gui;
 use inputs::Inputs;
-use timing::Timing;
 
 //
 // Re-exports.
@@ -77,12 +77,8 @@ struct Editor {
     dyn_scene: rds::DynamicScene,
     raytracer: cpupt::Raytracer,
     renderer: vulkan::Renderer,
+    frame_state: FrameState,
 
-    prev_time: Instant,
-    delta_time: f32,
-    delta_times: Timing,
-    frame_index: u64,
-    frame_count: u64,
     inputs: Inputs,
     any_window_focused: bool,
     latest_output: Option<cpupt::Output>,
@@ -132,11 +128,7 @@ impl Editor {
             raytracer,
             renderer,
 
-            prev_time: Instant::now(),
-            delta_time: 0.0,
-            delta_times: Timing::new(),
-            frame_index: 0,
-            frame_count: 0,
+            frame_state: FrameState::new(),
             inputs: Inputs::new(),
             latest_output: None,
             any_window_focused: false,
@@ -190,14 +182,11 @@ impl Editor {
     }
 
     fn new_events(&mut self) {
-        // Update clock.
-        let delta_duration = self.prev_time.elapsed();
-        self.delta_time = delta_duration.as_secs_f32();
-        self.delta_times.push(self.delta_time);
-        self.prev_time = Instant::now();
+        // Update frame state.
+        self.frame_state.update();
 
         // Update gui.
-        self.gui.update_delta_time(delta_duration);
+        self.gui.update_delta_time(self.frame_state.delta());
     }
 
     fn main_events_cleared(&mut self) -> Result<()> {
@@ -206,11 +195,12 @@ impl Editor {
 
         // Update camera.
         let speed = TAU / 5.0;
+        let delta_time = self.frame_state.delta().as_secs_f32();
         if self.inputs.a {
-            self.camera_angle -= speed * self.delta_time;
+            self.camera_angle -= speed * delta_time;
         }
         if self.inputs.d {
-            self.camera_angle += speed * self.delta_time;
+            self.camera_angle += speed * delta_time;
         }
         self.camera_transform = Mat4::from_axis_angle(&Vec3::y_axis(), self.camera_angle);
 
@@ -255,7 +245,7 @@ impl Editor {
             window.build(|| {
                 // Performance counters.
                 {
-                    ui.text(self.delta_times.display_text());
+                    ui.text(format!("{}", self.frame_state));
                 }
 
                 // Rendering status.
@@ -628,14 +618,15 @@ impl Editor {
 
             // Update gui.
             let gui_data = self.gui.render();
-            self.renderer.update_gui(self.frame_index, gui_data)?;
+            self.renderer
+                .update_gui(self.frame_state.frame_index(), gui_data)?;
 
             // Rasterize.
             self.renderer.redraw(
                 &self.dyn_scene,
                 self.window.size(),
                 self.window.new_size(),
-                self.frame_index,
+                self.frame_state.frame_index(),
                 self.camera_transform,
                 self.display_raytracing_image,
                 self.visualize_normals,
@@ -643,8 +634,6 @@ impl Editor {
             )?;
         }
 
-        self.frame_count += 1;
-        self.frame_index = self.frame_count % u64::from(vulkan::MAX_CONCURRENT_FRAMES);
         self.window.handled_resize();
 
         Ok(())
