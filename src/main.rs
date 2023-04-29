@@ -63,13 +63,11 @@ mod cpupt;
 mod debug;
 mod editor;
 mod gltf;
-mod gui;
 mod math;
 mod offline;
 mod rds;
 mod vulkan;
 mod vz;
-mod window;
 
 use color::*;
 use cpupt::bxdfs;

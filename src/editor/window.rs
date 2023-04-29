@@ -1,20 +1,20 @@
 use super::*;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub struct Size {
+pub struct WindowSize {
     pub w: u32,
     pub h: u32,
 }
 
-impl Size {
+impl WindowSize {
     #[must_use]
     pub fn is_zero(self) -> bool {
         self.w == 0 && self.h == 0
     }
 }
 
-impl From<Size> for PhysicalSize<u32> {
-    fn from(value: Size) -> Self {
+impl From<WindowSize> for PhysicalSize<u32> {
+    fn from(value: WindowSize) -> Self {
         Self {
             width: value.w,
             height: value.h,
@@ -22,7 +22,7 @@ impl From<Size> for PhysicalSize<u32> {
     }
 }
 
-impl From<PhysicalSize<u32>> for Size {
+impl From<PhysicalSize<u32>> for WindowSize {
     fn from(value: PhysicalSize<u32>) -> Self {
         Self {
             w: value.width,
@@ -31,8 +31,8 @@ impl From<PhysicalSize<u32>> for Size {
     }
 }
 
-impl From<Size> for vk::Extent2D {
-    fn from(value: Size) -> Self {
+impl From<WindowSize> for vk::Extent2D {
+    fn from(value: WindowSize) -> Self {
         Self {
             width: value.w,
             height: value.h,
@@ -42,12 +42,12 @@ impl From<Size> for vk::Extent2D {
 
 pub struct Params<'a> {
     pub title: &'a str,
-    pub size: Size,
-    pub min_size: Size,
+    pub size: WindowSize,
+    pub min_size: WindowSize,
     pub decorations: bool,
 }
 
-pub fn create(params: &Params) -> Result<(EventLoop<()>, Window)> {
+pub fn create_window(params: &Params) -> Result<(EventLoop<()>, Window)> {
     // Create event loop.
     let event_loop = EventLoop::new();
 

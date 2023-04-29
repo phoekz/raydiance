@@ -1,8 +1,16 @@
 use super::*;
 
-//
-// Editor
-//
+mod gui;
+mod inputs;
+mod timing;
+mod window;
+
+use gui::Gui;
+use inputs::Inputs;
+use timing::Timing;
+use window::create_window;
+
+pub(crate) use window::WindowSize;
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -15,13 +23,13 @@ pub fn run(args: Args) -> Result<()> {
     let window_title = env!("CARGO_PKG_NAME");
     let window_aspect = (16, 9);
     let window_aspect_multi = 50;
-    let min_window_size = window::Size { w: 320, h: 180 };
-    let mut window_size = window::Size {
+    let min_window_size = WindowSize { w: 320, h: 180 };
+    let mut window_size = WindowSize {
         w: window_aspect.0 * window_aspect_multi,
         h: window_aspect.1 * window_aspect_multi,
     };
     let mut resized_window_size = window_size;
-    let (mut event_loop, window) = window::create(&window::Params {
+    let (mut event_loop, window) = create_window(&window::Params {
         title: window_title,
         size: window_size,
         min_size: min_window_size,
@@ -29,7 +37,7 @@ pub fn run(args: Args) -> Result<()> {
     })?;
 
     // Init gui.
-    let mut gui = gui::Gui::create(&window);
+    let mut gui = Gui::create(&window);
 
     // Init rds scene.
     let (rds_scene, mut dyn_scene) = rds::Scene::create(
@@ -60,10 +68,10 @@ pub fn run(args: Args) -> Result<()> {
     // Main event loop.
     let mut prev_time = Instant::now();
     let mut delta_time = 0.0;
-    let mut delta_times = DeltaTimes::new(0.125);
+    let mut delta_times = Timing::new();
     let mut frame_index = 0_u64;
     let mut frame_count = 0_u64;
-    let mut input_state = InputState::default();
+    let mut input_state = Inputs::default();
     let mut any_window_focused = false;
     let mut latest_output: Option<cpupt::Output> = None;
     let mut sample_state = (0, 0);
@@ -627,72 +635,4 @@ pub fn run(args: Args) -> Result<()> {
     unsafe { renderer.destroy()? };
 
     Ok(())
-}
-
-//
-// Input state
-//
-
-#[derive(Default)]
-struct InputState {
-    a: bool,
-    d: bool,
-}
-
-//
-// Timing
-//
-
-struct DeltaTimes {
-    buffer: VecDeque<f32>,
-    current_time: f32,
-    trigger_time: f32,
-    display_avg_fps: f32,
-    display_avg_time: f32,
-}
-
-impl DeltaTimes {
-    const MAX_SIZE: usize = 8;
-
-    fn new(trigger_time: f32) -> DeltaTimes {
-        Self {
-            buffer: VecDeque::with_capacity(Self::MAX_SIZE),
-            current_time: 0.0,
-            trigger_time,
-            display_avg_fps: 0.0,
-            display_avg_time: 0.0,
-        }
-    }
-
-    fn push(&mut self, delta_time: f32) {
-        // Update ring buffer.
-        self.buffer.push_front(delta_time);
-        if self.buffer.len() > Self::MAX_SIZE {
-            self.buffer.pop_back();
-        }
-
-        // Update (slowed down) display times.
-        self.current_time += delta_time;
-        if self.current_time > self.trigger_time {
-            self.display_avg_time = self.avg_time();
-            self.display_avg_fps = self.display_avg_time.recip();
-            self.current_time = 0.0;
-        }
-    }
-
-    fn avg_time(&self) -> f32 {
-        let mut sum = 0.0;
-        for &delta_time in &self.buffer {
-            sum += delta_time;
-        }
-        sum / self.buffer.len() as f32
-    }
-
-    fn display_text(&self) -> String {
-        format!(
-            "FPS: {:.03}, Delta: {:.03} ms",
-            self.display_avg_fps,
-            1e3 * self.display_avg_time
-        )
-    }
 }

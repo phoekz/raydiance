@@ -128,7 +128,7 @@ impl Renderer {
     pub unsafe fn create(
         window: &winit::window::Window,
         window_title: &str,
-        window_size: window::Size,
+        window_size: editor::WindowSize,
         rds_scene: &rds::Scene,
         font_atlas_texture: &imgui::FontAtlasTexture,
     ) -> Result<Self> {
@@ -167,8 +167,8 @@ impl Renderer {
     pub unsafe fn redraw(
         &mut self,
         dyn_scene: &rds::DynamicScene,
-        window_size: window::Size,
-        resized_window_size: window::Size,
+        window_size: editor::WindowSize,
+        resized_window_size: editor::WindowSize,
         frame_index: u64,
         camera_transform: Mat4,
         display_raytracing_image: bool,
