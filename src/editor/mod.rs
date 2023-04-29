@@ -4,16 +4,18 @@ use super::*;
 // Modules
 //
 
+mod camera;
 mod control_flow;
 mod frame_state;
 mod gui;
-mod inputs;
+mod input_state;
 mod window;
 
+use camera::Camera;
 use control_flow::ControlFlow;
 use frame_state::FrameState;
 use gui::Gui;
-use inputs::Inputs;
+use input_state::InputState;
 
 //
 // Re-exports.
@@ -78,15 +80,14 @@ struct Editor {
     raytracer: cpupt::Raytracer,
     renderer: vulkan::Renderer,
     frame_state: FrameState,
+    input_state: InputState,
+    camera: Camera,
 
-    inputs: Inputs,
     any_window_focused: bool,
     latest_output: Option<cpupt::Output>,
     sample_state: (u32, u32),
     image_name: String,
 
-    camera_angle: f32,
-    camera_transform: Mat4,
     display_raytracing_image: bool,
     hemisphere_sampler: HemisphereSampler,
     selected_material: usize,
@@ -127,16 +128,15 @@ impl Editor {
             dyn_scene,
             raytracer,
             renderer,
-
             frame_state: FrameState::new(),
-            inputs: Inputs::new(),
-            latest_output: None,
+            input_state: InputState::new(),
+            camera: Camera::new(),
+
             any_window_focused: false,
+            latest_output: None,
             sample_state: (0, 0),
             image_name: String::from("image"),
 
-            camera_angle: 0.0,
-            camera_transform: Mat4::identity(),
             display_raytracing_image: true,
             hemisphere_sampler: HemisphereSampler::default(),
             selected_material: 0,
@@ -162,7 +162,7 @@ impl Editor {
 
         // Inputs - event handler.
         if !self.any_window_focused {
-            self.inputs.handle_event(event);
+            self.input_state.handle_event(event);
         }
 
         match event {
@@ -194,19 +194,11 @@ impl Editor {
         self.gui.prepare_frame(&self.window)?;
 
         // Update camera.
-        let speed = TAU / 5.0;
-        let delta_time = self.frame_state.delta().as_secs_f32();
-        if self.inputs.a {
-            self.camera_angle -= speed * delta_time;
-        }
-        if self.inputs.d {
-            self.camera_angle += speed * delta_time;
-        }
-        self.camera_transform = Mat4::from_axis_angle(&Vec3::y_axis(), self.camera_angle);
+        self.camera.update(&self.input_state, &self.frame_state);
 
         // Update raytracer.
         self.raytracer.send_input(cpupt::Input {
-            camera_transform: self.camera_transform,
+            camera_transform: self.camera.transform(),
             image_size: self.window.size().into(),
             hemisphere_sampler: self.hemisphere_sampler,
             dyn_scene: self.dyn_scene.clone(),
@@ -627,7 +619,7 @@ impl Editor {
                 self.window.size(),
                 self.window.new_size(),
                 self.frame_state.frame_index(),
-                self.camera_transform,
+                self.camera.transform(),
                 self.display_raytracing_image,
                 self.visualize_normals,
                 gui_data,

@@ -1,9 +1,9 @@
-pub struct Inputs {
+pub struct InputState {
     pub a: bool,
     pub d: bool,
 }
 
-impl Inputs {
+impl InputState {
     pub fn new() -> Self {
         Self { a: false, d: false }
     }
