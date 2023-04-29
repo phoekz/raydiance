@@ -9,6 +9,7 @@ mod control_flow;
 mod frame_state;
 mod gui;
 mod input_state;
+mod material_editor;
 mod window;
 
 use camera::Camera;
@@ -16,6 +17,7 @@ use control_flow::ControlFlow;
 use frame_state::FrameState;
 use gui::Gui;
 use input_state::InputState;
+use material_editor::{MaterialEditor, MaterialEditorState};
 
 //
 // Re-exports.
@@ -91,7 +93,7 @@ struct Editor {
 
     display_raytracing_image: bool,
     hemisphere_sampler: cpupt::HemisphereSampler,
-    selected_material: usize,
+    material_editor_state: MaterialEditorState,
     visualize_normals: bool,
     tonemapping: bool,
     exposure: cpupt::Exposure,
@@ -140,7 +142,7 @@ impl Editor {
 
             display_raytracing_image: true,
             hemisphere_sampler: cpupt::HemisphereSampler::default(),
-            selected_material: 0,
+            material_editor_state: MaterialEditorState::new(),
             visualize_normals: false,
             tonemapping: true,
             exposure: cpupt::Exposure::default(),
@@ -236,7 +238,7 @@ impl Editor {
                 .resizable(false)
                 .movable(false);
             window.build(|| {
-                // Performance counters.
+                // Frame state.
                 self.frame_state.gui(ui);
 
                 // Sampling status.
@@ -245,286 +247,12 @@ impl Editor {
                 ui.separator();
 
                 // Material editor.
-                {
-                    let rds_scene = &self.rds_scene;
-                    let dyn_scene = &mut self.dyn_scene;
-
-                    // Selector.
-                    ui.combo(
-                        "Material",
-                        &mut self.selected_material,
-                        &rds_scene.materials,
-                        |material| Cow::Borrowed(&material.name),
-                    );
-
-                    let material = &mut dyn_scene.materials[self.selected_material];
-
-                    // Material model.
-                    {
-                        let model = &mut material.model;
-                        if let Some(token) = ui.begin_combo("Model", model.name()) {
-                            if ui.selectable(rds::MaterialModel::Diffuse.name()) {
-                                *model = rds::MaterialModel::Diffuse;
-                            }
-                            if ui.selectable(rds::MaterialModel::Disney.name()) {
-                                *model = rds::MaterialModel::Disney;
-                            }
-                            token.end();
-                        }
-                    }
-
-                    // Texture editor.
-                    if let Some(_token) = ui.begin_table("", 3) {
-                        ui.table_next_row();
-                        ui.table_set_column_index(0);
-                        {
-                            let name = "Base color";
-                            let _id = ui.push_id(name);
-                            let index = material.base_color as usize;
-                            let mut texture = &mut dyn_scene.textures[index];
-                            let mut bit = dyn_scene.replaced_textures[index];
-
-                            ui.text(name);
-                            ui.table_next_column();
-
-                            if let rds::DynamicTexture::Vector4(ref mut value) = &mut texture {
-                                if ui
-                                    .color_edit4_config("Value", value)
-                                    .alpha(false)
-                                    .inputs(false)
-                                    .build()
-                                {
-                                    // Convenience: replace texture when an edit has been made without extra interaction.
-                                    dyn_scene.replaced_textures.set(index, true);
-                                }
-                            }
-                            ui.table_next_column();
-
-                            {
-                                if ui.checkbox("##use", &mut bit) {
-                                    dyn_scene.replaced_textures.set(index, bit);
-                                }
-                                ui.same_line();
-                                if ui.button("X") {
-                                    // Convenience: reset to default value and clear replacement with one click.
-                                    *texture = dyn_scene.default_textures[index];
-                                    dyn_scene.replaced_textures.set(index, false);
-                                }
-                            }
-                            ui.table_next_column();
-                        }
-                        {
-                            let name = "Roughness";
-                            let _id = ui.push_id(name);
-                            let index = material.roughness as usize;
-                            let mut texture = &mut dyn_scene.textures[index];
-                            let mut bit = dyn_scene.replaced_textures[index];
-
-                            ui.text(name);
-                            ui.table_next_column();
-
-                            if let rds::DynamicTexture::Scalar(ref mut value) = &mut texture {
-                                if imgui::Drag::new("##slider")
-                                    .range(0.0, 1.0)
-                                    .speed(0.01)
-                                    .build(ui, value)
-                                {
-                                    // Convenience: replace texture when an edit has been made without extra interaction.
-                                    dyn_scene.replaced_textures.set(index, true);
-                                }
-                            }
-                            ui.table_next_column();
-
-                            {
-                                if ui.checkbox("##use", &mut bit) {
-                                    dyn_scene.replaced_textures.set(index, bit);
-                                }
-                                ui.same_line();
-                                if ui.button("X") {
-                                    // Convenience: reset to default value and clear replacement with one click.
-                                    *texture = dyn_scene.default_textures[index];
-                                    dyn_scene.replaced_textures.set(index, false);
-                                }
-                            }
-                            ui.table_next_column();
-                        }
-                        {
-                            let name = "Metallic";
-                            let _id = ui.push_id(name);
-                            let index = material.metallic as usize;
-                            let mut texture = &mut dyn_scene.textures[index];
-                            let mut bit = dyn_scene.replaced_textures[index];
-
-                            ui.text(name);
-                            ui.table_next_column();
-
-                            if let rds::DynamicTexture::Scalar(ref mut value) = &mut texture {
-                                if imgui::Drag::new("##slider")
-                                    .range(0.0, 1.0)
-                                    .speed(0.01)
-                                    .build(ui, value)
-                                {
-                                    // Convenience: replace texture when an edit has been made without extra interaction.
-                                    dyn_scene.replaced_textures.set(index, true);
-                                }
-                            }
-                            ui.table_next_column();
-
-                            {
-                                if ui.checkbox("##use", &mut bit) {
-                                    dyn_scene.replaced_textures.set(index, bit);
-                                }
-                                ui.same_line();
-                                if ui.button("X") {
-                                    // Convenience: reset to default value and clear replacement with one click.
-                                    *texture = dyn_scene.default_textures[index];
-                                    dyn_scene.replaced_textures.set(index, false);
-                                }
-                            }
-                            ui.table_next_column();
-                        }
-                        {
-                            let name = "Specular";
-                            let _id = ui.push_id(name);
-                            let index = material.specular as usize;
-                            let mut texture = &mut dyn_scene.textures[index];
-                            let mut bit = dyn_scene.replaced_textures[index];
-
-                            ui.text(name);
-                            ui.table_next_column();
-
-                            if let rds::DynamicTexture::Scalar(ref mut value) = &mut texture {
-                                if imgui::Drag::new("##slider")
-                                    .range(0.0, 1.0)
-                                    .speed(0.01)
-                                    .build(ui, value)
-                                {
-                                    // Convenience: replace texture when an edit has been made without extra interaction.
-                                    dyn_scene.replaced_textures.set(index, true);
-                                }
-                            }
-                            ui.table_next_column();
-
-                            {
-                                if ui.checkbox("##use", &mut bit) {
-                                    dyn_scene.replaced_textures.set(index, bit);
-                                }
-                                ui.same_line();
-                                if ui.button("X") {
-                                    // Convenience: reset to default value and clear replacement with one click.
-                                    *texture = dyn_scene.default_textures[index];
-                                    dyn_scene.replaced_textures.set(index, false);
-                                }
-                            }
-                            ui.table_next_column();
-                        }
-                        {
-                            let name = "Specular Tint";
-                            let _id = ui.push_id(name);
-                            let index = material.specular_tint as usize;
-                            let mut texture = &mut dyn_scene.textures[index];
-                            let mut bit = dyn_scene.replaced_textures[index];
-
-                            ui.text(name);
-                            ui.table_next_column();
-
-                            if let rds::DynamicTexture::Scalar(ref mut value) = &mut texture {
-                                if imgui::Drag::new("##slider")
-                                    .range(0.0, 1.0)
-                                    .speed(0.01)
-                                    .build(ui, value)
-                                {
-                                    // Convenience: replace texture when an edit has been made without extra interaction.
-                                    dyn_scene.replaced_textures.set(index, true);
-                                }
-                            }
-                            ui.table_next_column();
-
-                            {
-                                if ui.checkbox("##use", &mut bit) {
-                                    dyn_scene.replaced_textures.set(index, bit);
-                                }
-                                ui.same_line();
-                                if ui.button("X") {
-                                    // Convenience: reset to default value and clear replacement with one click.
-                                    *texture = dyn_scene.default_textures[index];
-                                    dyn_scene.replaced_textures.set(index, false);
-                                }
-                            }
-                            ui.table_next_column();
-                        }
-                        {
-                            let name = "Sheen";
-                            let _id = ui.push_id(name);
-                            let index = material.sheen as usize;
-                            let mut texture = &mut dyn_scene.textures[index];
-                            let mut bit = dyn_scene.replaced_textures[index];
-
-                            ui.text(name);
-                            ui.table_next_column();
-
-                            if let rds::DynamicTexture::Scalar(ref mut value) = &mut texture {
-                                if imgui::Drag::new("##slider")
-                                    .range(0.0, 1.0)
-                                    .speed(0.01)
-                                    .build(ui, value)
-                                {
-                                    // Convenience: replace texture when an edit has been made without extra interaction.
-                                    dyn_scene.replaced_textures.set(index, true);
-                                }
-                            }
-                            ui.table_next_column();
-
-                            {
-                                if ui.checkbox("##use", &mut bit) {
-                                    dyn_scene.replaced_textures.set(index, bit);
-                                }
-                                ui.same_line();
-                                if ui.button("X") {
-                                    // Convenience: reset to default value and clear replacement with one click.
-                                    *texture = dyn_scene.default_textures[index];
-                                    dyn_scene.replaced_textures.set(index, false);
-                                }
-                            }
-                            ui.table_next_column();
-                        }
-                        {
-                            let name = "Sheen Tint";
-                            let _id = ui.push_id(name);
-                            let index = material.sheen_tint as usize;
-                            let mut texture = &mut dyn_scene.textures[index];
-                            let mut bit = dyn_scene.replaced_textures[index];
-
-                            ui.text(name);
-                            ui.table_next_column();
-
-                            if let rds::DynamicTexture::Scalar(ref mut value) = &mut texture {
-                                if imgui::Drag::new("##slider")
-                                    .range(0.0, 1.0)
-                                    .speed(0.01)
-                                    .build(ui, value)
-                                {
-                                    // Convenience: replace texture when an edit has been made without extra interaction.
-                                    dyn_scene.replaced_textures.set(index, true);
-                                }
-                            }
-                            ui.table_next_column();
-
-                            {
-                                if ui.checkbox("##use", &mut bit) {
-                                    dyn_scene.replaced_textures.set(index, bit);
-                                }
-                                ui.same_line();
-                                if ui.button("X") {
-                                    // Convenience: reset to default value and clear replacement with one click.
-                                    *texture = dyn_scene.default_textures[index];
-                                    dyn_scene.replaced_textures.set(index, false);
-                                }
-                            }
-                            ui.table_next_column();
-                        }
-                    }
-                }
+                MaterialEditor::new(
+                    &mut self.material_editor_state,
+                    &mut self.rds_scene,
+                    &mut self.dyn_scene,
+                )
+                .gui(ui);
 
                 ui.separator();
 
@@ -537,20 +265,7 @@ impl Editor {
                 self.exposure.gui(ui);
                 ui.checkbox("Visualize normals", &mut self.visualize_normals);
                 ui.checkbox("Tonemapping", &mut self.tonemapping);
-                ui.text("Hemisphere sampler");
-                if let Some(token) =
-                    ui.begin_combo("##hemisphere_sampler", self.hemisphere_sampler.name())
-                {
-                    if ui.selectable(cpupt::HemisphereSampler::Uniform.name()) {
-                        self.hemisphere_sampler = cpupt::HemisphereSampler::Uniform;
-                    }
-
-                    if ui.selectable(cpupt::HemisphereSampler::Cosine.name()) {
-                        self.hemisphere_sampler = cpupt::HemisphereSampler::Cosine;
-                    }
-
-                    token.end();
-                }
+                self.hemisphere_sampler.gui(ui);
 
                 ui.separator();
 
@@ -559,16 +274,7 @@ impl Editor {
                 imgui::InputText::new(ui, "Image name", &mut self.image_name).build();
                 if ui.button("Save image") {
                     if let Some(output) = &self.latest_output {
-                        let timestamp = utc_timestamp().expect("Failed to generate timestamp");
-                        let path = if self.image_name.is_empty() {
-                            PathBuf::from(format!("{timestamp}.png"))
-                        } else {
-                            PathBuf::from(format!("{}.png", self.image_name))
-                        };
-                        let image = vz::image::Rgb::from_colors(&output.image, output.image_size);
-                        image.save(&path).unwrap_or_else(|_| {
-                            panic!("Failed to save image to {}", path.display())
-                        });
+                        save_image_to_file(&self.image_name, output).expect("Saving image to file");
                     }
                 }
             });
@@ -612,4 +318,24 @@ impl Editor {
 
         Ok(())
     }
+}
+
+fn save_image_to_file(image_name: &str, output: &cpupt::Output) -> Result<()> {
+    let path = if image_name.is_empty() {
+        let timestamp = utc_timestamp()?;
+        PathBuf::from(format!("{timestamp}.png"))
+    } else {
+        PathBuf::from(format!("{image_name}.png"))
+    };
+    let image = vz::image::Rgb::from_colors(&output.image, output.image_size);
+    image
+        .save(&path)
+        .with_context(|| format!("Failed to save image to {}", path.display()))?;
+    info!(
+        "Wrote {}x{} image to {}",
+        output.image_size.0,
+        output.image_size.1,
+        path.display()
+    );
+    Ok(())
 }

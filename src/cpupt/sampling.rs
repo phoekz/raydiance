@@ -153,6 +153,21 @@ impl std::fmt::Display for HemisphereSampler {
     }
 }
 
+impl GuiElement for HemisphereSampler {
+    fn gui(&mut self, ui: &imgui::Ui) {
+        ui.text("Hemisphere sampler");
+        if let Some(_token) = ui.begin_combo("##hemisphere_sampler", self.name()) {
+            if ui.selectable(cpupt::HemisphereSampler::Uniform.name()) {
+                *self = cpupt::HemisphereSampler::Uniform;
+            }
+
+            if ui.selectable(cpupt::HemisphereSampler::Cosine.name()) {
+                *self = cpupt::HemisphereSampler::Cosine;
+            }
+        }
+    }
+}
+
 fn hemisphere_uniform(s: f32, t: f32) -> Vec3 {
     let u = TAU * s;
     let v = f32::sqrt(f32::max(0.0, 1.0 - t * t));
