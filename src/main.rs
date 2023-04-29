@@ -46,13 +46,6 @@ use nalgebra as na;
 use rand::prelude::*;
 use rayon::prelude::*;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use winit::{
-    dpi::{PhysicalPosition, PhysicalSize},
-    event::{Event, KeyboardInput, VirtualKeyCode, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
-    platform::run_return::EventLoopExtRunReturn,
-    window::{Window, WindowBuilder},
-};
 
 #[cfg(test)]
 use approx::{assert_abs_diff_eq, assert_ulps_eq};

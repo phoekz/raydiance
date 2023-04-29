@@ -12,7 +12,7 @@ impl Gui {
         let mut imgui = imgui::Context::create();
         imgui.set_ini_filename(None);
         let mut winit = WinitPlatform::init(&mut imgui);
-        winit.attach_window(imgui.io_mut(), window, HiDpiMode::Rounded);
+        winit.attach_window(imgui.io_mut(), window.handle(), HiDpiMode::Rounded);
         let font = include_bytes!("../assets/fonts/SourceSansPro-Regular.ttf");
         let font_source = imgui::FontSource::TtfData {
             data: font,
@@ -35,9 +35,9 @@ impl Gui {
         atlas_texture
     }
 
-    pub fn handle_event(&mut self, window: &Window, event: &Event<()>) {
+    pub fn handle_event(&mut self, window: &Window, event: &winit::event::Event<()>) {
         let io = self.imgui.io_mut();
-        self.winit.handle_event(io, window, event);
+        self.winit.handle_event(io, window.handle(), event);
     }
 
     pub fn update_delta_time(&mut self, delta: Duration) {
@@ -47,7 +47,7 @@ impl Gui {
 
     pub fn prepare_frame(&mut self, window: &Window) {
         let io = self.imgui.io_mut();
-        self.winit.prepare_frame(io, window).unwrap();
+        self.winit.prepare_frame(io, window.handle()).unwrap();
     }
 
     pub fn frame<F>(&mut self, window: &Window, f: F)
@@ -56,7 +56,7 @@ impl Gui {
     {
         let ui = self.imgui.frame();
         f(ui);
-        self.winit.prepare_render(ui, window);
+        self.winit.prepare_render(ui, window.handle());
     }
 
     pub fn render(&mut self) -> &imgui::DrawData {

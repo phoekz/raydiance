@@ -1,16 +1,29 @@
 use super::*;
 
+//
+// Modules
+//
+
+mod control_flow;
 mod gui;
 mod inputs;
 mod timing;
 mod window;
 
+use control_flow::ControlFlow;
 use gui::Gui;
 use inputs::Inputs;
 use timing::Timing;
-use window::create_window;
 
-pub(crate) use window::WindowSize;
+//
+// Re-exports.
+//
+
+pub(crate) use window::{Window, WindowSize};
+
+//
+// Editor
+//
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -19,20 +32,20 @@ pub struct Args {
 }
 
 pub fn run(args: Args) -> Result<()> {
-    // Init winit.
-    let window_title = env!("CARGO_PKG_NAME");
+    use winit::platform::run_return::EventLoopExtRunReturn;
+
+    // Init window.
     let window_aspect = (16, 9);
-    let window_aspect_multi = 50;
-    let min_window_size = WindowSize { w: 320, h: 180 };
-    let mut window_size = WindowSize {
-        w: window_aspect.0 * window_aspect_multi,
-        h: window_aspect.1 * window_aspect_multi,
-    };
-    let mut resized_window_size = window_size;
-    let (mut event_loop, window) = create_window(&window::Params {
-        title: window_title,
-        size: window_size,
-        min_size: min_window_size,
+    let (mut window, mut event_loop) = Window::create(&window::Params {
+        title: env!("CARGO_PKG_NAME"),
+        size: WindowSize {
+            w: window_aspect.0 * 50,
+            h: window_aspect.1 * 50,
+        },
+        min_size: WindowSize {
+            w: window_aspect.0 * 20,
+            h: window_aspect.1 * 20,
+        },
         decorations: true,
     })?;
 
@@ -58,8 +71,8 @@ pub fn run(args: Args) -> Result<()> {
     let mut renderer = unsafe {
         vulkan::Renderer::create(
             &window,
-            window_title,
-            window_size,
+            window.title(),
+            window.size(),
             &rds_scene,
             &gui.font_atlas_texture(),
         )?
@@ -71,7 +84,7 @@ pub fn run(args: Args) -> Result<()> {
     let mut delta_times = Timing::new();
     let mut frame_index = 0_u64;
     let mut frame_count = 0_u64;
-    let mut input_state = Inputs::default();
+    let mut inputs = Inputs::default();
     let mut any_window_focused = false;
     let mut latest_output: Option<cpupt::Output> = None;
     let mut sample_state = (0, 0);
@@ -87,73 +100,22 @@ pub fn run(args: Args) -> Result<()> {
     let mut exposure = Exposure::default();
     let mut sky_params = cpupt::sky::ext::StateExtParams::default();
     event_loop.run_return(|event, _, control_flow| {
-        *control_flow = ControlFlow::Poll;
+        // Control flow - event handler.
+        *control_flow = ControlFlow::handle_event(&event);
 
-        // Event handler.
+        // Window - event handler.
+        window.handle_event(&event);
+
+        // Gui - event handler.
         gui.handle_event(&window, &event);
+
+        // Inputs - event handler.
+        if !any_window_focused {
+            inputs.handle_event(&event);
+        }
+
         match event {
-            // Close window if user hits the X.
-            Event::WindowEvent {
-                event: WindowEvent::CloseRequested,
-                window_id,
-            } if window_id == window.id() => {
-                *control_flow = ControlFlow::Exit;
-            }
-
-            Event::WindowEvent {
-                event: WindowEvent::KeyboardInput { input, .. },
-                window_id,
-            } if window_id == window.id() => {
-                // Close window if user hits the escape key.
-                if let KeyboardInput {
-                    virtual_keycode: Some(VirtualKeyCode::Escape),
-                    ..
-                } = input
-                {
-                    *control_flow = ControlFlow::Exit;
-                    return;
-                }
-
-                // Ignore app keybindings if any GUI window is focused.
-                if any_window_focused {
-                    return;
-                }
-
-                // Camera controls.
-                if let Some(virtual_keycode) = input.virtual_keycode {
-                    match input.state {
-                        winit::event::ElementState::Pressed => {
-                            if virtual_keycode == VirtualKeyCode::A {
-                                input_state.a = true;
-                            }
-                            if virtual_keycode == VirtualKeyCode::D {
-                                input_state.d = true;
-                            }
-                        }
-                        winit::event::ElementState::Released => {
-                            if virtual_keycode == VirtualKeyCode::A {
-                                input_state.a = false;
-                            }
-                            if virtual_keycode == VirtualKeyCode::D {
-                                input_state.d = false;
-                            }
-                        }
-                    }
-                }
-            }
-
-            Event::WindowEvent {
-                event: WindowEvent::Resized(new_window_size),
-                window_id,
-            } if window_id == window.id() => {
-                debug!(
-                    "New window size: {} x {}",
-                    new_window_size.width, new_window_size.height
-                );
-                resized_window_size = new_window_size.into();
-            }
-
-            Event::NewEvents(_) => {
+            winit::event::Event::NewEvents(_) => {
                 // Update clock.
                 let delta_duration = prev_time.elapsed();
                 delta_time = delta_duration.as_secs_f32();
@@ -164,16 +126,16 @@ pub fn run(args: Args) -> Result<()> {
                 gui.update_delta_time(delta_duration);
             }
 
-            Event::MainEventsCleared => {
+            winit::event::Event::MainEventsCleared => {
                 // Update gui.
                 gui.prepare_frame(&window);
 
                 // Update camera.
                 let speed = TAU / 5.0;
-                if input_state.a {
+                if inputs.a {
                     camera_angle -= speed * delta_time;
                 }
-                if input_state.d {
+                if inputs.d {
                     camera_angle += speed * delta_time;
                 }
                 camera_transform = Mat4::from_axis_angle(&Vec3::y_axis(), camera_angle);
@@ -181,7 +143,7 @@ pub fn run(args: Args) -> Result<()> {
                 // Update raytracer.
                 raytracer.send_input(cpupt::Input {
                     camera_transform,
-                    image_size: (window_size.w, window_size.h),
+                    image_size: window.size().into(),
                     hemisphere_sampler,
                     dyn_scene: dyn_scene.clone(),
                     visualize_normals,
@@ -192,10 +154,10 @@ pub fn run(args: Args) -> Result<()> {
                 });
 
                 // Draw screen.
-                window.request_redraw();
+                window.handle().request_redraw();
             }
 
-            Event::RedrawRequested(_) => {
+            winit::event::Event::RedrawRequested(_) => {
                 gui.frame(&window, |ui| {
                     // Update state.
                     any_window_focused =
@@ -204,7 +166,7 @@ pub fn run(args: Args) -> Result<()> {
                     // Main window.
                     ui.window("Raydiance")
                         .size(
-                            [220.0, window_size.h as f32],
+                            [220.0, window.size().h as f32],
                             imgui::Condition::FirstUseEver,
                         )
                         .position_pivot([0.0, 0.0])
@@ -610,8 +572,8 @@ pub fn run(args: Args) -> Result<()> {
                     renderer
                         .redraw(
                             &dyn_scene,
-                            window_size,
-                            resized_window_size,
+                            window.size(),
+                            window.new_size(),
                             frame_index,
                             camera_transform,
                             display_raytracing_image,
@@ -623,7 +585,7 @@ pub fn run(args: Args) -> Result<()> {
 
                 frame_count += 1;
                 frame_index = frame_count % u64::from(vulkan::MAX_CONCURRENT_FRAMES);
-                window_size = resized_window_size;
+                window.handled_resize();
             }
 
             _ => {}

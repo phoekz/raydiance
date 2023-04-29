@@ -126,7 +126,7 @@ impl Renderer {
     // minimizing logic separately from the application logic.
 
     pub unsafe fn create(
-        window: &winit::window::Window,
+        window: &editor::Window,
         window_title: &str,
         window_size: editor::WindowSize,
         rds_scene: &rds::Scene,
@@ -139,7 +139,7 @@ impl Renderer {
         let debug = validation
             .then(|| Debug::create(&entry, &instance))
             .transpose()?;
-        let surface = Surface::create(&entry, &instance, window)?;
+        let surface = Surface::create(&entry, &instance, window.handle())?;
         let device = Device::create(&instance, &surface)?;
         let swapchain = Swapchain::create(&instance, &surface, &device, window_size.into())?;
         let color = ColorTarget::create(&device, window_size.into())?;
