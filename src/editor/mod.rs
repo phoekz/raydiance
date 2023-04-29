@@ -60,7 +60,7 @@ pub fn run(args: Args) -> Result<()> {
     // Main event loop.
     let mut prev_time = Instant::now();
     let mut delta_time = 0.0;
-    let mut delta_times = DeltaTimes::new(0.25);
+    let mut delta_times = DeltaTimes::new(0.125);
     let mut frame_index = 0_u64;
     let mut frame_count = 0_u64;
     let mut input_state = InputState::default();
@@ -648,10 +648,11 @@ struct DeltaTimes {
     current_time: f32,
     trigger_time: f32,
     display_avg_fps: f32,
+    display_avg_time: f32,
 }
 
 impl DeltaTimes {
-    const MAX_SIZE: usize = 4;
+    const MAX_SIZE: usize = 8;
 
     fn new(trigger_time: f32) -> DeltaTimes {
         Self {
@@ -659,6 +660,7 @@ impl DeltaTimes {
             current_time: 0.0,
             trigger_time,
             display_avg_fps: 0.0,
+            display_avg_time: 0.0,
         }
     }
 
@@ -672,20 +674,25 @@ impl DeltaTimes {
         // Update (slowed down) display times.
         self.current_time += delta_time;
         if self.current_time > self.trigger_time {
-            self.display_avg_fps = self.avg_fps();
+            self.display_avg_time = self.avg_time();
+            self.display_avg_fps = self.display_avg_time.recip();
             self.current_time = 0.0;
         }
     }
 
-    fn avg_fps(&self) -> f32 {
+    fn avg_time(&self) -> f32 {
         let mut sum = 0.0;
         for &delta_time in &self.buffer {
-            sum += delta_time.recip();
+            sum += delta_time;
         }
         sum / self.buffer.len() as f32
     }
 
     fn display_text(&self) -> String {
-        format!("FPS: {:.03}", self.display_avg_fps)
+        format!(
+            "FPS: {:.03}, Delta: {:.03} ms",
+            self.display_avg_fps,
+            1e3 * self.display_avg_time
+        )
     }
 }
