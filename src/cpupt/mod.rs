@@ -154,8 +154,7 @@ impl Raytracer {
             let mut tiles = vec![];
             let mut tile_results = vec![];
             let mut pixel_buffer = Vec::<ColorRgb>::new();
-            let mut sky_state =
-                sky::ext::StateExt::new(&sky::ext::StateExtParams::default()).unwrap();
+            let mut sky_state = sky::ext::StateExt::new(&sky::ext::StateExtParams::default())?;
 
             loop {
                 // Check for termination command.
@@ -191,14 +190,17 @@ impl Raytracer {
 
                         // Reset camera.
                         let camera = &rds_scene.cameras[0];
-                        let camera_transform = input.camera_transform.try_inverse().unwrap();
+                        let camera_transform = input
+                            .camera_transform
+                            .try_inverse()
+                            .context("Inverting camera transform")?;
                         let view_from_clip = camera.clip_from_view().inverse();
                         let world_from_view = camera.world_from_view();
                         world_from_clip = camera_transform * world_from_view * view_from_clip;
                         camera_position = camera_transform.transform_point(&camera.position());
 
                         // Reset sky.
-                        sky_state = sky::ext::StateExt::new(&input.sky_params).unwrap();
+                        sky_state = sky::ext::StateExt::new(&input.sky_params)?;
 
                         // Reset stats.
                         ray_stats = intersection::RayBvhHitStats::default();
@@ -325,8 +327,9 @@ impl Raytracer {
         }
     }
 
-    pub fn send_input(&self, input: Input) {
-        self.input_send.send(input).unwrap();
+    pub fn send_input(&self, input: Input) -> Result<()> {
+        self.input_send.send(input)?;
+        Ok(())
     }
 
     pub fn recv_output(&self) -> Option<Output> {
@@ -346,9 +349,10 @@ impl Raytracer {
         }
     }
 
-    pub fn terminate(self) {
-        self.terminate_send.send(()).unwrap();
-        self.thread.join().unwrap().unwrap();
+    pub fn terminate(self) -> Result<()> {
+        self.terminate_send.send(())?;
+        self.thread.join().unwrap()?;
+        Ok(())
     }
 }
 

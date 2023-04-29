@@ -41,7 +41,7 @@ use anyhow::{anyhow, bail, ensure, Context, Result};
 use ash::vk;
 use bitvec::prelude::*;
 use bytemuck::{Pod, Zeroable};
-use log::{debug, info, log, warn};
+use log::{debug, error, info, log, warn};
 use nalgebra as na;
 use rand::prelude::*;
 use rayon::prelude::*;

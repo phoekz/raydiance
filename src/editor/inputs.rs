@@ -1,10 +1,13 @@
-#[derive(Default)]
 pub struct Inputs {
     pub a: bool,
     pub d: bool,
 }
 
 impl Inputs {
+    pub fn new() -> Self {
+        Self { a: false, d: false }
+    }
+
     pub fn handle_event(&mut self, event: &winit::event::Event<()>) {
         let winit::event::Event::WindowEvent { event, .. } = event else {
             return;

@@ -216,7 +216,7 @@ fn render(
                     albedo: sky_albedo,
                 },
                 salt: Some(frame_index.into()),
-            });
+            })?;
             let mut latest_frame: Option<vz::image::Rgb> = None;
             for _ in 0..samples_per_pixel {
                 let output = raytracer.recv_output().expect("Something went wrong");
@@ -319,7 +319,7 @@ fn render(
     )?;
 
     // Cleanup.
-    raytracer.terminate();
+    raytracer.terminate()?;
 
     Ok(file_name)
 }

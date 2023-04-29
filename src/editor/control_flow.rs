@@ -1,10 +1,10 @@
 pub struct ControlFlow;
 
+pub const CONTINUE: winit::event_loop::ControlFlow = winit::event_loop::ControlFlow::Poll;
+pub const EXIT: winit::event_loop::ControlFlow = winit::event_loop::ControlFlow::Exit;
+
 impl ControlFlow {
     pub fn handle_event(event: &winit::event::Event<()>) -> winit::event_loop::ControlFlow {
-        const CONTINUE: winit::event_loop::ControlFlow = winit::event_loop::ControlFlow::Poll;
-        const EXIT: winit::event_loop::ControlFlow = winit::event_loop::ControlFlow::Exit;
-
         let winit::event::Event::WindowEvent { event, .. } = event else {
             return CONTINUE;
         };

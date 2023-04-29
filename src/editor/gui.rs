@@ -45,9 +45,10 @@ impl Gui {
         io.update_delta_time(delta);
     }
 
-    pub fn prepare_frame(&mut self, window: &Window) {
+    pub fn prepare_frame(&mut self, window: &Window) -> Result<()> {
         let io = self.imgui.io_mut();
-        self.winit.prepare_frame(io, window.handle()).unwrap();
+        self.winit.prepare_frame(io, window.handle())?;
+        Ok(())
     }
 
     pub fn frame<F>(&mut self, window: &Window, f: F)
