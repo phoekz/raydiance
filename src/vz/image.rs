@@ -67,13 +67,17 @@ impl Rgb {
         let text_height = line_count * line_height;
 
         // How much should the image be expanded to fit all text?
-        let expanded_height = (line_count + 1) * line_height;
+        let image_height = self.height() + (line_count + 1) * line_height;
+
+        // Align up to an even multiple to make certain video codecs happy.
+        let height_alignment = 4;
+        let image_height = (image_height + (height_alignment - 1)) & !(height_alignment - 1);
 
         // Margin.
         let margin = line_height / 2;
 
         // Expand canvas to accomodate text.
-        let mut expanded = imagelib::RgbImage::new(self.width(), self.height() + expanded_height);
+        let mut expanded = imagelib::RgbImage::new(self.width(), image_height);
         let bg_color = imagelib::Rgb(ColorRgb::BLACK.into_srgb8());
         expanded.pixels_mut().for_each(|pixel| {
             *pixel = bg_color;
