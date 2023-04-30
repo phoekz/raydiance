@@ -111,7 +111,7 @@ fn render(
     // Unpack render config.
     let samples_per_pixel = render_config.samples_per_pixel.get();
     let image_scale = render_config.image_scale.get();
-    let image_aspect = (16, 9);
+    let image_aspect = DEFAULT_ASPECT_RATIO;
     let image_size = (image_aspect.0 * image_scale, image_aspect.1 * image_scale);
     let frame_delay_num = render_config.frame_delay_num.get();
     let frame_delay_den = render_config.frame_delay_den.get();

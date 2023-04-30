@@ -70,6 +70,8 @@ const PI: f32 = std::f32::consts::PI;
 const TAU: f32 = std::f32::consts::TAU;
 const INV_PI: f32 = std::f32::consts::FRAC_1_PI;
 
+const DEFAULT_ASPECT_RATIO: (u32, u32) = (16, 10);
+
 //
 // Main
 //

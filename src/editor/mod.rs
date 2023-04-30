@@ -40,7 +40,7 @@ pub fn run(args: Args) -> Result<()> {
     use winit::platform::run_return::EventLoopExtRunReturn;
 
     // Init window.
-    let window_aspect = (16, 9);
+    let window_aspect = DEFAULT_ASPECT_RATIO;
     let (window, mut event_loop) = Window::create(&window::Params {
         title: env!("CARGO_PKG_NAME"),
         size: WindowSize {
