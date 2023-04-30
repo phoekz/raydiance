@@ -48,7 +48,7 @@ where
 {
     use std::process::Command;
     let args = args.into_iter().map(|s| s.to_string()).collect::<Vec<_>>();
-    debug!("Running ffmpeg with args: {args:#?}");
+    debug!("Running ffmpeg with args: {args:?}\n{}", args.join(" "));
     let output = Command::new("ffmpeg").args(&args).output()?;
     let stdout = std::str::from_utf8(output.stdout.as_slice())?;
     let stderr = std::str::from_utf8(output.stderr.as_slice())?;
@@ -133,6 +133,29 @@ fn ffmpeg_check_pixel_formats() -> Result<()> {
     Ok(())
 }
 
+fn ffmpeg_encode_h264(input: &str, output: &str) -> Result<f64> {
+    let time = Instant::now();
+    ffmpeg_run([
+        "-y",           // Overwrite output files without asking.
+        "-hide_banner", // Suppress printing banner.
+        "-i",           // Input file.
+        input,          // .
+        "-codec:v",     // Encoder.
+        "libx264",      // .
+        "-pix_fmt",     // Pixel format.
+        "yuv420p",      // .
+        "-crf",         // Constant rate factor.
+        "16",           // .
+        "-preset",      // Compression efficiency.
+        "slow",         // .
+        "-movflags",    // Move index (moov atom) to the beginning of the file.
+        "faststart",    // .
+        "-an",          // Disables audio recording.
+        output,         // Output file.
+    ])?;
+    Ok(time.elapsed().as_secs_f64())
+}
+
 fn ffmpeg_encode_h265(input: &str, output: &str) -> Result<f64> {
     let time = Instant::now();
     ffmpeg_run([
@@ -209,6 +232,11 @@ impl TranscodeArgs {
         let input_file = self.input_file.to_string_lossy().replace('\\', "/");
         ensure!(input_file.ends_with(".apng") || input_file.ends_with(".mp4"));
         let file_name = self.input_file.file_stem().unwrap().to_string_lossy();
+        let output_h264 = self
+            .output_directory
+            .join(format!("{file_name}-h264.mp4"))
+            .to_string_lossy()
+            .replace('\\', "/");
         let output_h265 = self
             .output_directory
             .join(format!("{file_name}-h265.mp4"))
@@ -221,15 +249,17 @@ impl TranscodeArgs {
             .replace('\\', "/");
 
         // Encoding.
+        let time_h264 = ffmpeg_encode_h264(&input_file, &output_h264)?;
         let time_h265 = ffmpeg_encode_h265(&input_file, &output_h265)?;
         let time_vp9 = ffmpeg_encode_vp9(&input_file, &output_vp9)?;
 
         // Report size.
         let bytes_input = file_size_fmt(&input_file);
+        let bytes_h264 = file_size_fmt(&output_h264);
         let bytes_h265 = file_size_fmt(&output_h265);
         let bytes_vp9 = file_size_fmt(&output_vp9);
-        info!("encoding_h265={time_h265:.02} s, encoding_vp9={time_vp9:.02} s");
-        info!("input={bytes_input} bytes, h265={bytes_h265} bytes, vp9={bytes_vp9} bytes");
+        info!("encoding_h264={time_h264:.02} s, encoding_h265={time_h265:.02} s, encoding_vp9={time_vp9:.02} s");
+        info!("input={bytes_input} bytes, h264={bytes_h264} bytes, h265={bytes_h265} bytes, vp9={bytes_vp9} bytes");
 
         Ok(())
     }
