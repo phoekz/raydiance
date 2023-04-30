@@ -426,7 +426,7 @@ impl DisneySpecular {
         1.0 / (1.0 + self.ggx_lambda(w))
     }
 
-    // Height-correlated masking-masking function.
+    // Height-correlated masking-shadowing function.
     fn ggx_g(&self, wo: &Outgoing, wi: &Incoming) -> f32 {
         1.0 / (1.0 + self.ggx_lambda(wo) + self.ggx_lambda(wi))
     }
