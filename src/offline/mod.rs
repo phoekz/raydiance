@@ -113,6 +113,7 @@ fn render(
     let image_scale = render_config.image_scale.get();
     let image_aspect = DEFAULT_ASPECT_RATIO;
     let image_size = (image_aspect.0 * image_scale, image_aspect.1 * image_scale);
+    info!("Rendering image {}x{}", image_size.0, image_size.1);
     let frame_delay_num = render_config.frame_delay_num.get();
     let frame_delay_den = render_config.frame_delay_den.get();
     let tonemapping = render_config.tonemapping;
@@ -158,17 +159,21 @@ fn render(
         total_time = total_time.max(value.max_time());
     }
     let frame_time = f32::from(frame_delay_num) / f32::from(frame_delay_den);
-    let frame_count = (total_time / frame_time).ceil() as u32;
+    let frame_count = (total_time / frame_time).ceil() as u64;
     info!("total_time={total_time}, frame_count={frame_count}");
 
-    // Init cpupt.
-    let raytracer = cpupt::Raytracer::create(
-        cpupt::Params {
-            samples_per_pixel,
-            ..cpupt::Params::default()
-        },
-        rds_scene.clone(),
-    );
+    // // Init cpupt.
+    // let raytracer = cpupt::Raytracer::create(
+    //     cpupt::Params {
+    //         samples_per_pixel,
+    //         ..cpupt::Params::default()
+    //     },
+    //     rds_scene.clone(),
+    // );
+    let renderer = vkpt::Renderer::create(vkpt::RendererCreateInfo {
+        image_size,
+        rds_scene: rds_scene.clone(),
+    })?;
 
     // Render frames.
     let frames = {
@@ -177,9 +182,12 @@ fn render(
         let timer = Instant::now();
         let hemisphere_sampler = cpupt::HemisphereSampler::Cosine;
         let visualize_normals = false;
-        let pb = ProgressBar::new(u64::from(frame_count * samples_per_pixel)).with_style(
-            ProgressStyle::with_template("{wide_bar} elapsed={elapsed_precise} eta={eta_precise}")?,
-        );
+        // let pb = ProgressBar::new(u64::from(frame_count * samples_per_pixel)).with_style(
+        //     ProgressStyle::with_template("{wide_bar} elapsed={elapsed_precise} eta={eta_precise}")?,
+        // );
+        // let pb = ProgressBar::new(frame_count).with_style(ProgressStyle::with_template(
+        //     "{wide_bar} elapsed={elapsed_precise} eta={eta_precise}",
+        // )?);
         let mut frames = vec![];
         for frame_index in 0..frame_count {
             // Time.
@@ -200,33 +208,42 @@ fn render(
                 dyn_scene.textures[*index as usize] = value.value(time);
             }
 
-            // Render.
-            raytracer.send_input(cpupt::Input {
+            // // Render.
+            // raytracer.send_input(cpupt::Input {
+            //     camera_transform,
+            //     image_size,
+            //     hemisphere_sampler,
+            //     dyn_scene: dyn_scene.clone(),
+            //     visualize_normals,
+            //     tonemapping,
+            //     exposure,
+            //     sky_params: cpupt::SkyParams {
+            //         elevation: sky_elevation,
+            //         azimuth: sky_azimuth,
+            //         turbidity: sky_turbidity,
+            //         albedo: sky_albedo,
+            //     },
+            //     salt: Some(frame_index.into()),
+            // })?;
+            // let mut latest_frame: Option<vz::image::Rgb> = None;
+            // for _ in 0..samples_per_pixel {
+            //     let output = raytracer.recv_output().expect("Something went wrong");
+            //     latest_frame = Some(vz::image::Rgb::from_colors(
+            //         &output.image,
+            //         output.image_size,
+            //     ));
+            //     pb.inc(1);
+            // }
+            // let mut latest_frame = latest_frame.unwrap();
+            let mut latest_frame = renderer.render(vkpt::RendererInput {
+                frame_index,
+                frame_count,
                 camera_transform,
                 image_size,
-                hemisphere_sampler,
                 dyn_scene: dyn_scene.clone(),
-                visualize_normals,
-                tonemapping,
-                exposure,
-                sky_params: cpupt::SkyParams {
-                    elevation: sky_elevation,
-                    azimuth: sky_azimuth,
-                    turbidity: sky_turbidity,
-                    albedo: sky_albedo,
-                },
-                salt: Some(frame_index.into()),
             })?;
-            let mut latest_frame: Option<vz::image::Rgb> = None;
-            for _ in 0..samples_per_pixel {
-                let output = raytracer.recv_output().expect("Something went wrong");
-                latest_frame = Some(vz::image::Rgb::from_colors(
-                    &output.image,
-                    output.image_size,
-                ));
-                pb.inc(1);
-            }
-            let mut latest_frame = latest_frame.unwrap();
+            // pb.inc(1);
+
             if render_config.annotations {
                 let mut text = vz::annotation::TextBox::new();
 
@@ -299,7 +316,7 @@ fn render(
             }
             frames.push(latest_frame);
         }
-        pb.finish();
+        // pb.finish();
         info!("Rendering took {} seconds", timer.elapsed().as_secs_f64());
         frames
     };
@@ -318,8 +335,9 @@ fn render(
         frames,
     )?;
 
-    // Cleanup.
-    raytracer.terminate()?;
+    // // Cleanup.
+    // raytracer.terminate()?;
+    renderer.destroy();
 
     Ok(file_name)
 }
@@ -327,7 +345,7 @@ fn render(
 #[test]
 fn config_template() {
     use rds::DynamicTexture::Scalar as TS;
-    use rds::DynamicTexture::Vector3 as TV3;
+    use rds::DynamicTexture::Vector4 as TV4;
     use rds::MaterialField::{BaseColor, Metallic, Roughness};
     use vz::cfg::{keyframe, Value};
     use Value::{Constant, Keyframes};
@@ -339,10 +357,10 @@ fn config_template() {
                 "cube".to_owned(),
                 BaseColor,
                 Keyframes(vec![
-                    keyframe!(0.0, TV3([1.0, 1.0, 1.0]), CubicInOut),
-                    keyframe!(1.0, TV3([1.0, 0.5, 0.5]), CubicInOut),
-                    keyframe!(2.0, TV3([0.5, 1.0, 0.5]), CubicInOut),
-                    keyframe!(3.0, TV3([0.5, 0.5, 1.0]), CubicInOut),
+                    keyframe!(0.0, TV4([1.0, 1.0, 1.0, 1.0]), CubicInOut),
+                    keyframe!(1.0, TV4([1.0, 0.5, 0.5, 1.0]), CubicInOut),
+                    keyframe!(2.0, TV4([0.5, 1.0, 0.5, 1.0]), CubicInOut),
+                    keyframe!(3.0, TV4([0.5, 0.5, 1.0, 1.0]), CubicInOut),
                 ]),
             ),
             MaterialMapping(

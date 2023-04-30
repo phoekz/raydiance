@@ -20,6 +20,9 @@
     clippy::unreadable_literal,
     clippy::wildcard_imports
 )]
+// Todo:
+#![allow(dead_code)]
+#![allow(unused)]
 
 use std::{
     borrow::Cow,
@@ -59,6 +62,7 @@ mod gltf;
 mod math;
 mod offline;
 mod rds;
+mod vkpt;
 mod vulkan;
 mod vz;
 

@@ -1,0 +1,12 @@
+#version 460 core
+#include "common.glslh"
+
+uint mesh_group_count(uint triangle_count) {
+    return (triangle_count + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;
+}
+
+void main() {
+    Mesh mesh = meshes[pc.mesh_index];
+    uint mesh_group_x = mesh_group_count(mesh.triangle_count);
+    EmitMeshTasksEXT(mesh_group_x, 1, 1);
+}

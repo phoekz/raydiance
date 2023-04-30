@@ -6,8 +6,8 @@
             ("plane", Roughness, Constant(Scalar(0.25))),
             ("cube", BaseColor, Keyframes([
 
-                (0.0, Vector3((1.00, 0.36, 0.10)), CubicInOut),
-                (2.0, Vector3((1.00, 1.00, 1.00)), CubicInOut),
+                (0.0, Vector4((1.00, 0.36, 0.10, 1.0)), CubicInOut),
+                (2.0, Vector4((1.00, 1.00, 1.00, 1.0)), CubicInOut),
             ]))
         ],
         sky_elevation_deg: Constant(45.0),

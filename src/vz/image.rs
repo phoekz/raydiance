@@ -106,6 +106,14 @@ impl From<imagelib::RgbImage> for Rgb {
     }
 }
 
+impl From<imagelib::RgbaImage> for Rgb {
+    fn from(buffer: imagelib::RgbaImage) -> Self {
+        let buffer = imagelib::DynamicImage::from(buffer);
+        let buffer = buffer.into_rgb8();
+        Self { buffer }
+    }
+}
+
 #[allow(dead_code)]
 fn create_checkerboard_texture() {
     let w = 32;
