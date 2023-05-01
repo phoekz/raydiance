@@ -170,7 +170,7 @@ fn render(
     //     },
     //     rds_scene.clone(),
     // );
-    let renderer = vkpt::Renderer::create(vkpt::RendererCreateInfo {
+    let mut renderer = vkpt::Renderer::create(vkpt::RendererCreateInfo {
         image_size,
         rds_scene: rds_scene.clone(),
     })?;
@@ -235,13 +235,15 @@ fn render(
             //     pb.inc(1);
             // }
             // let mut latest_frame = latest_frame.unwrap();
-            let mut latest_frame = renderer.render(vkpt::RendererInput {
+            let input = vkpt::RendererInput {
                 frame_index,
                 frame_count,
                 camera_transform,
                 image_size,
                 dyn_scene: dyn_scene.clone(),
-            })?;
+            };
+            renderer.update(&input);
+            let mut latest_frame = renderer.render(&input)?;
             // pb.inc(1);
 
             if render_config.annotations {

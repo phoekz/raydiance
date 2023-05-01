@@ -29,6 +29,9 @@ pub struct Renderer {
     buffer_allocations: vkx::BufferAllocations,
     image_resources: Vec<vkx::ImageResource>,
     image_allocations: vkx::ImageAllocations,
+    texture_flags_buffer: vkx::BufferResource,
+    dynamic_textures_buffer: vkx::BufferResource,
+    texture_buffer_allocations: vkx::BufferAllocations,
     sampler: vkx::SamplerResource,
 }
 
@@ -62,10 +65,21 @@ struct Material {
 
 #[repr(C)]
 #[derive(Debug)]
+struct DynamicMaterial {
+    base_color: Vec4,
+    metallic: f32,
+    roughness: f32,
+    specular: f32,
+    specular_tint: f32,
+    sheen: f32,
+    sheen_tint: f32,
+    replaced_mask: u32,
+}
+
+#[repr(C)]
+#[derive(Debug)]
 struct PushConstants {
     transform: Mat4,
-    base_color: Vec4,
-    mesh_index: u32,
 }
 
 const COLOR_TARGET_FORMAT: vk::Format = vk::Format::R8g8b8a8Unorm;
@@ -99,7 +113,7 @@ impl Renderer {
                         | vk::ImageUsageFlagBits::ColorAttachment,
                     SAMPLE_COUNT,
                 ),
-                vk::MemoryPropertyFlagBits::DeviceLocal.into(),
+                vk::MemoryPropertyFlagBits::DeviceLocal,
             )?;
             let depth_target = vkx::ImageDedicatedResource::create_2d(
                 &physical_device,
@@ -112,7 +126,7 @@ impl Renderer {
                         | vk::ImageUsageFlagBits::DepthStencilAttachment,
                     SAMPLE_COUNT,
                 ),
-                vk::MemoryPropertyFlagBits::DeviceLocal.into(),
+                vk::MemoryPropertyFlagBits::DeviceLocal,
             )?;
             let resolve_target = vkx::ImageDedicatedResource::create_2d(
                 &physical_device,
@@ -126,16 +140,16 @@ impl Renderer {
                         | vk::ImageUsageFlagBits::TransferSrc,
                     vk::SampleCountFlagBits::Count1,
                 ),
-                vk::MemoryPropertyFlagBits::DeviceLocal.into(),
+                vk::MemoryPropertyFlagBits::DeviceLocal,
             )?;
             let output_buffer = vkx::BufferDedicatedTransfer::create(
                 &physical_device,
                 &device,
                 vkx::BufferCreator::new(
                     resolve_target.byte_size(),
-                    vk::BufferUsageFlagBits::TransferDst.into(),
+                    vk::BufferUsageFlagBits::TransferDst,
                 ),
-                vk::MemoryPropertyFlagBits::HostVisible.into(),
+                vk::MemoryPropertyFlagBits::HostVisible,
             )?;
 
             // Camera.
@@ -223,7 +237,7 @@ impl Renderer {
                 &physical_device,
                 &device,
                 &buffer_creators,
-                vk::MemoryPropertyFlagBits::DeviceLocal.into(),
+                vk::MemoryPropertyFlagBits::DeviceLocal,
             )?;
             vkx::transfer_resources(
                 &physical_device,
@@ -275,7 +289,7 @@ impl Renderer {
                 &physical_device,
                 &device,
                 &image_creators,
-                vk::MemoryPropertyFlagBits::DeviceLocal.into(),
+                vk::MemoryPropertyFlagBits::DeviceLocal,
             )?;
             vkx::transfer_resources(
                 &physical_device,
@@ -285,6 +299,40 @@ impl Renderer {
                 &image_resources,
                 &image_bytes,
             )?;
+
+            // Texture flags / dynamic textures.
+            let (mut texture_buffer_resources, texture_buffer_allocations) =
+                vkx::BufferResource::create(
+                    &physical_device,
+                    &device,
+                    &[
+                        vkx::BufferCreator::new(
+                            (size_of::<u32>() * create_info.rds_scene.textures.len()) as _,
+                            vk::BufferUsageFlagBits::StorageBuffer,
+                        ),
+                        vkx::BufferCreator::new(
+                            (size_of::<Vec4>() * create_info.rds_scene.textures.len()) as _,
+                            vk::BufferUsageFlagBits::StorageBuffer,
+                        ),
+                    ],
+                    vk::MemoryPropertyFlagBits::HostVisible
+                        | vk::MemoryPropertyFlagBits::HostCoherent,
+                )?;
+
+            // Initialize texture buffers.
+            let mut texture_flags_buffer = texture_buffer_resources.remove(0);
+            texture_flags_buffer
+                .memory_mut()
+                .as_mut_slice(create_info.rds_scene.textures.len())
+                .fill(0_u32);
+            let texture_flags_descriptor = texture_flags_buffer.descriptor();
+
+            let mut dynamic_textures_buffer = texture_buffer_resources.remove(0);
+            dynamic_textures_buffer
+                .memory_mut()
+                .as_mut_slice(create_info.rds_scene.textures.len())
+                .fill(Vec4::zeros());
+            let dynamic_textures_descriptor = dynamic_textures_buffer.descriptor();
 
             // Sampler.
             let sampler_creator = vkx::SamplerCreator::new()
@@ -326,41 +374,61 @@ impl Renderer {
                 .map(vkx::ImageResource::descriptor)
                 .collect::<Vec<_>>();
             let bindings = vec![
+                // binding = 0
                 vkx::DescriptorBinding {
                     ty: vk::DescriptorType::StorageBuffer,
                     stages: stage_flags,
                     descriptors: slice::from_ref(&meshes_descriptor),
                 },
+                // binding = 1
                 vkx::DescriptorBinding {
                     ty: vk::DescriptorType::StorageBuffer,
                     stages: stage_flags,
                     descriptors: &positions_descriptors,
                 },
+                // binding = 2
                 vkx::DescriptorBinding {
                     ty: vk::DescriptorType::StorageBuffer,
                     stages: stage_flags,
                     descriptors: &tex_coords_descriptors,
                 },
+                // binding = 3
                 vkx::DescriptorBinding {
                     ty: vk::DescriptorType::StorageBuffer,
                     stages: stage_flags,
                     descriptors: &normals_descriptors,
                 },
+                // binding = 4
                 vkx::DescriptorBinding {
                     ty: vk::DescriptorType::StorageBuffer,
                     stages: stage_flags,
                     descriptors: &triangles_descriptors,
                 },
+                // binding = 5
                 vkx::DescriptorBinding {
                     ty: vk::DescriptorType::StorageBuffer,
                     stages: stage_flags,
                     descriptors: slice::from_ref(&materials_descriptor),
                 },
+                // binding = 6
                 vkx::DescriptorBinding {
                     ty: vk::DescriptorType::SampledImage,
                     stages: stage_flags,
                     descriptors: &image_descriptors,
                 },
+                // binding = 7
+                vkx::DescriptorBinding {
+                    ty: vk::DescriptorType::StorageBuffer,
+                    stages: stage_flags,
+                    descriptors: slice::from_ref(&texture_flags_descriptor),
+                },
+                // binding = 8
+                vkx::DescriptorBinding {
+                    ty: vk::DescriptorType::StorageBuffer,
+                    stages: stage_flags,
+                    descriptors: slice::from_ref(&dynamic_textures_descriptor),
+                },
+                // binding = 9
                 vkx::DescriptorBinding {
                     ty: vk::DescriptorType::Sampler,
                     stages: stage_flags,
@@ -430,6 +498,9 @@ impl Renderer {
                 buffer_allocations,
                 image_resources,
                 image_allocations,
+                texture_flags_buffer,
+                dynamic_textures_buffer,
+                texture_buffer_allocations,
                 sampler,
             })
         }
@@ -455,13 +526,42 @@ impl Renderer {
                 image_resource.destroy(&self.device);
             }
             self.image_allocations.free(&self.device);
+            self.texture_flags_buffer.destroy(&self.device);
+            self.dynamic_textures_buffer.destroy(&self.device);
+            self.texture_buffer_allocations.free(&self.device);
             self.sampler.destroy(&self.device);
             self.device.destroy();
             self.instance.destroy();
         }
     }
 
-    pub fn render(&self, input: RendererInput) -> Result<vz::image::Rgb> {
+    pub fn update(&mut self, input: &RendererInput) {
+        unsafe {
+            let texture_count = self.scene.textures.len();
+            let mut texture_flags = self
+                .texture_flags_buffer
+                .memory_mut()
+                .as_mut_slice::<u32>(texture_count);
+            let mut dynamic_textures = self
+                .dynamic_textures_buffer
+                .memory_mut()
+                .as_mut_slice::<Vec4>(texture_count);
+
+            for texture_id in 0..texture_count {
+                if let Some(v) = rds::dynamic_try_sample(&input.dyn_scene, texture_id as _) {
+                    texture_flags[texture_id] = 1;
+                    dynamic_textures[texture_id] = transmute(v);
+                } else {
+                    texture_flags[texture_id] = 0;
+                    dynamic_textures[texture_id] = Vec4::new(0.0, 0.0, 0.0, 0.0);
+                };
+            }
+        }
+
+        //
+    }
+
+    pub fn render(&self, input: &RendererInput) -> Result<vz::image::Rgb> {
         let Self {
             scene,
             device,
@@ -535,23 +635,14 @@ impl Renderer {
                 vk::PipelineBindPoint::Graphics,
             );
             command_buffer.bind_shader(device, shader);
-            for (mesh_index, mesh) in scene.meshes.iter().enumerate() {
-                let texture = scene.materials[mesh.material as usize].base_color;
-                let base_color = match rds::dynamic_try_sample(&input.dyn_scene, texture) {
-                    Some(v) => std::mem::transmute(v),
-                    None => vector![0.0, 0.0, 0.0, 0.0],
-                };
-                let data = PushConstants {
-                    transform: clip_from_view
-                        * view_from_world
-                        * input.camera_transform
-                        * mesh.transform,
-                    base_color,
-                    mesh_index: mesh_index as _,
-                };
-                command_buffer.push_constants(device, descriptor_storage, &data)?;
-                command_buffer.draw_mesh_tasks(device, 1, 1, 1);
-            }
+            command_buffer.push_constants(
+                device,
+                descriptor_storage,
+                &(PushConstants {
+                    transform: clip_from_view * view_from_world * input.camera_transform,
+                }),
+            )?;
+            command_buffer.draw_mesh_tasks(device, scene.meshes.len() as _, 1, 1);
             command_buffer.end_rendering(device);
             command_buffer.image_barrier(
                 device,
@@ -581,7 +672,16 @@ impl Renderer {
 
             // Queries.
             let _timestamp_differences = timestamps.get_differences(device)?[0];
-            let _statistics = statistics.get_statistics(device)?;
+            let statistics = statistics.get_statistics(device)?;
+            let mesh_primitives_generated = statistics
+                .mesh_primitives_generated
+                .mesh_primitives_generated;
+            let scene_primitive_count = scene
+                .meshes
+                .iter()
+                .map(|mesh| u64::from(mesh.triangle_count()))
+                .sum::<u64>();
+            ensure!(mesh_primitives_generated == scene_primitive_count);
 
             // Copy to frame.
             let width = resolve_target.width();

@@ -59,8 +59,8 @@ time = { version = "0.3.20", features = [
     "parsing",
 ] }
 tinytemplate = "1.2.1"
-vulk = "0.1.16"
-vulk-ext = "0.1.16"
+vulk = "0.1.17"
+vulk-ext = "0.1.17"
 which = "4.4.0"
 winit = "0.27.5"
 
