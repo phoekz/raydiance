@@ -68,6 +68,10 @@ struct PushConstants {
     mesh_index: u32,
 }
 
+const COLOR_TARGET_FORMAT: vk::Format = vk::Format::R8g8b8a8Unorm;
+const DEPTH_TARGET_FORMAT: vk::Format = vk::Format::D32Sfloat;
+const RESOLVE_TARGET_FORMAT: vk::Format = vk::Format::R8g8b8a8Unorm;
+
 const SAMPLE_COUNT: vk::SampleCountFlagBits = vk::SampleCountFlagBits::Count8;
 
 impl Renderer {
@@ -90,7 +94,7 @@ impl Renderer {
                 vkx::ImageCreator::new_2d_samples(
                     create_info.image_size.0,
                     create_info.image_size.1,
-                    vk::Format::R8g8b8a8Unorm,
+                    COLOR_TARGET_FORMAT,
                     vk::ImageUsageFlagBits::InputAttachment
                         | vk::ImageUsageFlagBits::ColorAttachment,
                     SAMPLE_COUNT,
@@ -103,7 +107,7 @@ impl Renderer {
                 vkx::ImageCreator::new_2d_samples(
                     create_info.image_size.0,
                     create_info.image_size.1,
-                    vk::Format::D32Sfloat,
+                    DEPTH_TARGET_FORMAT,
                     vk::ImageUsageFlagBits::InputAttachment
                         | vk::ImageUsageFlagBits::DepthStencilAttachment,
                     SAMPLE_COUNT,
@@ -116,7 +120,7 @@ impl Renderer {
                 vkx::ImageCreator::new_2d_samples(
                     create_info.image_size.0,
                     create_info.image_size.1,
-                    vk::Format::R8g8b8a8Unorm,
+                    RESOLVE_TARGET_FORMAT,
                     vk::ImageUsageFlagBits::InputAttachment
                         | vk::ImageUsageFlagBits::ColorAttachment
                         | vk::ImageUsageFlagBits::TransferSrc,
@@ -376,24 +380,24 @@ impl Renderer {
 
             // Shaders.
             let mut compiler = vkx::ShaderCompiler::new()?;
-            compiler.include("common.glslh", include_str!("shaders/common.glslh"));
+            compiler.include("common.glsl", include_str!("shaders/common.glsl"));
             let task_binary = compiler.compile(
                 vkx::ShaderType::Task,
-                "triangle.task",
+                "triangle.task.glsl",
                 "main",
-                include_str!("shaders/triangle.task"),
+                include_str!("shaders/triangle.task.glsl"),
             )?;
             let mesh_binary = compiler.compile(
                 vkx::ShaderType::Mesh,
-                "triangle.mesh",
+                "triangle.mesh.glsl",
                 "main",
-                include_str!("shaders/triangle.mesh"),
+                include_str!("shaders/triangle.mesh.glsl"),
             )?;
             let frag_binary = compiler.compile(
                 vkx::ShaderType::Fragment,
-                "triangle.frag",
+                "triangle.frag.glsl",
                 "main",
-                include_str!("shaders/triangle.frag"),
+                include_str!("shaders/triangle.frag.glsl"),
             )?;
             let shader = vkx::Shader::create(
                 &device,

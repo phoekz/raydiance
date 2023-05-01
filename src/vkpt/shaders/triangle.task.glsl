@@ -1,5 +1,9 @@
 #version 460 core
-#include "common.glslh"
+#include "common.glsl"
+
+layout(local_size_x = 1) in;
+layout(local_size_y = 1) in;
+layout(local_size_z = 1) in;
 
 uint mesh_group_count(uint triangle_count) {
     return (triangle_count + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE;

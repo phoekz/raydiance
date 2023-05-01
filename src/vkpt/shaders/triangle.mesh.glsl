@@ -1,5 +1,5 @@
 #version 460 core
-#include "common.glslh"
+#include "common.glsl"
 
 layout(local_size_x = WORKGROUP_SIZE) in;
 layout(local_size_y = 1) in;

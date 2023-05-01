@@ -1,5 +1,5 @@
 #version 460 core
-#include "common.glslh"
+#include "common.glsl"
 
 layout(location = 0) in FragmentVertex fragment_vertex;
 layout(location = 2)
