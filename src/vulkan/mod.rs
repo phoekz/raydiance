@@ -263,7 +263,7 @@ impl Renderer {
             .depth_attachment(&depth_attachment);
 
         // Record command buffer.
-        let command_buffer = command_buffers[present_index as usize];
+        let command_buffer = command_buffers[frame_index as usize];
         device
             .begin_command_buffer(
                 command_buffer,
